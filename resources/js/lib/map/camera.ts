@@ -36,6 +36,8 @@ const LEGEND_GAP = 16;
 const LEGEND_LEFT = SIDE_PANEL_WIDTH + 16;
 /** The zoom buttons sit at the right edge, so both sides keep this much clear and the unit stays centred. */
 const CONTROLS_CLEARANCE = 56;
+/** A fitted unit keeps at least this much map width; below it the legend overlaps the map instead. */
+const MIN_UNIT_WIDTH = 320;
 /** The sheet may cover this share of a phone screen before the map stops making room for it. */
 const MAX_SHEET_SHARE = 0.6;
 
@@ -48,18 +50,27 @@ export function mapPadding({
     desktop: boolean;
     sheetHeight: number;
     viewport: { width: number; height: number };
-    /** The legend box sits at the bottom left of the map; a fitted unit stays clear of it. */
+    /**
+     * The legend box sits at the bottom left of the map; a fitted unit stays clear of it, as long
+     * as that leaves the unit at least 320px of map. On a narrower desktop window the legend
+     * overlaps the map instead of squeezing the unit into a sliver.
+     */
     legendOpen?: boolean;
 }): MapPadding {
-    if (desktop)
+    if (desktop) {
+        const clearOfLegend = LEGEND_LEFT + LEGEND_WIDTH + LEGEND_GAP;
+        const roomBesideLegend =
+            viewport.width - clearOfLegend - CONTROLS_CLEARANCE;
         return {
-            left: legendOpen
-                ? LEGEND_LEFT + LEGEND_WIDTH + LEGEND_GAP
-                : SIDE_PANEL_WIDTH + CONTROLS_CLEARANCE,
+            left:
+                legendOpen && roomBesideLegend >= MIN_UNIT_WIDTH
+                    ? clearOfLegend
+                    : SIDE_PANEL_WIDTH + CONTROLS_CLEARANCE,
             right: CONTROLS_CLEARANCE,
             top: 72,
             bottom: 72,
         };
+    }
     return {
         left: CONTROLS_CLEARANCE,
         right: CONTROLS_CLEARANCE,

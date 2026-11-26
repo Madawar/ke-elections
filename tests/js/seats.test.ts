@@ -6,6 +6,7 @@ import {
     type SeatsData,
     EMPTY_SEATS,
     chamberGroups,
+    chamberHighlight,
     partyColours,
     seatColouring,
     legendScope,
@@ -228,5 +229,31 @@ describe('highlighting "Other and independent"', () => {
             expect(theme.faded).not.toBe(OTHER);
             expect(theme.faded).not.toBe(theme.noData);
         }
+    });
+});
+
+describe('chamberHighlight', () => {
+    const groups = [{ key: 'AAA' }, { key: 'BBB' }, { key: 'other' }];
+    const chamber = { AAA: 2, BBB: 1, IND: 1, ZZZ: 3 };
+
+    it('highlights the party’s own group', () => {
+        expect(chamberHighlight(groups, chamber, 'AAA')).toBe('AAA');
+    });
+
+    it('highlights Other for a party that sits in it', () => {
+        expect(chamberHighlight(groups, chamber, 'ZZZ')).toBe('other');
+        expect(chamberHighlight(groups, chamber, 'IND')).toBe('other');
+    });
+
+    it('highlights nothing for a party with no seats in the chamber', () => {
+        expect(chamberHighlight(groups, chamber, 'QQQ')).toBeUndefined();
+        expect(chamberHighlight(groups, { AAA: 1 }, 'ZZZ')).toBeUndefined();
+        expect(chamberHighlight(groups, chamber, undefined)).toBeUndefined();
+    });
+
+    it('highlights nothing when the chamber has no Other group to point at', () => {
+        expect(
+            chamberHighlight([{ key: 'AAA' }], chamber, 'ZZZ'),
+        ).toBeUndefined();
     });
 });

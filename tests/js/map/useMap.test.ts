@@ -21,6 +21,8 @@ const fake = vi.hoisted(() => ({
         fitZoom: number;
         fitZooms: Map<string, number>;
         moving: boolean;
+        /** Settles of the ward source's setData calls, to finish the "load" by hand. */
+        loadWards: (() => void)[];
         easeTo: ReturnType<typeof vi.fn>;
         scrollZoom: {
             enable: ReturnType<typeof vi.fn>;
@@ -59,9 +61,15 @@ vi.mock('maplibre-gl', () => {
                 }),
                 on: (name: string, cb: Handler) => handlers.set(name, cb),
                 getLayer: (id: string) => (layers.has(id) ? { id } : undefined),
+                loadWards: [] as (() => void)[],
                 getSource: (id: string) =>
                     sources.has(id)
-                        ? { setData: () => Promise.resolve() }
+                        ? {
+                              setData: () =>
+                                  new Promise<void>((done) =>
+                                      self.loadWards.push(done),
+                                  ),
+                          }
                         : undefined,
                 addSource: (id: string) => sources.add(id),
                 addLayer: (l: { id: string }) => layers.add(l.id),
@@ -228,6 +236,60 @@ describe('useMap focus', () => {
             '==',
             ['get', 'county_code'],
             47,
+        ]);
+    });
+
+    it('draws the parent constituency until the ward geometry has loaded, then the ward', async () => {
+        const parent = index.get('ward', 1448)!.p;
+        out.api!.setFocus({ level: 'ward', code: 1448 });
+        // The wards source is still empty: keep the constituency's wards, not a blank map.
+        expect(map().loadWards).toHaveLength(1);
+        expect(map().filters.get('constituencies-fill')).toEqual([
+            '==',
+            ['get', 'code'],
+            parent,
+        ]);
+        expect(map().filters.get('wards-fill')).toEqual([
+            '==',
+            ['get', 'constituency_code'],
+            parent,
+        ]);
+        expect(map().filters.get('land-constituencies')).toEqual([
+            '==',
+            ['get', 'code'],
+            parent,
+        ]);
+
+        map().loadWards[0]();
+        await vi.waitFor(() =>
+            expect(map().filters.get('wards-fill')).toEqual([
+                '==',
+                ['get', 'code'],
+                1448,
+            ]),
+        );
+        expect(map().filters.get('constituencies-fill')).toEqual([
+            '==',
+            ['get', 'code'],
+            -1,
+        ]);
+        expect(map().filters.get('land-wards')).toEqual([
+            '==',
+            ['get', 'code'],
+            1448,
+        ]);
+    });
+
+    it('applies a ward focus at once when the ward geometry is already loaded', async () => {
+        out.api!.select('ward', 1448, { animate: false });
+        map().loadWards[0]();
+        await nextTick();
+        await Promise.resolve();
+        out.api!.setFocus({ level: 'ward', code: 1448 });
+        expect(map().filters.get('wards-fill')).toEqual([
+            '==',
+            ['get', 'code'],
+            1448,
         ]);
     });
 

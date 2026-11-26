@@ -8,7 +8,7 @@ import LocatorExport from '@/components/export/LocatorExport.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
 import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
-import Legend, { type LegendRow } from '@/components/map/Legend.vue';
+import Legend from '@/components/map/Legend.vue';
 import MapControls from '@/components/map/MapControls.vue';
 import MapView from '@/components/map/MapView.vue';
 import NationalOverview from '@/components/map/NationalOverview.vue';
@@ -16,7 +16,11 @@ import SearchBox from '@/components/map/SearchBox.vue';
 import UnitList from '@/components/map/UnitList.vue';
 import UnitPanel from '@/components/map/UnitPanel.vue';
 import type { Picked } from '@/composables/useMap';
-import { LEVEL_NAME, announceSelection } from '@/lib/map/announce';
+import {
+    LEVEL_NAME,
+    announcePerson,
+    announceSelection,
+} from '@/lib/map/announce';
 import { mapPadding } from '@/lib/map/camera';
 import {
     type Colouring,
@@ -28,19 +32,27 @@ import type { FocusSelection } from '@/lib/map/focus';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
-import type { PersonResult } from '@/lib/search';
-import { OTHER, PROVINCE_TINTS, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
+import { type PersonResult, SEAT_TITLE } from '@/lib/search';
+import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
 import { formatAsOf } from '@/lib/export/format';
 import {
     type SeatsData,
     EMPTY_SEATS,
     legendScope,
-    legendTitle,
     loadSeats,
     seatColouring,
     seatLegend,
 } from '@/lib/seats';
+import {
+    SEAT_LABEL,
+    buildLegend,
+    buildProvinceLegend,
+    legendOpenAfterSelect,
+    pruneParties,
+    settingsCount,
+    toggleParty as toggledParties,
+} from '@/lib/legend';
 import { type Unit, UnitIndex } from '@/lib/units';
 
 type ServerUnit = {
@@ -50,14 +62,6 @@ type ServerUnit = {
     ancestors: { level: string; code: number; name: string }[];
 } | null;
 const props = defineProps<{ unit: ServerUnit }>();
-
-const SEAT_LABEL: Record<SeatKey, string> = {
-    governor: 'Governor',
-    senator: 'Senator',
-    woman_rep: 'Woman Rep',
-    mp: 'MP',
-    mca: 'MCA',
-};
 
 // ---- data -------------------------------------------------------------------------------
 const manifest = ref<Record<string, string> | null>(null);
@@ -174,101 +178,43 @@ const asOfText = computed(() =>
 const legend = computed(() => {
     const k = colourKey.value;
     if (k === 'none') return null;
-    if (k === 'province') {
-        const provinces = (index.value?.all() ?? [])
-            .filter((u) => u.l === 'province')
-            .sort((a, b) => a.c - b.c);
-        return {
-            title: 'Former provinces',
-            chipLabel: 'Former provinces',
-            note: undefined,
-            members: {} as Record<string, string[]>,
-            highlighted: [] as string[],
-            filtered: false,
-            rows: provinces.map((p): LegendRow => ({
-                key: String(p.c),
-                label: p.n,
-                colour: PROVINCE_TINTS[(p.c - 1) % PROVINCE_TINTS.length],
-            })),
-        };
-    }
+    if (k === 'province')
+        return buildProvinceLegend(
+            (index.value?.all() ?? []).filter((u) => u.l === 'province'),
+        );
     // While a unit is focused the counts cover only the seats inside it (or the one seat above it).
     const scope = index.value
         ? legendScope(index.value, k, focusOf(selection.value))
         : null;
-    const rows = seatLegend(seats.value, k, scope?.codes);
-    const shown = rows.filter((r) => r.colour !== OTHER).slice(0, 7);
-    const other = rows
-        .filter((r) => !shown.includes(r))
-        .reduce((n, r) => n + r.seats, 0);
-    const mapped: LegendRow[] = shown.map((r) => ({
-        key: r.abbrev,
-        label: r.abbrev,
-        name: r.name,
-        colour: r.colour,
-        count: r.seats,
-    }));
-    if (other)
-        mapped.push({
-            key: 'other',
-            label: 'Other',
-            name: 'Other and independent',
-            colour: OTHER,
-            count: other,
-            last: true,
-        });
-    // Each row stands for the parties it lists ("Other" is every party folded into it); a row is on
-    // when all of them are highlighted.
-    const members: Record<string, string[]> = Object.fromEntries(
-        shown.map((r) => [r.abbrev, [r.abbrev]]),
+    return buildLegend(
+        seats.value,
+        k,
+        scope && { codes: scope.codes, unitName: scope.unit.n },
+        onlyParties.value,
+        asOfText.value,
     );
-    if (other)
-        members.other = rows
-            .filter((r) => !shown.includes(r))
-            .map((r) => r.abbrev);
-    const chosen = new Set(onlyParties.value);
-    const on = mapped.filter((r) => members[r.key].every((a) => chosen.has(a)));
-    const covered = new Set(on.flatMap((r) => members[r.key]));
-    const showing = [
-        ...on.map((r) => r.label),
-        ...[...chosen].filter((a) => !covered.has(a)),
-    ];
-    return {
-        title: legendTitle(SEAT_LABEL[k], scope?.unit.n, showing),
-        // The collapsed chip says what is highlighted, so a phone shows it with the legend closed.
-        chipLabel: `${SEAT_LABEL[k]} seats${showing.length ? `: ${showing.length > 3 ? `${showing.length} parties` : showing.join(', ')}` : ''}`,
-        rows: mapped,
-        members,
-        highlighted: on.map((r) => r.key),
-        filtered: chosen.size > 0,
-        note: `${mapped.length ? '' : 'No approved holder for this seat yet. '}Elected 2022, with changes since. Source: IEBC gazette notices${asOfText.value ? `, as of ${asOfText.value}` : ''}`,
-    };
 });
 /** A legend row was pressed: switch the parties it stands for on or off, each independently. */
 function toggleParty(key: string) {
-    const parties = legend.value?.members[key];
-    if (!parties?.length) return;
-    const next = new Set(onlyParties.value);
-    const allOn = parties.every((a) => next.has(a));
-    for (const a of parties) allOn ? next.delete(a) : next.add(a);
-    onlyParties.value = [...next];
+    if (legend.value)
+        onlyParties.value = toggledParties(
+            legend.value.members,
+            onlyParties.value,
+            key,
+        );
 }
 // A different seat keeps the highlighted parties that hold it and drops the rest.
 watch(colourKey, (k) => {
-    if (!onlyParties.value.length) return;
-    const present =
-        k === 'none' || k === 'province'
-            ? new Set<string>()
-            : new Set(seatLegend(seats.value, k).map((r) => r.abbrev));
-    onlyParties.value = onlyParties.value.filter((a) => present.has(a));
+    onlyParties.value = pruneParties(seats.value, k, onlyParties.value);
 });
 const partyChips = computed(() =>
     colourKey.value === 'none' || colourKey.value === 'province'
         ? []
         : seatLegend(seats.value, colourKey.value),
 );
-const activeSettings = computed(
-    () => (colourKey.value !== 'none' ? 1 : 0) + onlyParties.value.length,
+// What the person set: a colouring, plus each legend row they pressed ("Other" counts once).
+const activeSettings = computed(() =>
+    settingsCount(colourKey.value, legend.value),
 );
 
 // ---- selection and camera ---------------------------------------------------------------
@@ -334,8 +280,11 @@ function selectUnit(
     tip.value = null;
     highlightSeat.value = undefined;
     highlightParty.value = undefined;
-    if (unit && !selection.value) legendOpen.value = false;
-    else if (!unit) legendOpen.value = isDesktop.value;
+    legendOpen.value = legendOpenAfterSelect(legendOpen.value, {
+        desktop: isDesktop.value,
+        wasFocused: selection.value !== null,
+        focusing: unit !== null,
+    });
     selection.value = unit;
     applyPadding();
     autoCentre.value = recentre;
@@ -381,6 +330,11 @@ function onPickPerson({ holder, unit }: PersonResult) {
     selectUnit(unit ?? null);
     if (unit) highlightSeat.value = holder.seat;
     else highlightParty.value = holder.party ?? undefined;
+    // Say who was picked and where it is shown; selecting the unit only announced the unit.
+    announce.value = announcePerson(
+        { name: holder.name, title: SEAT_TITLE[holder.seat] },
+        unit ?? null,
+    );
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
 

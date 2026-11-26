@@ -63,6 +63,40 @@ describe('mapPadding with the legend open', () => {
         expect(open.right).toBe(closed.right);
     });
 
+    it('lets the legend overlap the map when clearing it would leave the unit under 320px', () => {
+        for (const width of [768, 834, 1000]) {
+            const narrow = { width, height: 900 };
+            const closed = mapPadding({
+                desktop: true,
+                sheetHeight: 0,
+                viewport: narrow,
+            });
+            const open = mapPadding({
+                desktop: true,
+                sheetHeight: 0,
+                viewport: narrow,
+                legendOpen: true,
+            });
+            expect(open).toEqual(closed);
+            // The unit keeps the same usable width as with the legend closed.
+            expect(width - open.left - open.right).toBeGreaterThan(0);
+        }
+    });
+
+    it('clears the legend whenever that leaves a unit at least 320px wide', () => {
+        for (const width of [1100, 1440]) {
+            const v = { width, height: 900 };
+            const open = mapPadding({
+                desktop: true,
+                sheetHeight: 0,
+                viewport: v,
+                legendOpen: true,
+            });
+            expect(open.left).toBe(396 + LEGEND_WIDTH + 16);
+            expect(width - open.left - open.right).toBeGreaterThanOrEqual(320);
+        }
+    });
+
     it('leaves phone padding alone: the sheet already makes room and the legend opens on tap', () => {
         const args = {
             desktop: false,

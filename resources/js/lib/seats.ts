@@ -221,3 +221,20 @@ export function chamberGroups(
           ]
         : named;
 }
+
+/**
+ * Which hemicycle group to emphasise for a picked party in one chamber: the party's own group, or
+ * the merged "other" group when the party holds seats there but has no colour of its own. A party
+ * with no seats in the chamber highlights nothing.
+ */
+export function chamberHighlight(
+    groups: { key: string }[],
+    chamberSeats: Record<string, number>,
+    party: string | undefined,
+): string | undefined {
+    if (!party) return undefined;
+    if (groups.some((g) => g.key === party)) return party;
+    if ((chamberSeats[party] ?? 0) > 0)
+        return groups.find((g) => g.key === 'other')?.key;
+    return undefined;
+}

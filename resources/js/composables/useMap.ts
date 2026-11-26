@@ -84,6 +84,8 @@ export function useMap(
     let ownMove = false;
     let hovered: Picked | null = null;
     let wardsLoaded = false;
+    /** The ward source has its geometry (the data was set and the worker has finished with it). */
+    let wardsReady = false;
     let wantWards = false;
     let disposed = false;
     let padding: Padding = { top: 72, bottom: 24, left: 24, right: 24 };
@@ -92,20 +94,34 @@ export function useMap(
         typeof window !== 'undefined' &&
         window.matchMedia?.('(hover: hover)').matches;
 
-    const style = () =>
-        buildStyle({
+    /**
+     * The focus the map draws. A ward focus draws its parent constituency until the ward geometry
+     * has loaded, so the map is never blank while the wards source is still empty.
+     */
+    function drawnFocus(): FocusSelection | null {
+        if (focus?.level !== 'ward' || wardsReady) return focus;
+        const parent = opts.index.get('ward', focus.code)?.p;
+        return parent === null || parent === undefined
+            ? focus
+            : { level: 'constituency', code: parent };
+    }
+
+    const style = () => {
+        const drawn = drawnFocus();
+        return buildStyle({
             manifest: opts.manifest,
             theme: THEMES[opts.theme.value],
             colouring: opts.colouring.value,
             provinceOfCounty: opts.provinceOfCounty,
             wards: wardsLoaded,
-            focus: focus
+            focus: drawn
                 ? {
-                      outside: surroundings ? focusOutside(focus) : undefined,
-                      level: focus.level,
+                      outside: surroundings ? focusOutside(drawn) : undefined,
+                      level: drawn.level,
                   }
                 : undefined,
         });
+    };
 
     /** Fill the (initially empty) ward source; deferred until the style has loaded. */
     function ensureWards() {
@@ -114,7 +130,14 @@ export function useMap(
         const source = m?.getSource('wards') as GeoJSONSource | undefined;
         if (!m || wardsLoaded || !source) return;
         wardsLoaded = true;
-        void source.setData(fileUrl(opts.manifest, 'wards.geojson'));
+        source
+            .setData(fileUrl(opts.manifest, 'wards.geojson'))
+            .then(() => {
+                wardsReady = true;
+                // A ward focus was drawn as its constituency while this loaded.
+                if (focus?.level === 'ward') restyle();
+            })
+            .catch(() => {});
     }
 
     function setState(
@@ -192,7 +215,9 @@ export function useMap(
         const m = map.value;
         if (!m || !ready.value) return;
         const theme = THEMES[opts.theme.value];
-        const filters = focusFilters(focus, opts.index, { surroundings });
+        const filters = focusFilters(drawnFocus(), opts.index, {
+            surroundings,
+        });
         const layers = [
             ...style().layers,
             ...opts.overlays.value.flatMap((o) =>
@@ -469,6 +494,7 @@ export function useMap(
         /** Show only this unit (and what is inside it); null shows everything again. */
         setFocus(sel: FocusSelection | null) {
             focus = sel;
+            if (sel?.level === 'ward') ensureWards();
             applyZoomAnchor();
             restyle();
         },

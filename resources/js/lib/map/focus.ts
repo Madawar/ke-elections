@@ -16,6 +16,8 @@ export const HIDDEN: FilterSpecification = ['==', ['get', 'code'], -1];
 
 const GEOMETRY_LAYERS = [
     'land',
+    'land-constituencies',
+    'land-wards',
     'counties-fill',
     'constituencies-fill',
     'wards-fill',
@@ -48,6 +50,8 @@ export const FOCUS_LAYERS: readonly string[] = [
 
 const SOURCE_OF_LAYER: Record<string, FocusSource> = {
     land: 'counties',
+    'land-constituencies': 'constituencies',
+    'land-wards': 'wards',
     'counties-fill': 'counties',
     'counties-line': 'counties',
     'counties-line-casing': 'counties',

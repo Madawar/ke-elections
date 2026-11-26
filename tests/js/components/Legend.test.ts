@@ -150,6 +150,32 @@ describe('Legend as a bar chart', () => {
         );
     });
 
+    it('pins the source note and Show all outside the scrolling rows, so a capped legend still shows them', () => {
+        const wrapper = mountLegend({
+            note: 'Source: IEBC',
+            filtered: true,
+            highlighted: ['UDA'],
+            maxHeight: '220px',
+        });
+        const scroller = wrapper.find('.overflow-y-auto');
+        expect(scroller.find('ul').exists()).toBe(true);
+        expect(scroller.text()).not.toContain('Source: IEBC');
+        expect(scroller.text()).not.toContain('Show all');
+        const note = wrapper
+            .findAll('p')
+            .find((p) => p.text() === 'Source: IEBC')!;
+        expect(note.exists()).toBe(true);
+        expect(scroller.element.contains(note.element)).toBe(false);
+        // The cap stays on the whole legend; the footer does not scroll away.
+        expect(wrapper.attributes('style')).toContain('max-height: 220px');
+        expect(note.element.parentElement?.classList.contains('shrink-0')).toBe(
+            true,
+        );
+        expect(
+            wrapper.findAll('button').some((b) => b.text() === 'Show all'),
+        ).toBe(true);
+    });
+
     it('words the heading by scope: across Kenya unfocused, the unit when focused', () => {
         expect(legendTitle('Senator')).toBe(
             'Senator seats across Kenya by party',

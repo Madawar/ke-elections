@@ -183,6 +183,31 @@ describe('focusFilters', () => {
             expect(s.properties.ward_code).toBe(1448);
     });
 
+    it('keeps a land base on the focused level, so a constituency or ward interior is not the ground colour', () => {
+        const constituency = focusFilters(
+            { level: 'constituency', code: 290 },
+            index,
+        );
+        expect(
+            codes(
+                matching(
+                    'land-constituencies',
+                    constituency['land-constituencies'],
+                ),
+            ),
+        ).toEqual([290]);
+        // The wards of the focused constituency pass too; the style paints that layer transparent.
+        for (const w of matching('land-wards', constituency['land-wards']))
+            expect(w.properties.constituency_code).toBe(290);
+        const ward = focusFilters({ level: 'ward', code: 1448 }, index);
+        expect(codes(matching('land-wards', ward['land-wards']))).toEqual([
+            1448,
+        ]);
+        expect(
+            matching('land-constituencies', ward['land-constituencies']),
+        ).toHaveLength(0);
+    });
+
     it('hides the province layers for any selection', () => {
         for (const sel of [
             { level: 'county', code: 47 },

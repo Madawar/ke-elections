@@ -156,7 +156,7 @@ export function searchPeople(
     });
 }
 
-const SEAT_TITLE: Record<Holder['seat'], string> = {
+export const SEAT_TITLE: Record<Holder['seat'], string> = {
     governor: 'Governor',
     senator: 'Senator',
     woman_rep: 'Woman Representative',

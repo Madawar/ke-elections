@@ -2,18 +2,7 @@
 // The map legend. With counts it is a bar chart: one bar per party on a single scale that starts
 // at zero, largest first, "Other" last. Without counts (former provinces) it is a plain key.
 import { computed } from 'vue';
-
-export interface LegendRow {
-    key: string;
-    /** What the row shows: a party abbreviation, or a province name. */
-    label: string;
-    /** The full name, read out by assistive technology (defaults to the label). */
-    name?: string;
-    colour: string;
-    count?: number;
-    /** Sorts after every other row whatever its count ("Other and independent"). */
-    last?: boolean;
-}
+import type { LegendRow } from '@/lib/legend';
 
 const props = defineProps<{
     title: string;
@@ -105,7 +94,7 @@ const spoken = (r: LegendRow) =>
                 />
             </svg>
         </button>
-        <div v-if="open" class="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+        <div v-if="open" class="min-h-0 flex-1 overflow-y-auto px-3 pb-1">
             <ul class="space-y-0.5">
                 <li v-for="r in sorted" :key="r.key" :data-key="r.key">
                     <template v-if="r.count !== undefined">
@@ -171,15 +160,18 @@ const spoken = (r: LegendRow) =>
                     </span>
                 </li>
             </ul>
+        </div>
+        <!-- Outside the scrolling rows, so the source and "Show all" stay in view when the legend is capped -->
+        <div v-if="open && (filtered || note)" class="shrink-0 px-3 pb-2">
             <button
                 v-if="filtered"
                 type="button"
-                class="mt-1 min-h-11 text-[14px] underline underline-offset-4"
+                class="min-h-11 text-[14px] underline underline-offset-4"
                 @click="emit('clear')"
             >
                 Show all
             </button>
-            <p v-if="note" class="mt-2 text-[12px] text-muted-ink">
+            <p v-if="note" class="mt-1 text-[12px] text-muted-ink">
                 {{ note }}
             </p>
         </div>

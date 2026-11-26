@@ -421,6 +421,19 @@ export function buildStyle({
                 source: 'counties',
                 paint: { 'fill-color': theme.land },
             },
+            // The county land fill is hidden by a constituency or ward focus, so the focused level
+            // gets its own land base: its interior reads as Kenya, not as the area outside it.
+            ...(['constituency', 'ward'] as const).map(
+                (level): LayerSpecification => ({
+                    id: `land-${SOURCE_OF[level]}`,
+                    type: 'fill',
+                    source: SOURCE_OF[level],
+                    paint: {
+                        'fill-color': theme.land,
+                        'fill-opacity': focus?.level === level ? 1 : 0,
+                    },
+                }),
+            ),
             ...fills,
             ...lineLayers(theme, colouring.mode.kind !== 'none', focus),
             {

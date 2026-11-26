@@ -153,6 +153,42 @@ describe('buildStyle', () => {
             return Math.max(...stops.filter((_, i) => i % 2 === 1).map(Number));
         };
 
+        it('gives a focused constituency or ward a land fill, and a county none (the county land layer covers it)', () => {
+            const at = (level: 'county' | 'constituency' | 'ward') =>
+                buildStyle({
+                    manifest,
+                    theme,
+                    provinceOfCounty,
+                    focus: { level },
+                });
+            const landOpacity = (st: typeof style, id: string) =>
+                paint(st, id)['fill-opacity'];
+            const constituency = at('constituency');
+            expect(
+                paint(constituency, 'land-constituencies')['fill-color'],
+            ).toBe(theme.land);
+            expect(landOpacity(constituency, 'land-constituencies')).toBe(1);
+            expect(landOpacity(constituency, 'land-wards')).toBe(0);
+            const ward = at('ward');
+            expect(paint(ward, 'land-wards')['fill-color']).toBe(theme.land);
+            expect(landOpacity(ward, 'land-wards')).toBe(1);
+            expect(landOpacity(ward, 'land-constituencies')).toBe(0);
+            const county = at('county');
+            expect(landOpacity(county, 'land-constituencies')).toBe(0);
+            expect(landOpacity(county, 'land-wards')).toBe(0);
+            expect(landOpacity(style, 'land-wards')).toBe(0);
+        });
+
+        it('draws the land bases under the fills and above the county land', () => {
+            const ids = style.layers.map((l) => l.id);
+            expect(ids.indexOf('land-constituencies')).toBeGreaterThan(
+                ids.indexOf('land'),
+            );
+            expect(ids.indexOf('land-wards')).toBeLessThan(
+                ids.indexOf('counties-fill'),
+            );
+        });
+
         it('draws the unit outline in the one ink colour, thicker than every inner border', () => {
             const inner = Math.max(
                 topStop(paint(focused, 'wards-line')['line-width']),
@@ -591,7 +627,7 @@ describe('buildStyle', () => {
         const colouring = (seat: 'mp' | 'governor', only: string[]) =>
             seatColouring(data, seat, {
                 noData: '#eee',
-                faded: OTHER,
+                faded: theme.faded,
                 only: new Set(only),
             });
         const paintOf = (st: typeof style, id: string) => layerOf(st, id).paint;
@@ -623,14 +659,18 @@ describe('buildStyle', () => {
                 focus,
             });
 
-        it('keeps the highlighted party colours and turns every other holder to the Other grey', () => {
+        it('keeps the faded colour distinct from the Other party grey', () => {
+            expect(theme.faded).not.toBe(OTHER);
+        });
+
+        it('keeps the highlighted party colours and fades every other holder to the faded colour, not the Other party grey', () => {
             const fill = paintOf(
                 build(colouring('mp', ['UDA'])),
                 'constituencies-fill',
             )['fill-color'];
             expect(colourOf(fill, props(289))).toBe('#E5B800');
-            expect(colourOf(fill, props(290))).toBe(OTHER);
-            expect(colourOf(fill, props(1))).toBe(OTHER);
+            expect(colourOf(fill, props(290))).toBe(theme.faded);
+            expect(colourOf(fill, props(1))).toBe(theme.faded);
         });
 
         it('highlights several parties at once, each keeping its own colour', () => {
@@ -640,13 +680,13 @@ describe('buildStyle', () => {
             )['fill-color'];
             expect(colourOf(fill, props(289))).toBe('#E5B800');
             expect(colourOf(fill, props(290))).toBe('#E07B20');
-            expect(colourOf(fill, props(1))).toBe(OTHER);
+            expect(colourOf(fill, props(1))).toBe(theme.faded);
             // Toggling ODM off leaves UDA only.
             const one = paintOf(
                 build(colouring('mp', ['UDA'])),
                 'constituencies-fill',
             )['fill-color'];
-            expect(colourOf(one, props(290))).toBe(OTHER);
+            expect(colourOf(one, props(290))).toBe(theme.faded);
         });
 
         it('restores the normal colours when the highlight is cleared', () => {
@@ -668,7 +708,9 @@ describe('buildStyle', () => {
             expect(colourOf(fill, { code: 1448, county_code: 47 })).toBe(
                 '#E5B800',
             );
-            expect(colourOf(fill, { code: 1, county_code: 1 })).toBe(OTHER);
+            expect(colourOf(fill, { code: 1, county_code: 1 })).toBe(
+                theme.faded,
+            );
         });
 
         it('keeps the surroundings grey and the borders neutral and cased while a party is highlighted', () => {
