@@ -21,10 +21,10 @@ function corrections(log) {
 
 /**
  * `log` is the step list from assembleWards. `stats`:
- * `{ counts, wardNames: Map, simplify, coverage: { assembled, simplified }, patchChecks, files }`.
+ * `{ counts, wardNames: Map, simplify, areaChanges, coverage: { assembled, simplified }, patchChecks, files }`.
  */
 export function renderReport(log, stats) {
-    const { counts, wardNames, simplify, coverage, patchChecks, files } = stats;
+    const { counts, wardNames, simplify, areaChanges, coverage, patchChecks, files } = stats;
     const name = (code) => wardNames.get(code) ?? '';
     const patched = byStep(log, 'patched').sort(byCode);
     const dropped = byStep(log, 'dropped');
@@ -48,7 +48,7 @@ export function renderReport(log, stats) {
             ],
         ),
         '',
-        `All codes are present exactly once and no polygon is empty. Names and parent codes come from the gazette. Wards were simplified with \`${simplify}\`, then the constituencies, counties and provinces were dissolved from those simplified wards, so every layer shares the same lines.`,
+        `All codes are present exactly once and no polygon is empty. Names and parent codes come from the gazette. Wards were simplified with \`-simplify ${simplify}\` (small wards keep more detail than large ones, see below), then the constituencies, counties and provinces were dissolved from those simplified wards, so every layer shares the same lines.`,
         '',
     );
 
@@ -114,6 +114,18 @@ export function renderReport(log, stats) {
                 ['After assembly (full detail)', coverage.assembled],
                 ['After simplification', coverage.simplified],
             ].map(([stage, c]) => [stage, km2(c.sumKm2), km2(c.unionKm2), km2(c.overlapKm2), c.holes, km2(c.holeKm2)]),
+        ),
+        '',
+    );
+
+    out.push(
+        '## Simplification: largest area changes per ward',
+        '',
+        `Each ward's area after simplification against its full-detail area (after cleaning and patching). ${areaChanges.over20} wards change by more than 20%; the build fails if any ward changes by more than ${areaChanges.limit * 100}%. The ${areaChanges.rows.length} largest changes:`,
+        '',
+        table(
+            ['Code', 'Ward', 'Full detail (km²)', 'Simplified (km²)', 'Change'],
+            areaChanges.rows.map((r) => [r.code, r.name, km2(r.beforeKm2), km2(r.afterKm2), `${r.change >= 0 ? '+' : ''}${(r.change * 100).toFixed(1)}%`]),
         ),
         '',
     );

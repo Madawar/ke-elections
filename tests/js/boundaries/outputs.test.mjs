@@ -46,6 +46,16 @@ describe('boundary outputs', () => {
         });
     }
 
+    it('simplification keeps every ward within 20% of its full-detail area', () => {
+        const full = JSON.parse(readFileSync(resolve(root, 'boundaries/build/ward-areas.json'), 'utf8'));
+        expect(Object.keys(full)).toHaveLength(1450);
+        for (const feature of layers.wards.features) {
+            const before = full[feature.properties.code];
+            const change = turf.area(feature) / 1e6 / before - 1;
+            expect(Math.abs(change), `ward ${feature.properties.code} ${feature.properties.name}`).toBeLessThanOrEqual(0.2);
+        }
+    });
+
     it('wards carry gazette names and parent codes', () => {
         for (const { properties: p } of layers.wards.features) {
             const ward = gazette.wards.get(p.code);

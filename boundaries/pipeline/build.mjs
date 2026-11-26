@@ -1,11 +1,11 @@
 // Builds public/boundaries/* and boundaries/build-report.md from the raw sources.
 // Run with `npm run boundaries:build`. Exits non-zero if any validation fails.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import * as turf from '@turf/turf';
-import { buildUnitsIndex, deriveLayers, labelPoints, simplifyWards } from './derive.mjs';
+import { WARD_SIMPLIFY, buildUnitsIndex, deriveLayers, labelPoints, simplifyWards } from './derive.mjs';
 import { loadGazette, loadProvinces } from './gazette.mjs';
 import { writeOutputs } from './outputs.mjs';
 import { renderReport } from './report.mjs';
@@ -16,7 +16,9 @@ const root = resolve(import.meta.dirname, '../..');
 const path = (...parts) => resolve(root, ...parts);
 const text = (...parts) => readFileSync(path(...parts), 'utf8');
 
-const SIMPLIFY = '2%';
+// The build fails if simplification changes any ward's area by more than this; the aim is 20%.
+const MAX_AREA_CHANGE = 0.35;
+const REPORTED_AREA_CHANGES = 15;
 const RUIRU = [571, 572, 573, 574, 575, 576];
 const BUDGET_KB = { 'counties.geojson': 120, 'constituencies.geojson': 180, 'wards.geojson': 300, 'units.json': 60 };
 const EXPECTED = { provinces: 8, counties: 47, constituencies: 290, wards: 1450 };
@@ -65,6 +67,17 @@ function checkRuiru(wards) {
     return { rows, overlaps, pairs };
 }
 
+/** Each ward's area after simplification against its full-detail area, largest change first. */
+function areaChanges(full, simplified) {
+    return simplified.features
+        .map((f) => {
+            const before = full.get(f.properties.code);
+            const after = sqKm(f);
+            return { code: f.properties.code, name: f.properties.name, beforeKm2: before, afterKm2: after, change: after / before - 1 };
+        })
+        .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+}
+
 function fail(problems) {
     console.error('Boundary build failed:');
     for (const p of problems) console.error(`  - ${p}`);
@@ -86,8 +99,18 @@ async function main() {
     if (patchChecks.overlaps.length > 0) problems.push('The Ruiru wards overlap each other');
     if (patchChecks.rows.some((r) => !(r.areaKm2 > 0))) problems.push('A Ruiru ward has no area');
 
-    console.log(`Simplifying wards (${SIMPLIFY} keep-shapes) and deriving layers...`);
-    const wards = await simplifyWards(assembled, SIMPLIFY);
+    const fullAreas = new Map(assembled.features.map((f) => [f.properties.code, sqKm(f)]));
+    mkdirSync(path('boundaries/build'), { recursive: true });
+    writeFileSync(
+        path('boundaries/build/ward-areas.json'),
+        JSON.stringify(Object.fromEntries([...fullAreas].map(([code, km2]) => [code, Math.round(km2 * 1e6) / 1e6]))) + '\n',
+    );
+
+    console.log('Simplifying wards and deriving layers...');
+    const wards = await simplifyWards(assembled);
+    const changes = areaChanges(fullAreas, wards);
+    const tooFar = changes.filter((c) => Math.abs(c.change) > MAX_AREA_CHANGE);
+    if (tooFar.length > 0) problems.push(`${tooFar.length} wards changed area by more than ${MAX_AREA_CHANGE * 100}% when simplified: ${tooFar.map((c) => c.code).join(', ')}`);
     const simplifiedCoverage = await coverage(wards);
     const { constituencies, counties, provinces: provinceLayer } = await deriveLayers(wards, gazette, provinces);
     const layers = { provinces: provinceLayer, counties, constituencies, wards };
@@ -125,7 +148,8 @@ async function main() {
         renderReport(log, {
             counts,
             wardNames,
-            simplify: `-simplify ${SIMPLIFY} keep-shapes`,
+            simplify: WARD_SIMPLIFY,
+            areaChanges: { rows: changes.slice(0, REPORTED_AREA_CHANGES), over20: changes.filter((c) => Math.abs(c.change) > 0.2).length, limit: MAX_AREA_CHANGE },
             coverage: { assembled: assembledCoverage, simplified: simplifiedCoverage },
             patchChecks,
             files,

@@ -7,9 +7,18 @@ import { runMapshaper } from './wards.mjs';
 const collection = (features) => ({ type: 'FeatureCollection', features });
 const byCode = (a, b) => a.properties.code - b.properties.code;
 
-/** Simplify the ward layer. `keep-shapes` stops small wards from collapsing. */
-export async function simplifyWards(wards, percentage = '2%') {
-    const { output } = await runMapshaper(`-i wards.json -simplify ${percentage} keep-shapes -o out.json format=geojson`, {
+// Simplification keeps a share of the vertices that depends on ward size. One global
+// percentage (2%) kept the big rural wards at a good size, but flattened small urban
+// wards: Garissa Township lost 97% of its area and 27 wards changed by more than 20%.
+// Small wards get a much higher share (60% below 1 km2, down to 2% above 60 km2).
+// A line shared by two wards keeps the finer setting, so neighbours stay in step and
+// every layer still nests.
+export const WARD_SIMPLIFY =
+    `variable percentage='$.area < 1e6 ? "60%" : $.area < 5e6 ? "30%" : $.area < 20e6 ? "8%" : $.area < 60e6 ? "4%" : "2%"' keep-shapes`;
+
+/** Simplify the ward layer with `-simplify` arguments (default: the size-tiered setting above). */
+export async function simplifyWards(wards, simplify = WARD_SIMPLIFY) {
+    const { output } = await runMapshaper(`-i wards.json -simplify ${simplify} -o out.json format=geojson`, {
         'wards.json': wards,
     });
     const simplified = JSON.parse(output['out.json'].toString());

@@ -11,7 +11,7 @@ Written by `npm run boundaries:build` on every run. Do not edit by hand.
 | Constituencies | 290 |
 | Wards | 1450 |
 
-All codes are present exactly once and no polygon is empty. Names and parent codes come from the gazette. Wards were simplified with `-simplify 2% keep-shapes`, then the constituencies, counties and provinces were dissolved from those simplified wards, so every layer shares the same lines.
+All codes are present exactly once and no polygon is empty. Names and parent codes come from the gazette. Wards were simplified with `-simplify variable percentage='$.area < 1e6 ? "60%" : $.area < 5e6 ? "30%" : $.area < 20e6 ? "8%" : $.area < 60e6 ? "4%" : "2%"' keep-shapes` (small wards keep more detail than large ones, see below), then the constituencies, counties and provinces were dissolved from those simplified wards, so every layer shares the same lines.
 
 ## Patched wards (13)
 
@@ -143,7 +143,29 @@ Gap threshold: with mapshaper's default, 434 gaps totalling about 1,324 km² sta
 | Stage | Sum of ward areas (km²) | Area of union (km²) | Overlap (km²) | Holes inside the country | Hole area (km²) |
 |---|---|---|---|---|---|
 | After assembly (full detail) | 594,077.86 | 594,077.86 | 0 | 1 | 0.02 |
-| After simplification | 594,039.75 | 594,039.75 | 0 | 0 | 0 |
+| After simplification | 594,050.65 | 594,050.65 | 0 | 0 | 0 |
+
+## Simplification: largest area changes per ward
+
+Each ward's area after simplification against its full-detail area (after cleaning and patching). 0 wards change by more than 20%; the build fails if any ward changes by more than 35%. The 15 largest changes:
+
+| Code | Ward | Full detail (km²) | Simplified (km²) | Change |
+|---|---|---|---|---|
+| 101 | Faza | 30.18 | 28.77 | -4.7% |
+| 29 | Shimanzi/Ganjoni | 5.02 | 5.24 | +4.5% |
+| 104 | Shella | 105.41 | 101.65 | -3.6% |
+| 424 | Wote | 97.23 | 93.78 | -3.6% |
+| 988 | Mogogosiek | 60.92 | 58.88 | -3.4% |
+| 598 | Sigona | 24.33 | 25.04 | +2.9% |
+| 596 | Karai | 26.82 | 27.61 | +2.9% |
+| 761 | Nandi Hills | 77.02 | 79.23 | +2.9% |
+| 972 | Nyangores | 112.38 | 109.17 | -2.9% |
+| 301 | Mariani | 99.63 | 96.84 | -2.8% |
+| 215 | Libehia | 30.39 | 29.54 | -2.8% |
+| 1148 | Namboboto Nambuku | 63.49 | 61.74 | -2.8% |
+| 738 | Moiben/Kuserwo | 130.12 | 133.53 | +2.6% |
+| 1275 | Ragana-Oruba | 30.27 | 29.48 | -2.6% |
+| 944 | Kapsoit | 62.42 | 64.04 | +2.6% |
 
 ## Checks on the real data
 
@@ -166,9 +188,9 @@ Pairwise overlap among these six wards (15 pairs): none.
 
 | File | Raw (KB) | Gzipped (KB) | Gzip budget (KB) |
 |---|---|---|---|
-| constituencies.geojson | 414.1 | 105.0 | 180 |
-| counties.geojson | 164.6 | 47.2 | 120 |
+| constituencies.geojson | 523.1 | 132.0 | 180 |
+| counties.geojson | 193.7 | 55.6 | 120 |
 | labels.geojson | 264.6 | 32.8 |  |
-| provinces.geojson | 81.7 | 24.8 |  |
-| units.json | 145.1 | 41.7 | 60 |
-| wards.geojson | 1009.3 | 221.9 | 300 |
+| provinces.geojson | 100.5 | 30.8 |  |
+| units.json | 145.1 | 41.8 | 60 |
+| wards.geojson | 1255.6 | 279.1 | 300 |
