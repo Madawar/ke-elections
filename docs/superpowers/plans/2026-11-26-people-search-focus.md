@@ -289,7 +289,7 @@ otherwise build it here.
   1. Search: "Find any county, constituency, ward, or politician by name."
   2. Locate: "See the ward you're in."
   3. Seat chips: "Colour the map by the party holding each seat."
-  4. The map: "Tap an area to see who represents it. Zoom out or tap outside to step back."
+  4. The map: "Tap an area to see who represents it. Use Back to step out, or Show surroundings to see its neighbours."
 - Each popover has **Next** (**Done** on the last) and **Skip**, and shows its step as "1 of 4".
 - The popovers are non-modal: the map stays usable, Escape closes the tour, and focus moves to
   the popover's first button.
@@ -354,6 +354,19 @@ navigate back kind of button". Zoom-out stepping stays as well.
     breadcrumb, or a wheel or pinch zoom-out.
   - Test: in `useMap` and `Map.vue` logic, an outside tap with surroundings off leaves the
     selection unchanged; with surroundings on, it selects the tapped neighbour.
+- **A nudge on outside taps:** the owner asked on 2026-11-26 that we "goad the user" towards these
+  controls, because a silent no-op is a dead end.
+  - When an outside tap is ignored, show a small non-modal hint card near the back button: "You're
+    viewing <unit>. Go back to see more, or show the surroundings to pick a neighbour."
+  - The card has two buttons: **Back to <parent>**, which does the same as the back button, and
+    **Show surroundings**, which turns the switch on.
+  - It closes on its own after 6 s, on the next map tap, on Escape, or when either button is
+    used. It's announced through the aria-live region.
+  - Show it at most 3 times in total (`localStorage` key `kem.outsideHint.count`, with
+    try/catch), and never again once the person has used the back button or the switch.
+  - Test (component or unit): the hint appears on an ignored outside tap, its buttons emit
+    step-up and enable-surroundings, and it stops appearing after 3 shows or after either control
+    is used.
 - **History:**
   - Each focus change made by the user (tap, search pick, breadcrumb, back button) pushes a
     history entry for the unit's URL. A zoom-driven step-up replaces the current entry instead,
