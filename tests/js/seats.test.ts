@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OTHER } from '@/lib/map/theme';
+import { OTHER, THEMES } from '@/lib/map/theme';
 import {
     type SeatsData,
     EMPTY_SEATS,
@@ -189,5 +189,44 @@ describe('legend counts that follow the focus', () => {
         expect(scope.codes.size).toBe(
             index.children('constituency', nairobi[0]).length,
         );
+    });
+});
+
+describe('highlighting "Other and independent"', () => {
+    // CCC has no colour of its own, so it is drawn as the Other grey; AAA and BBB have colours.
+    const noColour: SeatsData = {
+        ...data,
+        parties: [
+            ...data.parties,
+            {
+                abbrev: 'CCC',
+                name: 'Gamma',
+                coalition_2022: null,
+                colour: null,
+            },
+        ],
+        holders: [
+            h('mp', 'constituency', 1, 'AAA'),
+            h('mp', 'constituency', 2, 'BBB'),
+            h('mp', 'constituency', 3, 'CCC'),
+            h('mp', 'constituency', 4, 'IND'),
+        ] as SeatsData['holders'],
+    };
+
+    it('draws selected units and not-selected units in clearly different colours', () => {
+        for (const theme of [THEMES.light, THEMES.dark]) {
+            const col = seatColouring(noColour, 'mp', {
+                noData: theme.noData,
+                faded: theme.faded,
+                only: new Set(['CCC', 'IND']),
+            });
+            // The highlighted remainder keeps the Other grey; everything else is the faded wash.
+            expect(col.colours.get(3)).toBe(OTHER);
+            expect(col.colours.get(4)).toBe(OTHER);
+            expect(col.colours.get(1)).toBe(theme.faded);
+            expect(col.colours.get(2)).toBe(theme.faded);
+            expect(theme.faded).not.toBe(OTHER);
+            expect(theme.faded).not.toBe(theme.noData);
+        }
     });
 });

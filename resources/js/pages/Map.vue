@@ -163,7 +163,7 @@ const colouring = computed<Colouring>(() => {
     const t = THEMES[theme.value];
     return seatColouring(seats.value, k, {
         noData: t.noData,
-        faded: OTHER,
+        faded: t.faded,
         only: new Set(onlyParties.value),
     });
 });
@@ -284,6 +284,12 @@ const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
 // The legend is open on desktop; a focused unit collapses it to its chip so it never covers the unit.
 const legendOpen = ref(isDesktop.value && !props.unit);
 watch(isDesktop, (d) => (legendOpen.value = d && !selection.value));
+// The open legend is capped to the room between the search bar and its own bottom edge, so its
+// heading is never pushed under the search bar.
+const legendMaxHeight = computed(
+    () =>
+        `calc(100dvh - ${(isDesktop.value ? 24 : sheetHeight.value + 12) + 68}px)`,
+);
 // Only an open legend beside a focused unit takes room from the fit.
 const legendBoxOpen = computed(
     () =>
@@ -679,6 +685,7 @@ const showView = (v: typeof view.value) => {
             <Legend
                 v-model:open="legendOpen"
                 :title="legend.title"
+                :max-height="legendMaxHeight"
                 :chip-label="legend.chipLabel"
                 :rows="legend.rows"
                 :note="legend.note"

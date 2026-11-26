@@ -19,6 +19,7 @@ export interface MapTheme {
     labelHalo: string;
     town: string;
     noData: string; // a seat with no approved holder
+    faded: string; // a seat whose party is not highlighted; distinct from the "Other" party grey and from noData
 }
 
 export const THEMES: Record<ThemeName, MapTheme> = {
@@ -39,6 +40,7 @@ export const THEMES: Record<ThemeName, MapTheme> = {
         labelHalo: '#EEF1EF',
         town: '#4C5B6B',
         noData: '#E3E8E5',
+        faded: '#C3CBC7',
     },
     // Direction B "Tally night"
     dark: {
@@ -57,6 +59,7 @@ export const THEMES: Record<ThemeName, MapTheme> = {
         labelHalo: '#0F2430',
         town: '#9DB0BA',
         noData: '#1C3A4A',
+        faded: '#34566A',
     },
 };
 

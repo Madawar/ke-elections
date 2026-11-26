@@ -17,6 +17,8 @@ export interface LegendRow {
 
 const props = defineProps<{
     title: string;
+    /** The most height the open legend may take (CSS length), so it never runs under the search bar. */
+    maxHeight?: string;
     /** The short name on the collapsed chip, such as "MP seats" (defaults to the title). */
     chipLabel?: string;
     rows: LegendRow[];
@@ -68,12 +70,13 @@ const spoken = (r: LegendRow) =>
 
 <template>
     <div
-        class="rounded-md border border-hairline bg-surface/95 text-[13px] text-ink shadow-sm"
+        class="flex flex-col rounded-md border border-hairline bg-surface text-[13px] text-ink shadow-sm"
         :class="open ? 'w-72 max-w-[calc(100vw-1.5rem)]' : 'max-w-[16rem]'"
+        :style="open && maxHeight ? { maxHeight } : undefined"
     >
         <button
             type="button"
-            class="flex min-h-11 w-full items-center gap-2 px-3 text-left font-semibold"
+            class="flex min-h-11 w-full shrink-0 items-center gap-2 px-3 text-left font-semibold [word-spacing:0.12em]"
             :aria-expanded="open"
             @click="open = !open"
         >
@@ -102,10 +105,7 @@ const spoken = (r: LegendRow) =>
                 />
             </svg>
         </button>
-        <div
-            v-if="open"
-            class="max-h-[min(70vh,30rem)] overflow-y-auto px-3 pb-2"
-        >
+        <div v-if="open" class="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
             <ul class="space-y-0.5">
                 <li v-for="r in sorted" :key="r.key" :data-key="r.key">
                     <template v-if="r.count !== undefined">
@@ -123,7 +123,7 @@ const spoken = (r: LegendRow) =>
                             @click="emit('toggle', r.key)"
                         >
                             <span
-                                class="inline-block size-3 shrink-0 rounded-[2px] border border-black/10"
+                                class="inline-block size-3 shrink-0 rounded-[2px] border border-hairline"
                                 :style="{ background: r.colour }"
                                 aria-hidden="true"
                             />
@@ -149,15 +149,21 @@ const spoken = (r: LegendRow) =>
                             </span>
                             <span
                                 data-count
-                                class="w-[4.5rem] shrink-0 text-right whitespace-nowrap tabular-nums"
+                                class="w-7 shrink-0 text-right tabular-nums"
                                 aria-hidden="true"
-                                >{{ r.count }} ({{ share(r.count) }})</span
+                                >{{ r.count }}</span
+                            >
+                            <span
+                                data-share
+                                class="w-11 shrink-0 text-right whitespace-nowrap tabular-nums"
+                                aria-hidden="true"
+                                >({{ share(r.count) }})</span
                             >
                         </button>
                     </template>
                     <span v-else class="flex items-center gap-2">
                         <span
-                            class="inline-block size-3 shrink-0 rounded-[2px] border border-black/10"
+                            class="inline-block size-3 shrink-0 rounded-[2px] border border-hairline"
                             :style="{ background: r.colour }"
                             aria-hidden="true"
                         />

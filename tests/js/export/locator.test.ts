@@ -234,6 +234,39 @@ describe('mapLegend with filters', () => {
         ]);
     });
 
+    it('labels a colourless party that is not highlighted as not selected, not by name', () => {
+        const theme = THEMES.light;
+        const data = {
+            ...SEATS,
+            parties: [
+                ...SEATS.parties,
+                {
+                    abbrev: 'ZZZ',
+                    name: 'Zed',
+                    coalition_2022: null,
+                    colour: null,
+                },
+            ],
+            holders: SEATS.holders.map((h) =>
+                h.seat === 'mp' && h.code === 290 ? { ...h, party: 'ZZZ' } : h,
+            ),
+        };
+        const colouring = seatColouring(data, 'mp', {
+            noData: theme.noData,
+            faded: theme.faded,
+            only: new Set(['SPB']),
+        });
+        const labels = mapLegend(
+            data,
+            index,
+            unit('county', 47),
+            colouring,
+        )!.rows.map((r) => r.label);
+        expect(labels).toContain('SPB');
+        expect(labels).toContain('Not selected');
+        expect(labels).not.toContain('ZZZ');
+    });
+
     it('folds small parties into an "Others" row with no swatch', () => {
         const data = {
             ...SEATS,

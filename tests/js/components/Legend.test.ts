@@ -45,6 +45,15 @@ const mountLegend = (props = {}) =>
         },
     });
 
+/** Each row's count and share, read from their own cells: two columns that line up. */
+const cells = (wrapper: ReturnType<typeof mountLegend>) =>
+    wrapper
+        .findAll('li')
+        .map(
+            (li) =>
+                `${li.find('[data-count]').text()} ${li.find('[data-share]').text()}`,
+        );
+
 describe('Legend as a bar chart', () => {
     it('sorts by count, ties by abbreviation, with Other last', () => {
         const items = mountLegend().findAll('li');
@@ -154,6 +163,33 @@ describe('Legend as a bar chart', () => {
         );
     });
 
+    it('keeps counts and shares in their own right-aligned tabular cells', () => {
+        const wrapper = mountLegend();
+        for (const li of wrapper.findAll('li')) {
+            for (const cell of ['[data-count]', '[data-share]']) {
+                const classes = li.find(cell).classes();
+                expect(classes).toContain('text-right');
+                expect(classes).toContain('tabular-nums');
+            }
+        }
+    });
+
+    it('uses tokens only: no literal colour classes, an opaque surface, a capped height', () => {
+        const wrapper = mountLegend({ maxHeight: 'calc(100dvh - 400px)' });
+        const classes = wrapper
+            .findAll('*')
+            .flatMap((el) => el.classes())
+            .concat(wrapper.classes());
+        expect(
+            classes.filter((c) => /(^|-)(black|white)(\/|$)|\[#/.test(c)),
+        ).toEqual([]);
+        expect(wrapper.classes()).toContain('bg-surface');
+        expect(wrapper.classes().join(' ')).not.toContain('bg-surface/');
+        expect((wrapper.element as HTMLElement).style.maxHeight).toBe(
+            'calc(100dvh - 400px)',
+        );
+    });
+
     it('collapses to a chip and opens on tap', async () => {
         const wrapper = mountLegend({ open: false });
         expect(wrapper.find('ul').exists()).toBe(false);
@@ -237,7 +273,7 @@ describe('Legend as a bar chart', () => {
                 },
             ],
         });
-        const counts = wrapper.findAll('[data-count]').map((c) => c.text());
+        const counts = cells(wrapper);
         expect(counts[0]).toBe('22 (47%)');
         expect(counts[1]).toBe('13 (28%)');
         // The shares are rounded one by one and are not forced to add up to 100.
@@ -272,8 +308,7 @@ describe('Legend as a bar chart', () => {
                 },
             ],
         });
-        const counts = wrapper.findAll('[data-count]').map((c) => c.text());
-        expect(counts).toEqual(['289 (100%)', '1 (<1%)']);
+        expect(cells(wrapper)).toEqual(['289 (100%)', '1 (<1%)']);
         const spoken = wrapper.findAll('li .sr-only').map((c) => c.text());
         expect(spoken[1]).toBe('Beta: 1 seat, less than 1 percent');
     });
