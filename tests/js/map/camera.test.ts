@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centreOn, mapPadding } from '@/lib/map/camera';
+import { LEGEND_WIDTH, centreOn, mapPadding } from '@/lib/map/camera';
 
 describe('mapPadding', () => {
     it('keeps a phone unit centred in the map above a half-height sheet', () => {
@@ -43,6 +43,35 @@ describe('mapPadding', () => {
         expect(middleX).toBe((380 + viewport.width) / 2);
         const middleY = (p.top + (viewport.height - p.bottom)) / 2;
         expect(middleY).toBe(viewport.height / 2);
+    });
+});
+
+describe('mapPadding with the legend open', () => {
+    const viewport = { width: 1440, height: 900 };
+
+    it('keeps a desktop unit clear of the legend box at the bottom left', () => {
+        const closed = mapPadding({ desktop: true, sheetHeight: 0, viewport });
+        const open = mapPadding({
+            desktop: true,
+            sheetHeight: 0,
+            viewport,
+            legendOpen: true,
+        });
+        // The legend spans x 396 to 652 (288 wide) beside the side panel.
+        expect(open.left).toBeGreaterThanOrEqual(396 + LEGEND_WIDTH);
+        expect(open.left).toBeGreaterThan(closed.left);
+        expect(open.right).toBe(closed.right);
+    });
+
+    it('leaves phone padding alone: the sheet already makes room and the legend opens on tap', () => {
+        const args = {
+            desktop: false,
+            sheetHeight: 388,
+            viewport: { width: 390, height: 844 },
+        };
+        expect(mapPadding({ ...args, legendOpen: true })).toEqual(
+            mapPadding(args),
+        );
     });
 });
 

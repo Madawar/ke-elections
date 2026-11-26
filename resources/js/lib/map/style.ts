@@ -37,6 +37,8 @@ export interface FocusStyle {
     /** The focused unit's level; a seat colouring above it is carried down to that level's fill. */
     level?: MapLevel;
 }
+/** A seat colour is drawn this opaque, so the lines and labels over it stay legible. */
+export const SEAT_FILL_OPACITY = 0.8;
 /** Outside the focused unit, fills are at most this opaque, in a neutral grey. */
 export const OUTSIDE_FILL_OPACITY = 0.15;
 /** Outside the focused unit, boundary lines are drawn at this share of their usual opacity. */
@@ -91,14 +93,14 @@ export function fillOpacity(
     // Focused on a level below the seat colouring (a ward, for a Governor): the layer for that level
     // is the one that shows the colour, as the coloured level above it is out of the picture.
     if (focusLevel === level && isFinerThanSeat(level, colouring.mode)) {
-        const coloured = state(0.97, 0.92, 0.86);
+        const coloured = state(0.9, 0.85, SEAT_FILL_OPACITY);
         return (
             outside ? ['case', outside, 0, coloured] : coloured
         ) as ExpressionSpecification;
     }
     if (pinned === level)
         return dim(
-            state(0.97, 0.92, 0.86),
+            state(0.9, 0.85, SEAT_FILL_OPACITY),
             OUTSIDE_FILL_OPACITY,
         ) as ExpressionSpecification;
     const tinted =
@@ -115,8 +117,20 @@ export function fillOpacity(
     );
 }
 
-/** Boundary lines, thickest for counties; constituency and ward lines fade in ahead of their fills. */
-function lineLayers(theme: MapTheme, focus?: FocusStyle): LayerSpecification[] {
+/** A casing is this much wider than the line it lies under. */
+export const CASING_RATIO = 1.5;
+
+/**
+ * Boundary lines, thickest for counties; constituency and ward lines fade in ahead of their fills.
+ * Each line is drawn twice: a casing in the ground colour underneath, then the line on top, so a
+ * border reads against any fill. Lines use only the neutral line tokens, never a party colour.
+ * The casing is off in the "boundaries only" view, which looks as it always has.
+ */
+function lineLayers(
+    theme: MapTheme,
+    cased: boolean,
+    focus?: FocusStyle,
+): LayerSpecification[] {
     const width = (stops: number[]) =>
         [
             'interpolate',
@@ -124,6 +138,8 @@ function lineLayers(theme: MapTheme, focus?: FocusStyle): LayerSpecification[] {
             ['zoom'],
             ...stops,
         ] as ExpressionSpecification;
+    const widen = (stops: number[]) =>
+        stops.map((v, i) => (i % 2 === 1 ? v * CASING_RATIO : v));
     // Line opacity, faded outside the focused unit when the surroundings are shown.
     const opacity = (
         stops: number[],
@@ -142,42 +158,69 @@ function lineLayers(theme: MapTheme, focus?: FocusStyle): LayerSpecification[] {
             ...stops.flatMap((v, i) => (i % 2 === 0 ? [v] : [fade(v)])),
         ] as ExpressionSpecification;
     };
-    // While focused, every border inside the unit is one neutral colour; only its outline is strong.
-    const inner = focus ? theme.constituencyLine : undefined;
-    return [
+    // Inside a focused unit the constituency lines are clearly heavier than the ward lines.
+    const wardWidth = focus
+        ? [9, 0.5, 12, 1, 15, 1.4]
+        : [9, 0.3, 12, 1, 15, 1.6];
+    const constituencyWidth = focus
+        ? [6.2, 0.6, 9, 1.6, 12, 2.6, 15, 3.4]
+        : [6.2, 0.4, 9, 1, 12, 1.8];
+    const countyWidth = [4, 0.8, 7, 1.6, 12, 2.8];
+    const lines = [
         {
-            id: 'wards-line',
-            type: 'line',
-            source: 'wards',
+            name: 'wards' as const,
             minzoom: 8.6,
-            paint: {
-                'line-color': inner ?? theme.wardLine,
-                'line-width': width([9, 0.3, 12, 1, 15, 1.6]),
-                'line-opacity': opacity([8.6, 0, 9.4, 1], 'wards'),
-            },
+            colour: theme.wardLine,
+            stops: wardWidth,
+            fade: [8.6, 0, 9.4, 1],
         },
         {
-            id: 'constituencies-line',
-            type: 'line',
-            source: 'constituencies',
+            name: 'constituencies' as const,
             minzoom: 6.2,
-            paint: {
-                'line-color': inner ?? theme.constituencyLine,
-                'line-width': width([6.2, 0.4, 9, 1, 12, 1.8]),
-                'line-opacity': opacity([6.2, 0, 7.1, 0.9], 'constituencies'),
-            },
+            colour: theme.constituencyLine,
+            stops: constituencyWidth,
+            fade: [6.2, 0, 7.1, 0.9],
         },
         {
-            id: 'counties-line',
-            type: 'line',
-            source: 'counties',
-            layout: { 'line-join': 'round' },
-            paint: {
-                'line-color': theme.countyLine,
-                'line-width': width([4, 0.8, 7, 1.6, 12, 2.8]),
-                'line-opacity': opacity([0.9], 'counties'),
-            },
+            name: 'counties' as const,
+            minzoom: undefined,
+            colour: theme.countyLine,
+            stops: countyWidth,
+            fade: [0.9],
         },
+    ].flatMap(({ name, minzoom, colour, stops, fade }) => {
+        const layer = (
+            id: string,
+            lineColour: string,
+            lineWidth: number[],
+            lineOpacity: ExpressionSpecification | number,
+        ): LayerSpecification => ({
+            id,
+            type: 'line',
+            source: name,
+            ...(minzoom === undefined ? {} : { minzoom }),
+            ...(name === 'counties'
+                ? { layout: { 'line-join': 'round' as const } }
+                : {}),
+            paint: {
+                'line-color': lineColour,
+                'line-width': width(lineWidth),
+                'line-opacity': lineOpacity,
+            },
+        });
+        const strength = opacity(fade, name);
+        return [
+            layer(
+                `${name}-line-casing`,
+                theme.ground,
+                widen(stops),
+                cased ? strength : 0,
+            ),
+            layer(`${name}-line`, colour, stops, strength),
+        ];
+    });
+    return [
+        ...lines,
         ...SOURCES.filter((s) => s !== 'provinces').map(
             (source): LayerSpecification => ({
                 id: `${source}-selected`,
@@ -379,7 +422,7 @@ export function buildStyle({
                 paint: { 'fill-color': theme.land },
             },
             ...fills,
-            ...lineLayers(theme, focus),
+            ...lineLayers(theme, colouring.mode.kind !== 'none', focus),
             {
                 id: 'overlays-anchor',
                 type: 'background',

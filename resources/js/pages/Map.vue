@@ -8,7 +8,7 @@ import LocatorExport from '@/components/export/LocatorExport.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
 import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
-import Legend from '@/components/map/Legend.vue';
+import Legend, { type LegendRow } from '@/components/map/Legend.vue';
 import MapControls from '@/components/map/MapControls.vue';
 import MapView from '@/components/map/MapView.vue';
 import NationalOverview from '@/components/map/NationalOverview.vue';
@@ -35,6 +35,8 @@ import { formatAsOf } from '@/lib/export/format';
 import {
     type SeatsData,
     EMPTY_SEATS,
+    legendScope,
+    legendTitle,
     loadSeats,
     seatColouring,
     seatLegend,
@@ -161,7 +163,7 @@ const colouring = computed<Colouring>(() => {
     const t = THEMES[theme.value];
     return seatColouring(seats.value, k, {
         noData: t.noData,
-        faded: t.hairline,
+        faded: OTHER,
         only: new Set(onlyParties.value),
     });
 });
@@ -178,36 +180,87 @@ const legend = computed(() => {
             .sort((a, b) => a.c - b.c);
         return {
             title: 'Former provinces',
-            rows: provinces.map((p) => ({
+            chipLabel: 'Former provinces',
+            note: undefined,
+            members: {} as Record<string, string[]>,
+            highlighted: [] as string[],
+            filtered: false,
+            rows: provinces.map((p): LegendRow => ({
                 key: String(p.c),
                 label: p.n,
                 colour: PROVINCE_TINTS[(p.c - 1) % PROVINCE_TINTS.length],
             })),
         };
     }
-    const rows = seatLegend(seats.value, k);
+    // While a unit is focused the counts cover only the seats inside it (or the one seat above it).
+    const scope = index.value
+        ? legendScope(index.value, k, focusOf(selection.value))
+        : null;
+    const rows = seatLegend(seats.value, k, scope?.codes);
     const shown = rows.filter((r) => r.colour !== OTHER).slice(0, 7);
     const other = rows
         .filter((r) => !shown.includes(r))
         .reduce((n, r) => n + r.seats, 0);
-    const mapped = shown.map((r) => ({
+    const mapped: LegendRow[] = shown.map((r) => ({
         key: r.abbrev,
-        label: r.abbrev === 'IND' ? 'Independent' : r.abbrev,
+        label: r.abbrev,
+        name: r.name,
         colour: r.colour,
         count: r.seats,
     }));
     if (other)
         mapped.push({
             key: 'other',
-            label: 'Other and independent',
+            label: 'Other',
+            name: 'Other and independent',
             colour: OTHER,
             count: other,
+            last: true,
         });
+    // Each row stands for the parties it lists ("Other" is every party folded into it); a row is on
+    // when all of them are highlighted.
+    const members: Record<string, string[]> = Object.fromEntries(
+        shown.map((r) => [r.abbrev, [r.abbrev]]),
+    );
+    if (other)
+        members.other = rows
+            .filter((r) => !shown.includes(r))
+            .map((r) => r.abbrev);
+    const chosen = new Set(onlyParties.value);
+    const on = mapped.filter((r) => members[r.key].every((a) => chosen.has(a)));
+    const covered = new Set(on.flatMap((r) => members[r.key]));
+    const showing = [
+        ...on.map((r) => r.label),
+        ...[...chosen].filter((a) => !covered.has(a)),
+    ];
     return {
-        title: `${SEAT_LABEL[k]} seats by party`,
+        title: legendTitle(SEAT_LABEL[k], scope?.unit.n, showing),
+        // The collapsed chip says what is highlighted, so a phone shows it with the legend closed.
+        chipLabel: `${SEAT_LABEL[k]} seats${showing.length ? `: ${showing.length > 3 ? `${showing.length} parties` : showing.join(', ')}` : ''}`,
         rows: mapped,
-        note: `Elected 2022, with changes since. Source: IEBC gazette notices${asOfText.value ? `, as of ${asOfText.value}` : ''}`,
+        members,
+        highlighted: on.map((r) => r.key),
+        filtered: chosen.size > 0,
+        note: `${mapped.length ? '' : 'No approved holder for this seat yet. '}Elected 2022, with changes since. Source: IEBC gazette notices${asOfText.value ? `, as of ${asOfText.value}` : ''}`,
     };
+});
+/** A legend row was pressed: switch the parties it stands for on or off, each independently. */
+function toggleParty(key: string) {
+    const parties = legend.value?.members[key];
+    if (!parties?.length) return;
+    const next = new Set(onlyParties.value);
+    const allOn = parties.every((a) => next.has(a));
+    for (const a of parties) allOn ? next.delete(a) : next.add(a);
+    onlyParties.value = [...next];
+}
+// A different seat keeps the highlighted parties that hold it and drops the rest.
+watch(colourKey, (k) => {
+    if (!onlyParties.value.length) return;
+    const present =
+        k === 'none' || k === 'province'
+            ? new Set<string>()
+            : new Set(seatLegend(seats.value, k).map((r) => r.abbrev));
+    onlyParties.value = onlyParties.value.filter((a) => present.has(a));
 });
 const partyChips = computed(() =>
     colourKey.value === 'none' || colourKey.value === 'province'
@@ -228,6 +281,17 @@ const isDesktop = useMediaQuery('(min-width: 768px)');
 const snap = ref<'peek' | 'half' | 'full'>('peek');
 const sheetHeight = ref(112);
 const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
+// The legend is open on desktop; a focused unit collapses it to its chip so it never covers the unit.
+const legendOpen = ref(isDesktop.value && !props.unit);
+watch(isDesktop, (d) => (legendOpen.value = d && !selection.value));
+// Only an open legend beside a focused unit takes room from the fit.
+const legendBoxOpen = computed(
+    () =>
+        isDesktop.value &&
+        legendOpen.value &&
+        legend.value !== null &&
+        selection.value !== null,
+);
 // What a person picked in search points at: a seat row in the unit panel, or a party in the overview.
 const highlightSeat = ref<string | undefined>();
 const highlightParty = ref<string | undefined>();
@@ -264,7 +328,10 @@ function selectUnit(
     tip.value = null;
     highlightSeat.value = undefined;
     highlightParty.value = undefined;
+    if (unit && !selection.value) legendOpen.value = false;
+    else if (!unit) legendOpen.value = isDesktop.value;
     selection.value = unit;
+    applyPadding();
     autoCentre.value = recentre;
     view.value = 'unit';
     const map = mapRef.value;
@@ -387,6 +454,7 @@ function applyPadding() {
             desktop: isDesktop.value,
             sheetHeight: sheetHeight.value,
             viewport: { width: window.innerWidth, height: window.innerHeight },
+            legendOpen: legendBoxOpen.value,
         }),
     );
 }
@@ -399,7 +467,10 @@ function scheduleRecentre() {
         200,
     );
 }
-watch([sheetHeight, isDesktop, () => mapRef.value?.ready], scheduleRecentre);
+watch(
+    [sheetHeight, isDesktop, legendBoxOpen, () => mapRef.value?.ready],
+    scheduleRecentre,
+);
 useEventListener(window, 'resize', scheduleRecentre);
 
 // Zooming out steps the selection up (see onZoomOut), so the panel always shows the selection.
@@ -606,10 +677,15 @@ const showView = (v: typeof view.value) => {
             :style="{ bottom: isDesktop ? '24px' : `${sheetHeight + 12}px` }"
         >
             <Legend
+                v-model:open="legendOpen"
                 :title="legend.title"
+                :chip-label="legend.chipLabel"
                 :rows="legend.rows"
                 :note="legend.note"
-                :collapsed="!isDesktop"
+                :highlighted="legend.highlighted"
+                :filtered="legend.filtered"
+                @toggle="toggleParty"
+                @clear="onlyParties = []"
             />
         </div>
 

@@ -1,7 +1,9 @@
 // Current office holders and parties from /data/seats.json (imported from cited CSVs),
 // turned into party colours, map colouring and per-unit seat rows.
 import { type Colouring, type SeatKey, SEAT_LEVEL } from './map/colouring';
+import type { MapLevel } from './map/levels';
 import { OTHER } from './map/theme';
+import type { Unit, UnitIndex } from './units';
 
 export interface Party {
     abbrev: string;
@@ -85,7 +87,11 @@ export function partyColours(data: SeatsData): Map<string, string> {
 export const currentHolder = (data: SeatsData, seat: SeatKey, code: number) =>
     data.holders.find((h) => h.seat === seat && h.code === code);
 
-/** Colour the seat's units by the holder's party; `only` limits colour to those parties (others go faded). */
+/**
+ * Colour the seat's units by the holder's party. `only` is the set of highlighted party
+ * abbreviations: those keep their colour and every other holder's unit goes to `faded`. Below the
+ * seat level the colours are carried down by ancestor (colouring.ts), so the highlight follows.
+ */
 export function seatColouring(
     data: SeatsData,
     seat: SeatKey,
@@ -107,16 +113,63 @@ export function seatColouring(
     };
 }
 
-/** Legend rows for a seat: parties holding it, largest first. */
+/**
+ * The seats a legend counts while a unit is focused: the codes of the seat's units that sit inside
+ * the focus (the 17 constituencies of Nairobi City, for MPs), or the one unit that holds the seat
+ * when the seat is coarser than the focus (the county, for a Governor while a ward is focused).
+ * `unit` is the unit those codes belong to, for the legend's heading. Null while nothing is focused.
+ */
+export function legendScope(
+    index: UnitIndex,
+    seat: SeatKey,
+    focus: { level: MapLevel; code: number } | null,
+): { codes: Set<number>; unit: Unit } | null {
+    const self = focus && index.get(focus.level, focus.code);
+    if (!focus || !self) return null;
+    const seatLevel = SEAT_LEVEL[seat];
+    if (seatLevel === focus.level)
+        return { codes: new Set([focus.code]), unit: self };
+    const holder = index
+        .ancestors(focus.level, focus.code)
+        .find((a) => a.l === seatLevel);
+    if (holder) return { codes: new Set([holder.c]), unit: holder };
+    const within = (unit: Unit): Unit[] =>
+        unit.l === seatLevel
+            ? [unit]
+            : index.children(unit.l, unit.c).flatMap(within);
+    return { codes: new Set(within(self).map((u) => u.c)), unit: self };
+}
+
+/**
+ * The legend heading: it always says what the counts cover, all of Kenya or the focused unit, and
+ * which parties are highlighted (their abbreviations, or a count beyond three).
+ */
+export const legendTitle = (
+    seatLabel: string,
+    unitName?: string | null,
+    showing: string[] = [],
+) => {
+    const base = unitName
+        ? `${seatLabel} seats in ${unitName} by party`
+        : `${seatLabel} seats across Kenya by party`;
+    if (showing.length === 0) return base;
+    return `${base}: showing ${showing.length > 3 ? `${showing.length} parties` : showing.join(', ')}`;
+};
+
+/**
+ * Legend rows for a seat: parties holding it, largest first. With `scope`, only the seats whose
+ * unit code is in it are counted; without, the national totals.
+ */
 export function seatLegend(
     data: SeatsData,
     seat: SeatKey,
+    scope?: Set<number> | null,
 ): { abbrev: string; name: string; seats: number; colour: string }[] {
     const colours = partyColours(data);
     const names = new Map(data.parties.map((p) => [p.abbrev, p.name]));
     const counts = new Map<string, number>();
     for (const h of data.holders)
-        if (h.seat === seat && h.party)
+        if (h.seat === seat && h.party && (!scope || scope.has(h.code)))
             counts.set(h.party, (counts.get(h.party) ?? 0) + 1);
     return [...counts.entries()]
         .map(([abbrev, seats]) => ({
