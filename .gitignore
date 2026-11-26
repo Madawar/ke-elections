@@ -31,3 +31,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Claude Code: local-only settings and agent worktrees stay out of git
+.claude/settings.local.json
+.claude/worktrees/
