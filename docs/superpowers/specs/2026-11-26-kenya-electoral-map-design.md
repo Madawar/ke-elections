@@ -1,97 +1,151 @@
-# Kenya Electoral Map: plan (DRAFT, awaiting review)
+# Kenya Electoral Map: design
 
-Status: draft for the owner's review, 2026-11-26. Nothing is built yet.
+Status: approach agreed with the owner on 2026-11-26. Phase 1 is approved to build.
 
-## What it is
-- A public, phone-first web map of Kenya's 47 counties, 290 constituencies and 1,450 wards.
-- It shows current office holders and each party's 2027 nominees for every seat.
+## What it is and who it's for
+- A **neutral, public** web map of Kenya's 47 counties, 290 constituencies and 1,450 wards,
+  for general use.
+- It answers questions such as "how many MPs and MCAs does each party hold right now?" and,
+  as 2027 approaches, "who is each party fielding where?"
+- Later it will show *incoming vs outgoing* holders, comparing the 2022 holder with the 2027
+  nominees and winners.
 - Logged-in editors submit nominations, verifiers approve them, and the public sees only
   approved data.
 - Private workspaces hold campaign regions, pins and notes.
 
-## Decisions (from the brief)
-- **Backend:** Laravel 13 (latest stable, v13.44), **MySQL 8.4**, and Filament 5 for the admin
-  panel.
-- **Map:** MapLibre GL JS 6.19.
-  - It is ESM-only and needs WebGL2, so phones without WebGL2 get a list view instead.
-  - There are no API keys.
-- **Boundaries:** static files in the repo, never in the database.
-- **Joins:** always on IEBC codes, never on names.
-- **Real people:**
-  - Office holders and nominees are never invented.
-  - Sample data is clearly labelled.
-  - Real data arrives by CSV import, validated against unit codes.
-- **Delivery:** four phases, stopping for review after each.
+**Neutrality** (anti-goals: looking partisan, or spreading wrong numbers):
+- No party branding in the interface.
+- Every party is treated the same in ordering, colour and copy.
+- Every number shows its source and an "as of" date.
+- Sample data is always watermarked, including in image exports.
 
-## Calls I'm making (correct any of these)
-1. **Front end:**
-   - Blade, Alpine and Vite, with the map as a plain ES module talking to a small JSON API.
-   - Filament is used only for the admin panel.
-   - I'm not using Livewire or Inertia on the map page, because of bundle size and the risk
-     of re-renders breaking the map.
-2. **Boundaries:** IEBC 2012 geometry, patched and rebuilt from wards. See
-   `docs/boundary-quality-report.md`.
-   - Output is plain GeoJSON:
-     - Counties, constituencies and provinces load up front.
-     - Wards (about 220 KB gzipped) load lazily on drill-down.
-   - PMTiles isn't needed at this size.
-3. **PWA:**
-   - A web app manifest and a Workbox service worker (vite-plugin-pwa).
-   - The service worker precaches the app shell, the search index and the boundary files.
-   - API calls use stale-while-revalidate.
-   - An offline banner shows when the connection drops.
-   - No offline basemap tiles, because tile providers' terms forbid or cap them.
-4. **Phone UI:**
-   - A bottom sheet with three heights (peek, half, full) that you drag by its handle only.
-     Above about 768px it becomes a side panel.
-   - Tap selects a unit, and hover is used only on devices that support it.
-   - The legend is a chip, and filters plus the colour-by selector share one "Filters" sheet.
-   - Every unit has a shareable link.
-   - A list/table view doubles as the accessible view and the no-WebGL2 fallback.
-5. **Colours:**
-   - Party colours are set by an admin. ORPP describes colours only in words ("Lilac, White and
-     Purple"), so there are no hex values to import.
-   - Choropleths use a colour-blind-safe palette for the top parties, with everything else as
-     "Other".
-   - Status and gaps are shown with hatching as well as colour.
-6. **Basemap:**
-   - Off by default: boundaries plus town labels.
-   - It can be toggled to OpenFreeMap (OSM data, no key), with OSM attribution.
-   - The OSM Foundation's own tile servers are never used.
-7. **Towns layer:** an OpenStreetMap `place=city|town` extract (ODbL), committed as a static
-   file.
-8. **Reference data I'd seed, since none of it is about invented people:**
-   - **Units:** from Kenya Gazette Notice 13771 of Aug 2026, the 2027 ward schedule.
-   - **Parties:** the ORPP register of fully registered parties as at Oct 2026 (107 parties),
-     with an alias table for renames such as WDM-K → Wiper Patriotic Front.
-9. **Data model additions to the brief:**
-   - `units.province` is derived for counties.
-   - A `party_aliases` table records renames.
-   - Audit uses an append-only `audits` table of old and new JSON per change, with rollback
-     implemented as "apply the inverse change", which is itself audited.
+## Decisions
+| Area | Decision | Decided by |
+|---|---|---|
+| Backend | Laravel 13 (v13.44), PHP 8.4 or later, **MySQL 8.4**. Filament 5 for the admin panel. | Owner |
+| Dev environment | **Laravel Sail** (Docker) with a MySQL service. Node and npm run inside the Sail container. | Owner |
+| Front end | **Vue 3.5 + Inertia 3 + TypeScript**, using the Laravel Vue starter kit (Tailwind 4, shadcn-vue/Reka UI, Lucide icons) | Owner: Vue and Inertia; the kit is my call |
+| Map | MapLibre GL JS 6.19 (ESM, WebGL2), loaded dynamically after first paint. No API keys. | Owner and me |
+| PWA | Installable: manifest plus a Workbox service worker (vite-plugin-pwa). It precaches the app shell, boundaries and search index, uses stale-while-revalidate for the API, and shows an offline banner. | Owner |
+| Boundaries | Static GeoJSON in the repo, built by a repeatable pipeline. See the "Boundaries" section. | Owner and me |
+| Joins | Always on IEBC codes, never on names | Owner |
+| Real people | Never invented. Sample data is clearly labelled, and real data comes in by CSV import validated against codes. | Owner |
+| Social exports | PNG "cards" in social sizes, built in the browser. See the "Infographic exports" section. | Owner asked; design is mine |
 
-## Phases
-1. **Boundary pipeline and static map:**
-   - A pipeline script (Node and mapshaper) builds the boundary files, and the quality report
-     runs as a CI check.
-   - The map page offers zoom drill-down, hover/tap highlight, a click panel showing the unit
-     and its parents, search, and the PWA shell.
+**Front-end options rejected:**
+- **Ionic Vue:** its own navigation stack conflicts with Inertia.
+- **Quasar:** has its own CLI and build, which fight Laravel's Vite setup.
+- **Vuetify and PrimeVue:** heavier and desktop-first.
+- **Konsta:** an imitation of native iOS/Material look, with a smaller ecosystem.
+- **Blade + Alpine** (my earlier pick): replaced at the owner's request.
+
+## Boundaries
+Source assessment is in `docs/boundary-quality-report.md`.
+- **Base:** IEBC 2012 ward geometry from mikelmaron/kenya-election-data (`data/wards.geojson`).
+- **Names and parent codes:** from Kenya Gazette Notice 13771 (Aug 2026), which is
+  `data/reference/iebc_wards_2027_gn13771.csv`.
+- **13 missing wards:** taken from the American Red Cross HDX layer (CC BY 4.0), using a
+  reviewed crosswalk file of Red Cross ID → IEBC code. Each patch is erased from whatever IEBC
+  polygon had swallowed it.
+- **Upper layers:** constituencies, counties and the 8 former provinces are built by
+  dissolving the cleaned, simplified wards, so every unit nests exactly inside its parent.
+- **The build fails** if any code in 1–1450, 1–290, 1–47 or 1–8 is missing, duplicated, out of
+  range or empty.
+- **Build report:** every run writes `boundaries/build-report.md`.
+- **Towns layer:** an OpenStreetMap `place=city|town` extract (ODbL), committed as GeoJSON.
+- **Label fonts:** self-hosted glyphs (Noto Sans, OFL) from protomaps/basemaps-assets.
+- **Basemap:** off by default. It can be switched to OpenFreeMap "positron", with attribution.
+
+## Phone UI
+- **Layout:**
+  - A full-screen map with a search bar on top.
+  - A non-modal bottom sheet (peek, half or full) that you drag by its handle. Above 768px it
+    becomes a left side panel.
+  - A legend chip, and one "Filters" sheet with an active-count badge.
+- **Interaction:**
+  - Tap selects a unit and drills down a level.
+  - Hover tooltips appear only on devices that support hover (`(hover: hover)`).
+  - Every unit has a deep link (`/county/47`, `/constituency/288`, `/ward/1438`).
+  - Deep links are server-rendered with `<title>` and Open Graph tags, so WhatsApp previews
+    work.
+- **Accessibility:**
+  - A list view (County → Constituency → Ward) is the accessible view and the no-WebGL2
+    fallback.
+  - The selected unit is announced in an `aria-live` region.
+  - Touch targets are at least 44px.
+- **Colour:**
+  - A colour-blind-safe palette (Okabe-Ito) for categories, and everything else in grey as
+    "Other".
+  - Status and gaps are shown with hatching as well as colour.
+  - Party display colours are set by an admin, because ORPP describes colours only in words.
+
+## Infographic exports
+- **How cards are made:**
+  - Built in the browser, so nothing is installed on the server and it works offline.
+  - An off-screen MapLibre map is rendered at the exact pixel size of the card, fitted to the
+    unit, and captured on the map's `idle` event.
+  - The card's layout is an SVG Vue component: title, breadcrumb, legend, stats and footer.
+  - The map image is embedded in that SVG, then rasterised to a canvas and saved as PNG, with
+    fonts embedded as data URIs.
+  - The same SVG components (for example the seat hemicycle) are also used on screen.
+- **Sizes:**
+
+  | Format | Pixels |
+  |---|---|
+  | Square | 1080×1080 |
+  | Portrait | 1080×1350 |
+  | Story / WhatsApp status | 1080×1920 |
+  | Landscape / link card | 1200×630 |
+
+- **Sharing:** the user can download the PNG, or on phones use the Web Share API with
+  `files` to send it straight to WhatsApp or X.
+- **Every card's footer shows:**
+  - The source.
+  - "Approved data as of `<date>`".
+  - The site URL and the unit's deep link.
+  - Boundary attribution, plus OSM attribution when the basemap is on.
+  - A diagonal "SAMPLE DATA" watermark whenever sample records are shown.
+- **Which cards ship when:**
+
+  | Phase | Cards |
+  |---|---|
+  | 1 | "Unit locator" card: where a unit is, its parents, its seats |
+  | 2 | "In power now" card (seat hemicycle and party bars per seat type, national or per unit) and "Nominees for `<seat>`" card |
+  | Later | "Incoming vs outgoing" card |
+
+- **Later still:** per-unit Open Graph images generated on the server. Phase 1 uses one static
+  Open Graph image.
+
+## Data model (phases 2–4)
+The brief's tables are kept, with these changes:
+- **`office_holders` stores terms:** `started_on` and a nullable `ended_on`. "Current" means
+  `ended_on IS NULL`. Keeping history is what makes the incoming/outgoing view possible.
+- **`party_aliases`** records renames such as WDM-K → Wiper Patriotic Front, with an
+  effective date.
+- **`audits`** is append-only, storing the old and new JSON for every change. Rollback applies
+  the inverse change, and the rollback is itself audited.
+- **Units** are seeded from the gazette CSV. **Parties** are seeded from the ORPP register
+  (107 parties as at October 2026).
+- **In-power counts** are computed from current terms per seat type, plus nominated members.
+
+## Phases (owner reviews after each)
+1. **Boundary pipeline and map:**
+   - Sail, the starter kit, the boundary pipeline and the map page.
+   - Drill-down, hover/tap highlight, the panel, search, deep links, the list view, the PWA,
+     and the locator export card.
 2. **Database and public data:**
    - Migrations, seeders (units, parties, labelled sample holders and nominations) and CSV
-     import with per-row validation errors.
-   - A public API serving approved data only, plus filters, colour-by and the gaps view.
+     import with per-row errors.
+   - A public API serving approved data only.
+   - Filters, colour-by and the gaps view.
+   - The "In power now" summary and card.
 3. **Accounts and approval:**
-   - Login with the admin, verifier, editor and viewer roles. Editors are limited to their
-     assigned counties.
-   - The submit → approve/reject (with reason) workflow, the audit log and rollback, all in
-     Filament.
-4. **Workspaces:** campaign regions, pins and notes, private to each workspace, shown as map
-   overlays.
+   - Roles, editors scoped to their counties, and the submit → verify workflow.
+   - The audit log and rollback, in Filament.
+4. **Workspaces:** campaign regions, pins and notes.
 
-**Tests:** Pest covers CSV import validation, the approval workflow, role scoping, the public
-API returning approved records only, and the pipeline's code-completeness check.
+Later: the incoming/outgoing view, and server-side Open Graph images.
 
-## Still open
-- Who the primary users are. This decides public branding, neutrality and how workspaces are
-  shared.
-- IEBC/ORPP reuse terms aren't stated. Attribution goes in the README.
+## Left to the builder
+- Exact zoom thresholds, colours and spacing, within the limits set in the plan.
+- Internal component breakdown.

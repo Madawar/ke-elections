@@ -40,7 +40,7 @@ scraped from IEBC with defects, described below.
 
 ### Constituencies (295 features)
 - All 290 codes are present, plus 5 slivers coded 0.
-- Constituency 148, Marakwet East, is tagged as county 24 (West Pokot). Both the gazette and
+- Constituency 148, Marakwet West, is tagged as county 24 (West Pokot). Both the gazette and
   its own wards say county 28.
 - Three names differ from the gazette, including Mbita → Suba North, Suba → Suba South and a
   "WEBUTE WEST" typo.
@@ -58,7 +58,7 @@ scraped from IEBC with defects, described below.
 | 640 | Lokori/Kochodin (Turkana East) | Missing; leaves a hole of about 3,223 km² |
 | 676 | Kapomboi (Kwanza, Trans Nzoia) | Missing; leaves a hole |
 | 734 | Embobut/Embulot (Marakwet East) | Mostly inside polygon 732 (Sambirir) |
-| 735 | Lelan (Marakwet West) | Missing; leaves a hole |
+| 735 | Lelan (Marakwet West, Elgeyo-Marakwet; not the Lelan ward in West Pokot, which is code 659) | Missing; leaves a hole |
 | 1448 | Ngei (Mathare, Nairobi) | Mostly inside 1447 (Huruma) |
 
 **Other ward problems:**
