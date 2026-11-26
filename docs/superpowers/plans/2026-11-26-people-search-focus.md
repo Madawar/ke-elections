@@ -234,7 +234,7 @@ The controller's look at the Task 2 screenshots found two more:
   `resources/js/lib/map/colouring.ts`, `resources/js/components/map/Legend.vue`,
   `resources/js/components/map/LayersPanel.vue`, `resources/js/components/map/AboutSheet.vue`
   and `resources/js/pages/Map.vue`
-- Create: `resources/js/components/map/SeatChips.vue`, `resources/js/components/map/Onboarding.vue`,
+- Create: `resources/js/components/map/SeatChips.vue`, `resources/js/components/map/Onboarding.vue`, `tests/js/components/Legend.test.ts`,
   `resources/js/lib/onboarding.ts` and `resources/js/components/map/BackButton.vue`
 - Test: `tests/js/map/style.test.ts` (extend), `tests/js/components/SeatChips.test.ts`,
   `tests/js/components/Onboarding.test.ts`, and `tests/js/seats.test.ts` (extend, for the scoped
@@ -299,6 +299,41 @@ otherwise build it here.
 - With reduced motion, use no animation; otherwise a short fade only.
 - Copy rules from `CLAUDE.md`: sentence case, no emoji, no "→".
 
+**(h) The legend must not cover the focused unit.** On desktop the open legend covered part of
+Mathare. Include the open legend's box in the fit padding, or collapse the legend to its chip
+while a unit is focused and let the person reopen it.
+
+**(i) The legend becomes a bar chart.** The owner asked on 2026-11-26 for "a bar graph for each
+party".
+- **Rows:** each party row shows a colour swatch and the party abbreviation, then a horizontal
+  bar in the party's colour, then the count as text at the end of the bar.
+  - Use tabular numbers.
+  - The count stays as text, so the legend reads without colour.
+- **Scale:**
+  - All bars share one scale that starts at zero.
+  - The longest bar is the largest count in the current scope; the bar track is the full row
+    width.
+- **Order:** sort by count, largest first. Ties break by abbreviation. "Other and independent"
+  always comes last, in the neutral "Other" colour.
+- **Heading:**
+  - It follows the scope: "<Seat> seats by party" unfocused, and "<Seat> seats in <unit> by
+    party" when focused, per (d).
+  - The source and "as of" line stays below the chart.
+- **Styling:**
+  - Colours come only from tokens and the party colours. There are no gridlines, axis or
+    gradients, and each bar has a 2px radius.
+  - Bars stay legible in dark mode: the bar track uses a token, not a literal colour.
+- **Accessibility:**
+  - Use an HTML list, with each row's accessible text reading as "<Party name>: <n> seats".
+  - Mark the bars `aria-hidden`.
+- **Phones:** collapsed by default to a chip such as "MP seats" that opens on tap. Desktop keeps
+  it open.
+- **Tests:** add a `Legend.test.ts`.
+  - Bar widths are proportional: the largest bar is 100%, a 13-of-22 bar is about 59%.
+  - The sort order is right, with Other last.
+  - Rows have the right accessible text.
+  - The scoped heading is right.
+
 **(g) Back button and the phone's back gesture.** The owner asked on 2026-11-26 for "a
 navigate back kind of button". Zoom-out stepping stays as well.
 - **The button:**
@@ -344,6 +379,8 @@ navigate back kind of button". Zoom-out stepping stays as well.
   (None, Governor, Senator, Woman Rep, MP, MCA):
   - With Kenya unfocused, with Nairobi City focused, and with Mathare focused.
   - Also the onboarding steps 1–4, and the chip row with the sheet at half and full.
+  - Also the bar-chart legend for each seat mode, unfocused and with Nairobi City focused, on
+    phone (opened from the chip) and on desktop.
   - Also the back button at each level, going Ngei, Mathare, Nairobi City, Kenya, plus
     `page.goBack()` stepping through the same chain.
   - Look at them, and fix any border or label that doesn't read against its fill.
