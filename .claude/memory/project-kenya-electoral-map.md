@@ -13,3 +13,11 @@ Building "Kenya Electoral Map" (Laravel + MySQL + Filament + MapLibre, PWA) in 4
 **Why:** user asked for phased review, the superpowers plugin workflow ("also use superpowers plugin for this"), MySQL, a PWA, and a public repo.
 
 **How to apply:** use superpowers skills (brainstorming → writing-plans → TDD etc.); don't start a phase without approval; plan lives at docs/superpowers/specs/2026-11-26-kenya-electoral-map-design.md. Raw boundary downloads in boundaries/raw/ are gitignored; the mikelmaron git clone fails over HTTP/2, so fetch via the codeload tarball.
+
+**State (2026-11-26):** Phase 1 Tasks 1–4 are done on `feature/phase-1-map`. The owner is
+continuing in Claude Code cloud sessions, environment "Elections App"
+`env_01StAectAimqiN9aWCso1VPu`, using the prompts in `docs/superpowers/plans/cloud-prompts.md`.
+Status and decisions live in `docs/superpowers/plans/2026-11-26-phase-1-progress.md`.
+- Next is Task 4b: some 2013 IEBC ward polygons are filed under the wrong codes (Mandera
+  211–217, Kitengela and others).
+- Phase 2 adds an admin review table for office holders.
