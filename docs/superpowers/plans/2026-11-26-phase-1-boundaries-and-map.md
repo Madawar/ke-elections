@@ -373,6 +373,76 @@ All of this is run through `mapshaper.applyCommands`, in memory.
 - [ ] **Step 7:** Commit the code, the outputs and the report:
   `feat(boundaries): derive nested layers and web-ready outputs`.
 
+### Task 4b: Evidence-based ward corrections
+
+Added after Task 4. In some places the 2013 IEBC copy files a ward's polygon under the wrong
+code. Two cases are confirmed with known town centres:
+- The middle of Mandera town (41.855, 3.937) falls in 215 Libehia instead of 212 Township.
+- Kitengela town (36.96, -1.475) falls in 921 Kaputiei North instead of 922 Kitengela.
+
+The Red Cross layer gets both right. IEBC's own 2013 polling-station locations point the same
+way for wards such as 1231 North Karachuonyo, 81 Magarini, 101 Faza, 1145 Marachi East, 285
+Mwanganthia, 560 Theta, 613 Lapur, 1361 Ekerenyo and 1388 Makina. Station GPS is rough, though,
+so stations alone never decide.
+
+The controller's rough diagnostics are `boundaries/scripts/recon/crosswalk_check.py` and
+`stations_check.py`. `stations_check.py` has a known bug: it lumps every "Township" ward
+together. Use them only as leads.
+
+**Files:**
+- Create:
+  - `boundaries/pipeline/evidence.mjs`
+  - `boundaries/overrides/reference_points.csv`
+  - The generated `boundaries/build/ward-evidence.csv` (committed)
+- Modify:
+  - `boundaries/pipeline/wards.mjs`, so patches support `mode=replace`
+  - `boundaries/overrides/ward_patches.csv`, adding the columns `mode,reason`
+  - `boundaries/pipeline/build.mjs` and `boundaries/pipeline/report.mjs`
+- Test: `tests/js/boundaries/evidence.test.mjs`, plus a reference-point test in
+  `tests/js/boundaries/outputs.test.mjs`
+
+**Interfaces:**
+- `scoreWards({ wards, stations, arc, gazette })` returns one row per ward:
+  `{code, stations, insideOurs, insideRedCross, arcUid}`.
+- **Station matching:**
+  - Stations come from `boundaries/raw/mikelmaron/output/pollingstations.shp`, whose fields
+    are county, constituen, ward and name.
+  - A station is assigned a gazette ward code only by an exact normalised ward-name match
+    *within its own constituency*.
+  - Constituencies are matched through an explicit alias table for 2013→2026 renames, for
+    example Mbita → Suba North and Suba → Suba South.
+  - There is no fallback across constituencies.
+  - Stations outside Kenya's bounding box are dropped.
+- **Red Cross matching:** the polygon is chosen by exact normalised name within the county.
+  When two wards in a county share a name, pick the one containing the most of that ward's
+  stations.
+- **`ward_patches.csv` modes:**
+  - `mode=fill`: the existing 13 rows. The code is missing from the IEBC data.
+  - `mode=replace`: the code exists, but its polygon is replaced by the Red Cross one. The new
+    polygon is erased from its neighbours, the same way as a fill.
+  - Every row has a `reason`.
+- **A `replace` row is added only when at least two independent signals agree:**
+  - Stations: at least 5, with `insideOurs ≤ 0.3` and `insideRedCross ≥ 0.7`.
+  - Or a reference point from `reference_points.csv` (place, lon, lat, expected ward code,
+    source) falls in the wrong code in the IEBC build and in the right one in the Red Cross
+    layer.
+  - Clusters such as Mandera East 212–216 are replaced as a group, so no seams are left.
+- **Reporting:** the build report lists every replacement with its evidence, plus a "still
+  uncertain" table of wards whose signals disagree.
+
+- [ ] **Step 1:** Write failing tests:
+  - Station matching never crosses a constituency.
+  - Duplicate ward names in one county are resolved by stations.
+  - `mode=replace` swaps the geometry, erases it from neighbours and leaves no overlap.
+  - Reference points: Mandera town is in 212 and Kitengela town is in 922, read from the
+    committed `wards.geojson`.
+- [ ] **Step 2:** Run them. Expected: FAIL.
+- [ ] **Step 3:** Implement. Generate `ward-evidence.csv`, review it, and add the `replace` rows
+  that meet the rule, each with its reason.
+- [ ] **Step 4:** Rebuild with `npm run boundaries:build`, then run `npm run test:js`. Expected:
+  PASS. The size budgets and nesting must still hold.
+- [ ] **Step 5:** Commit: `fix(boundaries): evidence-based ward corrections from Red Cross and polling stations`.
+
 ### Task 5: Towns layer and self-hosted label glyphs
 
 **Files:**
