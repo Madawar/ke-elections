@@ -32,6 +32,20 @@ a feature finishes.
    - (g) A back button, the browser and phone back gesture, and the new outside-tap rule (no-op,
      or select a neighbour when surroundings are shown), with a hint card.
    - (c) Onboarding tips.
+   - **Drill-down tapping.** The owner noted on 2026-11-26 that "selecting Machakos, I end up
+     clicking constituencies".
+     - A tap picks the level from the current focus, not from the zoom:
+       - With nothing focused, a tap selects the **county** under the finger, at any zoom.
+       - With a county focused, a tap inside it selects that **constituency**.
+       - With a constituency focused, a tap inside it selects that **ward**.
+       - With a ward focused, a tap inside it does nothing.
+     - This replaces the zoom-based level picking in `useMap`'s click handler.
+     - Stepping up stays as it is: the back button, browser and phone back, zoom-out, and
+       breadcrumbs.
+     - Hover tooltips follow the same rule, so they name the unit a tap would select.
+     - Update the onboarding tip and the outside-tap hint wording to match, e.g. "Tap a county,
+       then tap again to go deeper."
+     - Tests: unit-test `tapTarget(focus, featuresUnderPoint)` for each case.
 4. **Pocketbook data.**
    - KNBS 2019 census at county level (population, households, area, density). Ward and
      constituency figures only from an official KNBS table, never derived from sub-counties.
