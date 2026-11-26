@@ -44,7 +44,7 @@
             <meta property="og:title" content="{{ $meta['title'] }}">
             <meta property="og:description" content="{{ $meta['description'] }}">
             <meta property="og:url" content="{{ $meta['url'] }}">
-            <meta property="og:image" content="{{ url('/images/og-default.png') }}">
+            <meta property="og:image" content="{{ rtrim(config('app.url'), '/') }}/images/og-default.png">
             <meta name="twitter:card" content="summary_large_image">
             <link rel="canonical" href="{{ $meta['url'] }}">
         @endisset

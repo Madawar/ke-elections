@@ -203,7 +203,7 @@ const legend = computed(() => {
     return {
         title: `${SEAT_LABEL[k]} seats by party`,
         rows: mapped,
-        note: `Elected 2022, with changes since. Source: IEBC gazette notices${seats.value.as_of ? `, imported ${new Date(seats.value.as_of).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`,
+        note: `Elected 2022, with changes since. Source: IEBC gazette notices${(seats.value.data_as_of ?? seats.value.as_of) ? `, as of ${new Date((seats.value.data_as_of ?? seats.value.as_of)!).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`,
     };
 });
 const partyChips = computed(() =>

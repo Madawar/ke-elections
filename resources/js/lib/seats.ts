@@ -24,6 +24,8 @@ export interface Holder {
 
 export interface SeatsData {
     as_of: string | null;
+    /** Latest start or end date among the holders: the date the data describes. */
+    data_as_of?: string | null;
     parties: Party[];
     holders: Holder[];
     totals: Record<string, Record<string, number>>;

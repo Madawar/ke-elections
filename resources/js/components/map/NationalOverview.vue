@@ -8,18 +8,19 @@ const emit = defineEmits<{
     colourBy: [seat: 'governor' | 'mp' | 'senator' | 'woman_rep'];
 }>();
 
-const asOf = computed(() =>
-    props.seats.as_of
-        ? new Date(props.seats.as_of).toLocaleDateString('en-KE', {
+const asOf = computed(() => {
+    const date = props.seats.data_as_of ?? props.seats.as_of;
+    return date
+        ? new Date(date).toLocaleDateString('en-KE', {
               day: 'numeric',
               month: 'long',
               year: 'numeric',
           })
-        : null,
-);
+        : null;
+});
 const caption = computed(
     () =>
-        `Elected 2022, with by-elections and changes since. Source: IEBC gazette notices and parliament.go.ke${asOf.value ? `, imported ${asOf.value}` : ''}.`,
+        `Elected 2022, with by-elections and changes since. Source: IEBC gazette notices and parliament.go.ke${asOf.value ? `, as of ${asOf.value}` : ''}.`,
 );
 const na = computed(() => chamberGroups(props.seats, 'national_assembly'));
 const senate = computed(() => chamberGroups(props.seats, 'senate'));
