@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { siteUrl } from '@/lib/export/format';
 import { unitPath } from '@/lib/map/urls';
 import type { SeatsData } from '@/lib/seats';
@@ -12,6 +12,8 @@ const props = defineProps<{
     index: UnitIndex;
     seats: SeatsData;
     towns: string[];
+    /** Seat key of a person picked in search; that row gets a highlight and scrolls into view. */
+    highlightSeat?: string;
 }>();
 const emit = defineEmits<{ go: [unit: Unit]; share: [] }>();
 
@@ -65,6 +67,17 @@ const rows = computed(() =>
             ) ?? null,
     })),
 );
+const seatList = ref<HTMLElement | null>(null);
+async function showHighlight() {
+    if (!props.highlightSeat) return;
+    await nextTick();
+    seatList.value
+        ?.querySelector('[data-highlighted="true"]')
+        ?.scrollIntoView?.({ block: 'nearest' });
+}
+onMounted(showHighlight);
+watch(() => [props.highlightSeat, props.unit], showHighlight);
+
 const copied = ref('');
 let copiedTimer = 0;
 async function copyLink() {
@@ -115,14 +128,24 @@ const sourceHost = (url: string) => {
 
         <section v-if="rows.length">
             <h3 class="mb-2 text-[15px] font-semibold">Seats</h3>
-            <ul class="divide-y divide-hairline border-y border-hairline">
+            <ul
+                ref="seatList"
+                class="divide-y divide-hairline border-y border-hairline"
+            >
                 <li
                     v-for="{ seat, holder } in rows"
                     :key="seat.key"
                     class="flex gap-3 py-2.5"
+                    :class="
+                        seat.key === highlightSeat
+                            ? 'outline-2 -outline-offset-2 outline-ink'
+                            : ''
+                    "
+                    :data-highlighted="seat.key === highlightSeat"
                 >
                     <span
-                        class="w-1.5 shrink-0 rounded-[1px]"
+                        class="shrink-0 rounded-[1px]"
+                        :class="seat.key === highlightSeat ? 'w-3' : 'w-1.5'"
                         :style="{ background: SEAT_COLOURS[seat.key] }"
                         aria-hidden="true"
                     />

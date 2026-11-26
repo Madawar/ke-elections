@@ -25,6 +25,7 @@ import { type MapLevel, levelForZoom, zoomOutTarget } from '@/lib/map/levels';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
+import type { PersonResult } from '@/lib/search';
 import { OTHER, PROVINCE_TINTS, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
 import { formatAsOf } from '@/lib/export/format';
@@ -231,6 +232,9 @@ const isDesktop = useMediaQuery('(min-width: 768px)');
 const snap = ref<'peek' | 'half' | 'full'>('peek');
 const sheetHeight = ref(112);
 const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
+// What a person picked in search points at: a seat row in the unit panel, or a party in the overview.
+const highlightSeat = ref<string | undefined>();
+const highlightParty = ref<string | undefined>();
 
 const boundsOf = (level: MapLevel, code: number) =>
     index.value?.get(level, code)?.b;
@@ -240,6 +244,8 @@ function selectUnit(
     { push = true, fit = true, animate = true } = {},
 ) {
     overlayInfo.value = null;
+    highlightSeat.value = undefined;
+    highlightParty.value = undefined;
     selection.value = unit;
     autoCentre.value = true;
     view.value = 'unit';
@@ -266,6 +272,13 @@ function selectUnit(
         });
     announce.value = `Selected: ${unit.n} ${LEVEL_NAME[unit.l]}, ${ancestors.map((a) => a.n).join(', ')}`;
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+function onPickPerson({ holder, unit }: PersonResult) {
+    selectUnit(unit ?? null);
+    if (unit) highlightSeat.value = holder.seat;
+    else highlightParty.value = holder.party ?? undefined;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
 
@@ -510,7 +523,12 @@ const showView = (v: typeof view.value) => {
         <div
             class="absolute top-3 right-3 left-3 z-20 flex gap-2 md:left-[400px] md:max-w-md"
         >
-            <SearchBox :index="index" @pick="(u) => selectUnit(u)" />
+            <SearchBox
+                :index="index"
+                :holders="seats.holders"
+                @pick="(u) => selectUnit(u)"
+                @pick-person="onPickPerson"
+            />
             <button
                 type="button"
                 class="relative flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-hairline bg-surface px-3 text-[15px] text-ink shadow-sm"
@@ -682,12 +700,14 @@ const showView = (v: typeof view.value) => {
                     :index="index"
                     :seats="seats"
                     :towns="townsIn"
+                    :highlight-seat="highlightSeat"
                     @go="(u) => selectUnit(u)"
                     @share="shareUnit"
                 />
                 <NationalOverview
                     v-else
                     :seats="seats"
+                    :highlight-party="highlightParty"
                     @colour-by="(s) => (colourKey = s)"
                     @share="exportNational = true"
                 />

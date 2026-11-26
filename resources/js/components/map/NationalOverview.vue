@@ -4,7 +4,11 @@ import { computed } from 'vue';
 import Hemicycle from './Hemicycle.vue';
 import { type SeatsData, chamberGroups, seatLegend } from '@/lib/seats';
 
-const props = defineProps<{ seats: SeatsData }>();
+const props = defineProps<{
+    seats: SeatsData;
+    /** Abbreviation of a party whose seats to emphasise in both chambers. */
+    highlightParty?: string;
+}>();
 const emit = defineEmits<{
     colourBy: [seat: 'governor' | 'mp' | 'senator' | 'woman_rep'];
     share: [];
@@ -19,6 +23,19 @@ const caption = computed(
 );
 const na = computed(() => chamberGroups(props.seats, 'national_assembly'));
 const senate = computed(() => chamberGroups(props.seats, 'senate'));
+// Parties without their own colour sit in the merged "other" group of a chamber.
+const highlightKey = (groups: { key: string }[]) =>
+    !props.highlightParty
+        ? undefined
+        : groups.some((g) => g.key === props.highlightParty)
+          ? props.highlightParty
+          : groups.find((g) => g.key === 'other')?.key;
+const highlightName = computed(() => {
+    const abbrev = props.highlightParty;
+    if (!abbrev) return '';
+    if (abbrev === 'IND') return 'Independent';
+    return props.seats.parties.find((p) => p.abbrev === abbrev)?.name ?? abbrev;
+});
 const governors = computed(() => seatLegend(props.seats, 'governor'));
 const hasData = computed(() => props.seats.holders.length > 0);
 </script>
@@ -28,6 +45,13 @@ const hasData = computed(() => props.seats.holders.length > 0);
         <p class="text-[14px] text-muted-ink">
             Tap a county to see its seats, then keep tapping to reach
             constituencies and wards.
+        </p>
+        <p
+            v-if="highlightParty"
+            class="border-l-4 border-ink pl-3 text-[14px]"
+            role="status"
+        >
+            Seats held by {{ highlightName }} are highlighted below.
         </p>
         <template v-if="hasData">
             <button
@@ -42,6 +66,7 @@ const hasData = computed(() => props.seats.holders.length > 0);
                     title="National Assembly"
                     :groups="na"
                     :total="349"
+                    :highlight="highlightKey(na)"
                     :caption="caption"
                 />
                 <button
@@ -57,6 +82,7 @@ const hasData = computed(() => props.seats.holders.length > 0);
                     title="Senate"
                     :groups="senate"
                     :total="67"
+                    :highlight="highlightKey(senate)"
                     :caption="caption"
                 />
                 <button
@@ -80,10 +106,10 @@ const hasData = computed(() => props.seats.holders.length > 0);
                             :style="{ background: g.colour }"
                             aria-hidden="true"
                         />
-                        <span>{{ g.name }}</span
-                        ><span class="ml-auto text-muted-ink tabular-nums">{{
-                            g.seats
-                        }}</span>
+                        <span>{{ g.name }}</span><span
+                            class="ml-auto text-muted-ink tabular-nums"
+                            >{{ g.seats }}</span
+                        >
                     </li>
                 </ul>
                 <button

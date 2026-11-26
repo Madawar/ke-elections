@@ -18,6 +18,8 @@ const props = defineProps<{
     total?: number;
     /** Source and "as of" line, shown under the chart. */
     caption: string;
+    /** Key of a group to emphasise; the other seats are drawn faded. */
+    highlight?: string;
 }>();
 
 const assigned = computed(() =>
@@ -28,12 +30,13 @@ const vacant = computed(() => seatTotal.value - assigned.value);
 const majority = computed(() => Math.floor(seatTotal.value / 2) + 1);
 
 const seats = computed(() => {
-    const colours = props.groups.flatMap((g) =>
-        Array<string | null>(Math.max(0, g.seats)).fill(g.colour),
+    const owners = props.groups.flatMap((g) =>
+        Array<HemicycleGroup>(Math.max(0, g.seats)).fill(g),
     );
     return layoutHemicycle(seatTotal.value).map((s, i) => ({
         ...s,
-        colour: colours[i] ?? null,
+        colour: owners[i]?.colour ?? null,
+        faded: !!props.highlight && owners[i]?.key !== props.highlight,
     }));
 });
 
@@ -80,6 +83,7 @@ const summary = computed(() => {
                     :cy="1 - s.y"
                     :r="s.r"
                     :fill="s.colour"
+                    :opacity="s.faded ? 0.25 : 1"
                 />
                 <circle
                     v-else
@@ -101,6 +105,7 @@ const summary = computed(() => {
                 v-for="row in legend"
                 :key="row.key"
                 class="flex items-center gap-2"
+                :class="row.key === highlight ? 'font-semibold' : ''"
             >
                 <span
                     class="size-3 shrink-0 rounded-full"
