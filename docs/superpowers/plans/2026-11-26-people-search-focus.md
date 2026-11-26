@@ -216,3 +216,109 @@ surroundings" state.
   - Open `/ward/1448` directly.
   - Search a person and pick them.
 - [ ] **Step 7:** Commit: `feat(map): show only the selected unit`.
+
+### Task 3: Map polish (clear borders in colour views, floating seat chips, onboarding, scoped legend)
+
+The owner added these on 2026-11-26, after trying Tasks 1–2:
+- "On the map, boundaries only is good. On the other colours there's the issue." Borders get lost
+  against party fills.
+- "Why can't the filters for governor, senator, MP float on the map?"
+- "Can we have small popups that onboard the user?"
+
+The controller's look at the Task 2 screenshots found two more:
+- The legend shows national totals while a unit is focused.
+- Constituency and ward borders look the same inside a focused county.
+
+**Files:**
+- Modify: `resources/js/lib/map/style.ts` (line casing and the border hierarchy in colour modes),
+  `resources/js/lib/map/colouring.ts`, `resources/js/components/map/Legend.vue`,
+  `resources/js/components/map/LayersPanel.vue`, `resources/js/components/map/AboutSheet.vue`
+  and `resources/js/pages/Map.vue`
+- Create: `resources/js/components/map/SeatChips.vue`, `resources/js/components/map/Onboarding.vue`
+  and `resources/js/lib/onboarding.ts`
+- Test: `tests/js/map/style.test.ts` (extend), `tests/js/components/SeatChips.test.ts`,
+  `tests/js/components/Onboarding.test.ts`, and `tests/js/seats.test.ts` (extend, for the scoped
+  legend counts)
+
+**Requirements:**
+
+**(a) Borders that read in every colour view:**
+- Every boundary line is drawn twice: a light casing underneath (the ground colour, about 1.5×
+  the width) and the line on top.
+- Line colours:
+  - County: the ink token.
+  - Constituency: a dark neutral.
+  - Ward: a mid neutral.
+- Boundaries are never party-coloured.
+- Party fills use opacity 0.8, so lines and labels stay legible.
+- The "boundaries only" view looks exactly as it does today.
+
+**(e) Border hierarchy inside a focused county:**
+- Constituency lines are visibly heavier than ward lines: at least 1.6× the width and darker.
+- The focused unit's outline (ink, thickest) stays on top of everything.
+
+**(b) Floating seat chips:**
+- One horizontal row under the search bar (desktop: beside it) with the chips None, Governor,
+  Senator, Woman Rep, MP and MCA.
+- The active chip is filled with that seat's ballot colour token, with legible text.
+- The row is a single line that scrolls sideways (no wrapping), with scroll-snap and no visible
+  scrollbar on touch.
+- Chips are at least 44px tall to tap; the visual height can be smaller.
+- The row hides when the bottom sheet is at `full`.
+- The chips drive the same colour mode that `LayersPanel` sets today, and the two stay in sync.
+  `LayersPanel` keeps the other options: basemap, towns and stations.
+- Accessibility: a radiogroup with `aria-checked`, and arrow keys move between chips.
+
+**(d) Legend counts follow the focus:**
+- While a unit is focused, legend counts cover only the seats inside that unit. For example,
+  Nairobi City with MP colours shows 17 MP seats.
+- The heading says so, for example "MP seats in Nairobi City by party".
+- Unfocused, the legend shows national totals as today.
+
+**(f) Colour mode coarser than the focus:** taken from Task 2's review if it is raised there;
+otherwise build it here.
+- When the active seat's level is coarser than the focused unit's level (for example Governor
+  colours while a constituency or ward is focused), colour the visible features inside the unit
+  by their ancestor's holder.
+- Use a `match` on `county_code` or `constituency_code`, so the unit never shows uncoloured
+  under an active colour mode.
+
+**(c) Onboarding:**
+- Show on the first visit, after the map loads, and only when the map is supported. There are
+  four small popovers, each with a pointer to a real control:
+  1. Search: "Find any county, constituency, ward, or politician by name."
+  2. Locate: "See the ward you're in."
+  3. Seat chips: "Colour the map by the party holding each seat."
+  4. The map: "Tap an area to see who represents it. Zoom out or tap outside to step back."
+- Each popover has **Next** (**Done** on the last) and **Skip**, and shows its step as "1 of 4".
+- The popovers are non-modal: the map stays usable, Escape closes the tour, and focus moves to
+  the popover's first button.
+- Store `kem.onboarded.v1` in `localStorage`, with try/catch. If storage fails, show the tour at
+  most once per page load.
+- The About sheet gets a "Show tips again" link.
+- With reduced motion, use no animation; otherwise a short fade only.
+- Copy rules from `CLAUDE.md`: sentence case, no emoji, no "→".
+
+- [ ] **Step 1:** Write failing tests:
+  - `style.test.ts`: every boundary line layer has a casing layer below it, no line colour
+    expression refers to party colours, the constituency line width is at least 1.6× the ward
+    line width at zoom 9 and 11, and fill opacity is 0.8 in seat modes.
+  - `seats.test.ts`: scoped legend counts for county 47 with MP colours total 17.
+  - `SeatChips.test.ts`: renders 6 chips, the selected chip has `aria-checked=true`, ArrowRight
+    moves the selection, and the `update` event fires.
+  - `Onboarding.test.ts`:
+    - It shows step 1 when `localStorage` is empty.
+    - Next moves to the next step, and Skip sets `kem.onboarded.v1`.
+    - It doesn't show when the flag is set.
+    - "Show tips again" restarts the tour.
+- [ ] **Step 2:** Run `npm run test:js -- tests/js/map/style.test.ts tests/js/seats.test.ts tests/js/components/SeatChips.test.ts tests/js/components/Onboarding.test.ts`.
+  Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run the full `npm run test:js`, `npm run types:check` and the Sail build.
+  Expected: PASS.
+- [ ] **Step 5:** Playwright in Docker, at 390×844 and 1440×900. Screenshot each colour mode
+  (None, Governor, Senator, Woman Rep, MP, MCA):
+  - With Kenya unfocused, with Nairobi City focused, and with Mathare focused.
+  - Also the onboarding steps 1–4, and the chip row with the sheet at half and full.
+  - Look at them, and fix any border or label that doesn't read against its fill.
+- [ ] **Step 6:** Commit: `feat(map): clear borders in colour views, seat chips, onboarding`.
