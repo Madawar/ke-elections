@@ -36,7 +36,7 @@ else
   log "mysqld not found: paste scripts/cloud/environment-setup.sh into the environment's setup script"
 fi
 
-composer install --no-interaction --prefer-dist --no-progress
+bash scripts/cloud/composer-install.sh
 npm ci --no-audit --no-fund
 
 grep -q '^APP_KEY=base64:' .env || php artisan key:generate --force
