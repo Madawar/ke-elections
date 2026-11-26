@@ -1,13 +1,37 @@
 # raw downloads (fetched by the boundary pipeline; licences vary)
 boundaries/raw/
 
-/vendor/
-/node_modules/
+/.phpunit.cache
+/bootstrap/ssr
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+*.log
+/resources/js/actions
+/resources/js/routes
+/resources/js/wayfinder
+/vendor
+.DS_Store
 .env
 .env.*
 !.env.example
+.phpactor.json
 .phpunit.result.cache
-/public/build/
-/public/hot
-/storage/*.key
-.DS_Store
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/auth.json
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# Claude Code: local-only settings and agent worktrees stay out of git
+.claude/settings.local.json
+.claude/worktrees/

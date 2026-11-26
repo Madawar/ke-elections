@@ -128,6 +128,51 @@ The brief's tables are kept, with these changes:
   (107 parties as at October 2026).
 - **In-power counts** are computed from current terms per seat type, plus nominated members.
 
+## Admin data review table (Phase 2)
+
+The owner asked for this on 2026-11-26. It is a Filament admin table where admins can check
+every office holder and fix questionable records themselves.
+
+- **Who's in it:** one row per seat holder:
+  - 47 Governors, 47 Senators and 47 Woman Representatives.
+  - 290 MPs and 1,450 MCAs.
+  - Nominated MPs, Senators and MCAs.
+  - Past terms are reachable through a filter.
+- **Columns:**
+  - The seat and the unit, shown as its code, name and parents (for example
+    "Ward 1448 Ngei, Mathare, Nairobi City").
+  - Holder name, party (with alias awareness) and in office since/until.
+  - How they got the seat: elected, by-election or nominated.
+  - Source: the gazette notice number and a link.
+  - Review state and last edited by/at.
+- **Finding records quickly:**
+  - Search by name, unit or code.
+  - Filter by seat, county, constituency, party, review state, "no source", "no holder" and
+    "changed since import".
+  - Sort any column.
+  - Every filter is reflected in the URL, so a view can be shared.
+- **Fixing records:**
+  - Inline edit for the common fields, and a full edit form for the rest.
+  - Bulk actions: mark verified, flag for review, and set the source.
+  - Each row has a "flag as questionable" toggle with a note, and its own filter.
+- **Data checks view**, shown as tabs with counts:
+  - Seats with no current holder.
+  - Holders without a source.
+  - Parties not in the ORPP register.
+  - More than one current holder for a seat.
+  - Units whose codes don't exist.
+  - Records changed by hand since import.
+- **Import and export:**
+  - CSV import with per-row validation against unit codes, previewed before saving.
+  - CSV export of the filtered view.
+- **Safety:**
+  - Admin edits apply immediately but are always audited: old and new value, who, when and
+    why. Any change can be rolled back.
+  - That needs the audit log, which therefore moves forward from Phase 3 into Phase 2 for
+    office holders.
+  - Editors' changes still go through verification (Phase 3).
+  - The public map shows only verified records, with their source and "as of" date.
+
 ## Phases (owner reviews after each)
 1. **Boundary pipeline and map:**
    - Sail, the starter kit, the boundary pipeline and the map page.
@@ -139,6 +184,8 @@ The brief's tables are kept, with these changes:
    - A public API serving approved data only.
    - Filters, colour-by and the gaps view.
    - The "In power now" summary and card.
+   - The admin data review table for office holders (see "Admin data review table"), with
+     the audit log and rollback for those records.
 3. **Accounts and approval:**
    - Roles, editors scoped to their counties, and the submit → verify workflow.
    - The audit log and rollback, in Filament.

@@ -4,11 +4,46 @@ An interactive, phone-first map of Kenya's electoral units: 47 counties, 290 con
 and 1,450 wards. It is for tracking party nominations ahead of the August 2027 general
 election, with collaborative, verified data entry.
 
-**Status: planning.** No app code yet. See:
+**Status: Phase 1 in progress** (boundaries and map). See:
 
 - [`docs/superpowers/specs/2026-11-26-kenya-electoral-map-design.md`](docs/superpowers/specs/2026-11-26-kenya-electoral-map-design.md): the plan (draft)
 - [`docs/boundary-quality-report.md`](docs/boundary-quality-report.md): an assessment of the
   available boundary data
+
+## Development
+
+The app is Laravel 13 with the Vue/Inertia starter kit, MySQL 8.4 and
+[Laravel Sail](https://laravel.com/docs/sail). You need Docker; nothing else is installed on
+the host.
+
+```bash
+git clone <repo-url> elections && cd elections
+cp .env.example .env
+
+# install PHP dependencies without a local PHP
+docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd)":/var/www/html -w /var/www/html \
+  laravelsail/php84-composer:latest composer install --ignore-platform-reqs
+
+./vendor/bin/sail up -d
+./vendor/bin/sail artisan key:generate
+./vendor/bin/sail artisan migrate
+./vendor/bin/sail npm ci
+./vendor/bin/sail npm run dev      # Vite dev server (port 5173)
+```
+
+The app is served at <http://localhost:8080>. Sail also creates a `testing` database for the
+test suite.
+
+Run the tests (the PHP tests need built assets, so run `npm run build` once first):
+
+```bash
+./vendor/bin/sail npm run build
+./vendor/bin/sail artisan test     # Pest, against MySQL
+./vendor/bin/sail npm run test:js  # Vitest (happy-dom)
+```
+
+Continuous integration (`.github/workflows/ci.yml`) runs the same steps on every push and
+pull request.
 
 ## Reproducing the boundary quality report
 
