@@ -145,17 +145,25 @@ export function mapLegend(
                 b.count - a.count ||
                 a.label.localeCompare(b.label),
         );
-    // Past `maxRows` parties, the smallest fold into "Others"; units with no data stay apart.
-    const parties = rows.filter((r) => r.label !== 'No approved data');
-    if (parties.length > maxRows) {
-        const rest = parties.slice(maxRows - 1);
+    // Past `maxRows` rows, the smallest parties fold into "Other parties"; independents and
+    // units with no data always keep their own rows.
+    const apart = (r: { label: string }) =>
+        r.label === 'No approved data' || r.label === 'Independent';
+    const parties = rows.filter((r) => !apart(r));
+    const kept = rows.filter((r) => r.label === 'Independent');
+    const room = Math.max(0, maxRows - 1 - kept.length);
+    const rest = parties.slice(room);
+    if (parties.length + kept.length > maxRows && rest.length) {
         return {
             title: legendTitle(mode.seat, area),
             rows: [
-                ...parties.slice(0, maxRows - 1),
+                ...[...parties.slice(0, room), ...kept].sort(
+                    (a, b) =>
+                        b.count - a.count || a.label.localeCompare(b.label),
+                ),
                 {
                     // Their colours vary on the map, so this row gets no swatch.
-                    label: 'Others',
+                    label: 'Other parties',
                     colour: null,
                     count: rest.reduce((n, r) => n + r.count, 0),
                 },

@@ -49,6 +49,7 @@ import {
     loadSeats,
     seatColouring,
     seatLegend,
+    withIndependentColour,
 } from '@/lib/seats';
 import {
     SEAT_LABEL,
@@ -72,7 +73,12 @@ const props = defineProps<{ unit: ServerUnit }>();
 // ---- data -------------------------------------------------------------------------------
 const manifest = ref<Record<string, string> | null>(null);
 const index = shallowRef<UnitIndex | null>(null);
-const seats = shallowRef<SeatsData>(EMPTY_SEATS);
+const loadedSeats = shallowRef<SeatsData>(EMPTY_SEATS);
+// Independents are drawn in the theme's own `independent` colour everywhere (map, legend,
+// seating charts, cards), so every view reads the seats through the current theme.
+const seats = computed(() =>
+    withIndependentColour(loadedSeats.value, THEMES[theme.value].independent),
+);
 const towns = shallowRef<
     {
         name: string;
@@ -103,7 +109,7 @@ onMounted(async () => {
             loadSeats(),
         ]);
         index.value = units;
-        seats.value = data;
+        loadedSeats.value = data;
         manifest.value = m;
         applySharedView(data);
         if (props.unit)

@@ -37,7 +37,12 @@ import {
     viewMapAspect,
 } from '@/lib/export/viewMap';
 import { viewLayout } from '@/lib/export/viewLayout';
-import { type ViewState, headlineFor, withTheme } from '@/lib/export/viewState';
+import {
+    type ViewState,
+    headlineFor,
+    seatsInTheme,
+    withTheme,
+} from '@/lib/export/viewState';
 import { THEMES, type ThemeName } from '@/lib/map/theme';
 
 const props = defineProps<{
@@ -54,7 +59,9 @@ const size = computed<ViewSize>({
 });
 const themeName = ref<ThemeName>(props.view.theme);
 const theme = computed(() => THEMES[themeName.value]);
-const shown = computed(() => withTheme(props.view, themeName.value));
+const shown = computed(() =>
+    withTheme(props.view, themeName.value, props.context),
+);
 
 const HEADLINE_MAX = 120;
 const generated = computed(() => headlineFor(props.view));
@@ -124,7 +131,15 @@ async function build() {
         const view = shown.value;
         pending = queue.then(() => {
             if (t !== token) throw new Superseded();
-            return renderViewMap(view, props.context, THEMES[name], box);
+            return renderViewMap(
+                view,
+                {
+                    ...props.context,
+                    seats: seatsInTheme(props.context.seats, name),
+                },
+                THEMES[name],
+                box,
+            );
         });
         queue = pending.catch(() => {});
         images.set(key, pending);

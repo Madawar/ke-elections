@@ -7,7 +7,7 @@
 import { SEAT_LABEL, buildLegend, shareOf } from '@/lib/legend';
 import { type SeatKey, SEAT_LEVEL } from '@/lib/map/colouring';
 import type { FocusSelection } from '@/lib/map/focus';
-import { OTHER, type ThemeName } from '@/lib/map/theme';
+import { OTHER, THEMES, type ThemeName } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
 import {
     INDEPENDENT,
@@ -15,6 +15,7 @@ import {
     legendScope,
     legendTitle,
     seatLegend,
+    withIndependentColour,
 } from '@/lib/seats';
 import type { Level, UnitIndex } from '@/lib/units';
 import { sourceLine, sourceParts } from './format';
@@ -24,7 +25,7 @@ export const SEAT_KEYS = Object.keys(SEAT_LABEL) as SeatKey[];
 export interface ViewRow {
     /** The legend row key: a party abbreviation or "other". */
     key: string;
-    /** As drawn on the card: the abbreviation, or "Other and independent". */
+    /** As drawn on the card: the legend row's label ("UDA", "Independent", "Other parties"). */
     label: string;
     /** The full name as the data spells it. */
     name: string;
@@ -160,14 +161,14 @@ export function snapshotView({
     const chosen = new Set(only);
     const names = new Map(perParty.map((r) => [r.abbrev, r.name]));
 
-    // Exactly the legend's rows: the same parties, counts and shares, "Other and independent" last.
+    // Exactly the legend's rows: the same parties, counts and shares, "Other parties" last.
     const rows: ViewRow[] = legend.rows.map((r) => {
         const members = legend.members[r.key] ?? [];
         const other = r.key === 'other';
         const count = r.count ?? 0;
         return {
             key: r.key,
-            label: other ? (r.name ?? r.label) : r.label,
+            label: r.label,
             name: r.name ?? r.label,
             colour: r.colour,
             count,
@@ -266,9 +267,33 @@ function unitsInView(
     return count > 1 ? { count, word: UNIT_WORD[level] } : null;
 }
 
-/** The same view drawn in the other theme. */
-export const withTheme = (view: ViewState, theme: ThemeName): ViewState =>
-    view.theme === theme ? view : { ...view, theme };
+/** The seats data drawn in a theme (independents take that theme's colour). */
+export const seatsInTheme = (seats: SeatsData, theme: ThemeName): SeatsData =>
+    withIndependentColour(seats, THEMES[theme].independent);
+
+/**
+ * The same view in another theme: taken again from the same seats, filters and focus, so every
+ * colour that depends on the theme follows it.
+ */
+export function withTheme(
+    view: ViewState,
+    theme: ThemeName,
+    ctx: { seats: SeatsData; index: UnitIndex },
+): ViewState {
+    if (view.theme === theme) return view;
+    return snapshotView({
+        seats: seatsInTheme(ctx.seats, theme),
+        index: ctx.index,
+        seat: view.seat,
+        focus: view.focus
+            ? { level: view.focus.level, code: view.focus.code }
+            : null,
+        only: view.only,
+        showSurroundings: view.showSurroundings,
+        theme,
+        sample: view.sample,
+    });
+}
 
 const list = (items: string[]) =>
     items.length <= 1

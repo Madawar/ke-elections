@@ -2,7 +2,7 @@
 // how the heading and chip describe that. The page only wires this to the legend and the map.
 import type { SeatKey } from './map/colouring';
 import { OTHER, PROVINCE_TINTS } from './map/theme';
-import { legendTitle, seatLegend, type SeatsData } from './seats';
+import { INDEPENDENT, legendTitle, seatLegend, type SeatsData } from './seats';
 
 export interface LegendRow {
     key: string;
@@ -12,8 +12,10 @@ export interface LegendRow {
     name?: string;
     colour: string;
     count?: number;
-    /** Sorts after every other row whatever its count ("Other and independent"). */
+    /** Sorts after every other row whatever its count ("Other parties"). */
     last?: boolean;
+    /** How many parties a grouped row stands for ("Other parties (9)" in accessible text). */
+    parties?: number;
 }
 
 export const SEAT_LABEL: Record<SeatKey, string> = {
@@ -30,7 +32,10 @@ export function shareOf(count: number, total: number): string {
     return count > 0 && p < 0.5 ? '<1%' : `${Math.round(p)}%`;
 }
 
-/** The most party rows the legend shows; every other party is folded into "Other". */
+/**
+ * The most coloured-party rows the legend shows; every other party is folded into "Other
+ * parties". Independents have a row of their own on top of these.
+ */
 export const MAX_PARTY_ROWS = 7;
 
 export interface LegendModel {
@@ -61,14 +66,19 @@ export function buildLegend(
     asOf: string | null = '',
 ): LegendModel {
     const rows = seatLegend(seats, seat, scope?.codes);
-    const shown = rows
-        .filter((r) => r.colour !== OTHER)
+    // Independents always have their own row, sorted by count like a party, on top of the
+    // largest coloured parties; "Other parties" is every other party.
+    const top = rows
+        .filter((r) => r.abbrev !== INDEPENDENT && r.colour !== OTHER)
         .slice(0, MAX_PARTY_ROWS);
+    const shown = rows.filter(
+        (r) => r.abbrev === INDEPENDENT || top.includes(r),
+    );
     const folded = rows.filter((r) => !shown.includes(r));
     const other = folded.reduce((n, r) => n + r.seats, 0);
     const mapped: LegendRow[] = shown.map((r) => ({
         key: r.abbrev,
-        label: r.abbrev,
+        label: r.abbrev === INDEPENDENT ? 'Independent' : r.abbrev,
         name: r.name,
         colour: r.colour,
         count: r.seats,
@@ -76,11 +86,12 @@ export function buildLegend(
     if (other)
         mapped.push({
             key: 'other',
-            label: 'Other',
-            name: 'Other and independent',
+            label: 'Other parties',
+            name: 'Other parties',
             colour: OTHER,
             count: other,
             last: true,
+            parties: folded.length,
         });
     // A row is on when every party it stands for is highlighted.
     const members: Record<string, string[]> = Object.fromEntries(

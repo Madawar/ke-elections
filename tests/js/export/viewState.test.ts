@@ -83,7 +83,7 @@ describe('headlineFor', () => {
             theme: 'light',
         });
         expect(headlineFor(view)).toBe(
-            'MCA seats across Kenya: UDA 523, ODM 312, JP 76 and 2 more parties',
+            'MCA seats across Kenya: UDA 523, ODM 312, Independent 114 and 2 more parties',
         );
     });
 
@@ -96,19 +96,20 @@ describe('headlineFor', () => {
 });
 
 describe('snapshotView', () => {
-    it('takes exactly the legend rows: same parties, counts and shares, "Other and independent" last', () => {
+    it('takes exactly the legend rows: same parties, counts and shares, "Other parties" last', () => {
         const view = mcaUdaOdm();
         expect(view.kind).toBe('party');
         expect(view.total).toBe(1450);
         expect(view.rows.map((r) => [r.label, r.count, r.share])).toEqual([
             ['UDA', 523, '36%'],
             ['ODM', 312, '22%'],
+            ['Independent', 114, '8%'],
             ['JP', 76, '5%'],
             ['WDM-K', 68, '5%'],
             ['UDM', 36, '2%'],
             ['FORD-K', 33, '2%'],
             ['ANC', 31, '2%'],
-            ['Other and independent', 371, '26%'],
+            ['Other parties', 257, '18%'],
         ]);
         // The same rows, counts, colours and shares the on-screen legend draws.
         const legend = buildLegend(VIEW_SEATS, 'mca', null, ['UDA', 'ODM']);
@@ -126,7 +127,7 @@ describe('snapshotView', () => {
         const other = view.rows.at(-1)!;
         expect(other.kind).toBe('other');
         expect(other.colour).toBe(OTHER);
-        expect(other.members).toContain('IND');
+        expect(other.members).not.toContain('IND');
         expect(
             view.rows.filter((r) => r.highlighted).map((r) => r.key),
         ).toEqual(legend.highlighted);
@@ -141,8 +142,8 @@ describe('snapshotView', () => {
             ['ODM', 8],
             ['UDA', 4],
             ['JP', 3],
+            ['Independent', 1],
             ['WDM-K', 1],
-            ['Other and independent', 1],
         ]);
         expect(scopeLineFor(view)).toBe('In Nairobi City’s 17 constituencies');
         expect(scopeLineFor(mcaUdaOdm())).toBe(

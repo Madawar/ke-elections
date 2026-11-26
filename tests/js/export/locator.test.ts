@@ -29,13 +29,13 @@ describe('cardSeats', () => {
         expect(rows[1].holder).toBeNull();
     });
 
-    it('names independents as such, in the grey "Other" colour', () => {
+    it('names independents as such, in the independent colour', () => {
         const [row] = cardSeats(SEATS, unit('ward', 1448));
         expect(row.key).toBe('mca');
         expect(row.holder).toMatchObject({
             name: 'Sample Ward Rep',
             party: 'Independent',
-            colour: OTHER,
+            colour: THEMES.light.independent,
         });
     });
 });
@@ -87,7 +87,11 @@ describe('mapLegend', () => {
             colouring,
         )!;
         expect(legend.rows).toEqual([
-            { label: 'Independent', colour: OTHER, count: 1 },
+            {
+                label: 'Independent',
+                colour: THEMES.light.independent,
+                count: 1,
+            },
             { label: 'No approved data', colour: '#E3E8E5', count: 1 },
         ]);
     });
@@ -267,7 +271,7 @@ describe('mapLegend with filters', () => {
         expect(labels).not.toContain('ZZZ');
     });
 
-    it('folds small parties into an "Others" row with no swatch', () => {
+    it('folds small parties into an "Other parties" row with no swatch', () => {
         const data = {
             ...SEATS,
             holders: [
@@ -286,8 +290,14 @@ describe('mapLegend with filters', () => {
             colouring,
             1,
         )!;
+        // Independents never fold: they keep their row beside "Other parties".
         expect(legend.rows).toEqual([
-            { label: 'Others', colour: null, count: 2 },
+            {
+                label: 'Independent',
+                colour: THEMES.light.independent,
+                count: 1,
+            },
+            { label: 'Other parties', colour: null, count: 1 },
         ]);
     });
 });

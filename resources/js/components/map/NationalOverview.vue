@@ -76,8 +76,8 @@ const hasData = computed(() => props.seats.holders.length > 0);
                 the Senate.</template
             >
             <template v-else-if="inOther"
-                >{{ highlightName }} is counted in the highlighted Other group
-                below.</template
+                >{{ highlightName }} is counted in the highlighted Other parties
+                group below.</template
             >
             <template v-else
                 >Seats held by {{ highlightName }} are highlighted

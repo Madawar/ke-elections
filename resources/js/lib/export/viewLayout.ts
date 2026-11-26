@@ -29,7 +29,7 @@ export interface RowItem {
     colour: string;
     kind: ViewState['rows'][number]['kind'];
     label: TextItem;
-    /** A long label ("Other and independent") continues on a second, smaller line. */
+    /** A long label ("Other parties") continues on a second, smaller line. */
     label2: TextItem | null;
     bar: Box;
     value: TextItem;
@@ -348,7 +348,7 @@ function chart(
 
     let size = Math.max(18, Math.round(spec.row.label * Math.max(0.82, scale)));
     // The label column is as wide as the one-word labels; a longer label of several words
-    // ("Other and independent") wraps onto two smaller lines instead of widening it.
+    // ("Other parties") wraps onto two smaller lines instead of widening it.
     const small = Math.round(size * 0.82);
     const single = labels.filter((l) => !l.includes(' '));
     let labelCol = widest(single.length ? single : labels, size);
@@ -443,7 +443,11 @@ function chart(
             const barW = Math.max(3, Math.round((r.count / largest) * maxBar));
             const on = r.highlighted;
             const lines = wrapped[i];
-            const first = Math.round(mid - small * 0.12);
+            // Two lines sit either side of the bar's middle; one shorter line on it.
+            const first =
+                lines && lines.length > 1
+                    ? Math.round(mid - small * 0.12)
+                    : Math.round(mid + small * 0.36);
             return {
                 key: r.key,
                 highlighted: on,

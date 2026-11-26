@@ -72,8 +72,8 @@ describe('ViewCard', () => {
         expect(text).toContain('IEBC gazette notices');
         expect(text).toContain('Data as of 16 July 2026');
         expect(text).toContain('example.org/?seat=mca&parties=uda,odm');
-        expect(wrapper.findAll('[data-row]')).toHaveLength(8);
-        expect(wrapper.get('[data-row="other"]').text()).toContain('371 (26%)');
+        expect(wrapper.findAll('[data-row]')).toHaveLength(9);
+        expect(wrapper.get('[data-row="other"]').text()).toContain('257 (18%)');
         expect(wrapper.findAll('[data-callout]')).toHaveLength(2);
         expect(wrapper.get('image[data-map]').attributes('href')).toBe(
             'data:image/png;base64,AAAA',
@@ -230,5 +230,26 @@ describe('credits', () => {
         expect(ATTRIBUTION).toBe(
             'Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data); 13 wards: American Red Cross (HDX), CC BY 4.0; Codes: Kenya Gazette Notice 13771 (2026); Towns: © OpenStreetMap contributors',
         );
+    });
+});
+
+describe('chart labels', () => {
+    it('keep a one-line shrunk label level with its bar, like the others', () => {
+        for (const size of SIZES) {
+            const l = viewLayout(size, mca, {
+                headline: headlineFor(mca),
+                url: 'https://example.org/',
+                mapAspect: 0.82,
+            });
+            for (const row of l.rows) {
+                // Rows with the label above the bar (narrow columns) are not level by design.
+                if (row.label2 || row.value.anchor === 'end') continue;
+                const mid = row.bar.y + row.bar.h / 2;
+                // The label's middle (baseline minus about a third of its size) is on the bar's.
+                expect(
+                    Math.abs(row.label.y - row.label.size * 0.36 - mid),
+                ).toBeLessThan(row.label.size * 0.6);
+            }
+        }
     });
 });

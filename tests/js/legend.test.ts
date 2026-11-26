@@ -114,8 +114,10 @@ describe('buildLegend', () => {
 
         const all = buildLegend(seats, 'mp', null, ['A8', 'A9', 'Z1', 'Z2']);
         expect(all.highlighted).toEqual(['other']);
-        expect(all.showing).toEqual(['Other']);
-        expect(all.title).toBe('MP seats across Kenya by party: showing Other');
+        expect(all.showing).toEqual(['Other parties']);
+        expect(all.title).toBe(
+            'MP seats across Kenya by party: showing Other parties',
+        );
     });
 
     it('counts only the seats in scope and names the unit', () => {
@@ -171,7 +173,7 @@ describe('toggleParty', () => {
         const model = buildLegend(seats, 'mp', null, only);
         expect(model.highlighted.sort()).toEqual(['A1', 'other']);
         // The person pressed two rows: A1 and Other.
-        expect(model.showing).toEqual(['A1', 'Other']);
+        expect(model.showing).toEqual(['A1', 'Other parties']);
     });
 
     it('switches Other off as one unit, leaving the other highlights alone', () => {

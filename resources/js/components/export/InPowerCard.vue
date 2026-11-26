@@ -11,7 +11,7 @@ import type { CardSize } from '@/lib/export/sizes';
 import { textWidth, wrapText } from '@/lib/export/text';
 import { layoutHemicycle } from '@/lib/hemicycle';
 import { type MapTheme, THEMES } from '@/lib/map/theme';
-import { type SeatsData, chamberGroups } from '@/lib/seats';
+import { INDEPENDENT, type SeatsData, chamberGroups } from '@/lib/seats';
 
 const props = withDefaults(
     defineProps<{
@@ -75,7 +75,12 @@ function chamber(def: (typeof CHAMBERS)[number], place: ChamberLayout) {
         ...groups.map((g) => ({
             key: g.key,
             label: g.label,
-            short: g.key === 'other' ? 'Others' : g.key,
+            short:
+                g.key === 'other'
+                    ? 'Other parties'
+                    : g.key === INDEPENDENT
+                      ? 'Independent'
+                      : g.key,
             seats: g.seats,
             colour: g.colour as string | null,
         })),

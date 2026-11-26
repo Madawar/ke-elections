@@ -6,8 +6,9 @@ import { legendTitle } from '@/lib/seats';
 const rows = [
     {
         key: 'other',
-        label: 'Other',
-        name: 'Other and independent',
+        label: 'Other parties',
+        name: 'Other parties',
+        parties: 9,
         colour: '#9AA5A0',
         count: 6,
         last: true,
@@ -112,7 +113,7 @@ describe('Legend as a bar chart', () => {
             'Orange Democratic Movement: 13 seats, 46 percent',
         );
         expect(items[4].find('.sr-only').text()).toBe(
-            'Other and independent: 6 seats, 21 percent',
+            'Other parties (9): 6 seats, 21 percent',
         );
         expect(items[0].text()).toContain('13');
         const one = mountLegend({
@@ -291,8 +292,8 @@ describe('Legend as a bar chart', () => {
                 },
                 {
                     key: 'other',
-                    label: 'Other',
-                    name: 'Other and independent',
+                    label: 'Other parties',
+                    name: 'Other parties',
                     colour: '#9AA5A0',
                     count: 2,
                     last: true,

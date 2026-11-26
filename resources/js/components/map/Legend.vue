@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The map legend. With counts it is a bar chart: one bar per party on a single scale that starts
-// at zero, largest first, "Other" last. Without counts (former provinces) it is a plain key.
+// at zero, largest first, "Other parties" last. Without counts (former provinces) it is a plain key.
 import { computed } from 'vue';
 import { type LegendRow, shareOf } from '@/lib/legend';
 
@@ -54,10 +54,13 @@ const total = computed(() =>
 const share = (count: number) => shareOf(count, total.value);
 const widthOf = (count: number) =>
     `${Number(((count / largest.value) * 100).toFixed(1))}%`;
+/** The row's full name; a grouped row says how many parties it stands for ("Other parties (9)"). */
+const fullName = (r: LegendRow) =>
+    `${r.name ?? r.label}${r.parties ? ` (${r.parties})` : ''}`;
 const spoken = (r: LegendRow) =>
     r.count === undefined
-        ? (r.name ?? r.label)
-        : `${r.name ?? r.label}: ${r.count} ${r.count === 1 ? 'seat' : 'seats'}, ${share(r.count).replace('<1%', 'less than 1 percent').replace('%', ' percent')}`;
+        ? fullName(r)
+        : `${fullName(r)}: ${r.count} ${r.count === 1 ? 'seat' : 'seats'}, ${share(r.count).replace('<1%', 'less than 1 percent').replace('%', ' percent')}`;
 </script>
 
 <template>
@@ -111,7 +114,7 @@ const spoken = (r: LegendRow) =>
                                     : 'hover:bg-ground'
                             "
                             :aria-pressed="isOn(r.key)"
-                            :aria-label="`Highlight ${r.name ?? r.label} areas`"
+                            :aria-label="`Highlight ${fullName(r)} areas`"
                             @click="emit('toggle', r.key)"
                         >
                             <span
@@ -120,8 +123,8 @@ const spoken = (r: LegendRow) =>
                                 aria-hidden="true"
                             />
                             <span
-                                class="w-[3.25rem] shrink-0 truncate"
-                                :title="r.name"
+                                class="w-[5rem] shrink-0 truncate"
+                                :title="fullName(r)"
                                 aria-hidden="true"
                                 >{{ r.label }}</span
                             >
