@@ -38,7 +38,7 @@ access instead.
 | `fonts.bunny.net` | Starter-kit fonts pulled during `npm run build` |
 | `codeload.github.com` | Boundary source download (`boundaries/scripts/fetch_sources.sh`) |
 | `data.humdata.org` | Red Cross ward layer (boundary rebuilds only) |
-| `overpass-api.de` | OpenStreetMap towns layer (boundary rebuilds only) |
+| `production-raw-data-api.s3.amazonaws.com` | OpenStreetMap towns (HOT export on HDX; boundary rebuilds only). Overpass (`overpass-api.de`) resets connections from cloud sessions, so it isn't used |
 | `raw.githubusercontent.com` | Self-hosted label glyphs (`boundaries/scripts/fetch_glyphs.sh`) |
 | `www.iebc.or.ke`, `orpp.or.ke` | Re-downloading gazette notices and the party register (data work only) |
 
@@ -51,6 +51,16 @@ rebuilds boundaries or refreshes reference data.
 - Commands time out after 2 minutes by default. The hook itself is allowed 10 minutes.
 - Cloud MySQL is Ubuntu's 8.0 package; local Sail and CI use 8.4. Keep migrations to features
   both versions support.
+
+## Verified on a cloud session (2026-11-26, "Elections App", unrestricted network)
+- `scripts/cloud/session-start.sh` completes in about 10 minutes the first time, mostly composer.
+- **Composer and GitHub:** the session's GitHub proxy answers `api.github.com` and
+  `codeload.github.com` zip downloads with HTTP 403 for repos outside the session's scope, but
+  allows public git clones. `scripts/cloud/composer-install.sh` (called by the hook) installs from
+  source and zips dist-only packages (`phpstan/phpstan`) from a git clone of the locked commit.
+- PHP 8.4.28 and MySQL 8.0.46; `php artisan test` (78) and `npm run test:js` (114) pass.
+- MapLibre renders in headless Chromium with `--use-angle=swiftshader --enable-unsafe-swiftshader`,
+  so Playwright checks of the map work here.
 
 ## Not verified yet
 These come from the docs or from reasoning, and haven't been confirmed on a real cloud

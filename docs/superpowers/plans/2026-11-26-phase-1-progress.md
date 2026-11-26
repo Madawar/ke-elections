@@ -27,11 +27,16 @@ the owner's machine.
 | 2 Gazette loader, provinces, code validation | Complete, review clean | `587a887` |
 | 3 Ward assembly with 13 Red Cross fills | Complete, review clean | `3fd0506` |
 | 4 Derived layers, outputs, build report | Complete. Review needed fixes; fix round 1 was re-reviewed clean | `3af9490`, `4a2d9d0`, `216cf8a` |
-| 4b Evidence-based ward corrections | **Next.** Added after Task 4 found misfiled ward polygons | — |
-| 5 Towns and glyphs | Not started | — |
-| 6 Unit directory, routes, meta tags | Not started. Needs PHP and MySQL, so it's a good first cloud task | — |
-| 6b Visual direction tokens | Direction chosen; tokens not yet committed | — |
-| 7–11 Map core, panel and search, export cards, PWA, docs and verification | Not started | — |
+| 4b Evidence-based ward corrections | **Still open.** Deferred so the owner could get a browsable map first; a few ward polygons are still misfiled | — |
+| 5 Towns and glyphs | Complete. Towns from the HOT OSM export on HDX (Overpass is unreachable from cloud sessions), each tagged with its ward | `b7f1381` |
+| 6 Unit directory, routes, meta tags | Complete. `og-default.png` rendered from the map | `8cfd425` |
+| 6b Visual direction tokens | Complete (`docs/design/visual-direction.md`) | `e4ce241` |
+| 7 Map core | Complete, with owner changes: `MapView` is a reusable component with an overlay registry (`lib/map/overlays.ts`); the ward source is always in the style but loads lazily | `e4ce241` |
+| 8 Panel, sheet, search, list, legend, About | Complete | `e4ce241` |
+| Owner request: real 2022 office holders, party colouring, seating charts | Pulled forward from Phase 2. Importer `data:import`, sourced CSVs under `data/sources/`, `/data/seats.json`, colour by any seat's party, National Assembly and Senate charts | `5d6f9f3`, `4af8420`, `e4ce241` |
+| 9 Export cards | Not started | — |
+| 10 PWA | Not started | — |
+| 11 Docs and verification | Partly: browser check at 390×844 and 1280×800 done by Playwright; PR open | — |
 
 Infra outside the plan, requested by the owner: `962f7bd` (CLAUDE.md, `.claude/`, cloud
 scripts) and `fdec2ff` (owner additions to the plan).
@@ -112,10 +117,9 @@ scripts) and `fdec2ff` (owner additions to the plan).
 ## Cloud environment notes
 - **Environment:** "Elections App" (`env_01StAectAimqiN9aWCso1VPu`). Its setup script is
   `scripts/cloud/environment-setup.sh` and is confirmed working: PHP 8.4.28 and MySQL 8.0.46.
-- **Not yet verified:** that `scripts/cloud/session-start.sh` completes in the cloud, or that
-  `php artisan test` and `npm run test:js` pass there. The first check run was stopped about six
-  minutes into the session script. The first cloud session should run that script, then both
-  test suites, and fix any gaps (for example a blocked domain) before starting new work.
+- **Verified 2026-11-26:** `scripts/cloud/session-start.sh` completes (composer installs from git
+  because the GitHub proxy refuses zip downloads; see `docs/cloud-setup.md`), and both test
+  suites pass.
 - **The SessionStart hook:** it lives in `.claude/settings.json`, which is on `develop`, so new
   cloud sessions run `scripts/cloud/session-start.sh` at startup.
 - **Raw boundary sources** (`boundaries/raw/`, about 120 MB) aren't in git. Fetch them with
