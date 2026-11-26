@@ -123,4 +123,87 @@ export const TOWNS: MapOverlay = {
     ],
 };
 
-export const OVERLAYS: MapOverlay[] = [TOWNS];
+export const POLLING_STATIONS: MapOverlay = {
+    id: 'stations',
+    label: 'Polling stations (2013)',
+    description: 'IEBC 2013 locations; many have moved or been added since',
+    source: ({ manifest }) => ({
+        type: 'geojson',
+        data: `/boundaries/stations.geojson?v=${manifest['stations.geojson'] ?? ''}`,
+    }),
+    swatch: () => '#13233A',
+    interactive: ['stations-dot'],
+    layers: (theme, source) => [
+        {
+            id: 'stations-dot',
+            type: 'circle',
+            source,
+            minzoom: 9,
+            paint: {
+                'circle-radius': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    9,
+                    1.6,
+                    12,
+                    3.2,
+                    15,
+                    5,
+                ],
+                'circle-color': theme.ink,
+                'circle-stroke-color': theme.surface,
+                'circle-stroke-width': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    9,
+                    0.4,
+                    13,
+                    1.2,
+                ],
+                'circle-opacity': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    9,
+                    0,
+                    9.6,
+                    0.85,
+                ],
+                'circle-stroke-opacity': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    9,
+                    0,
+                    9.6,
+                    1,
+                ],
+            },
+        },
+        {
+            id: 'stations-label',
+            type: 'symbol',
+            source,
+            minzoom: 12.5,
+            layout: {
+                'text-field': ['get', 'name'],
+                'text-font': ['Noto Sans Regular'],
+                'text-size': 11,
+                'text-offset': [0, 0.8],
+                'text-anchor': 'top',
+                'text-max-width': 9,
+                'text-optional': true,
+                'text-padding': 2,
+            },
+            paint: {
+                'text-color': theme.muted,
+                'text-halo-color': theme.labelHalo,
+                'text-halo-width': 1.4,
+            },
+        },
+    ],
+};
+
+export const OVERLAYS: MapOverlay[] = [TOWNS, POLLING_STATIONS];

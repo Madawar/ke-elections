@@ -239,6 +239,7 @@ function selectUnit(
     unit: Unit | null,
     { push = true, fit = true, animate = true } = {},
 ) {
+    overlayInfo.value = null;
     selection.value = unit;
     autoCentre.value = true;
     view.value = 'unit';
@@ -384,6 +385,22 @@ const townsIn = computed(() => {
 // ---- find my ward -----------------------------------------------------------------------
 const locating = ref(false);
 const locateMessage = ref('');
+
+// ---- overlay features (polling stations) -----------------------------------------------
+const overlayInfo = ref<{ title: string; detail: string } | null>(null);
+function onOverlayClick(
+    overlay: MapOverlay,
+    properties: Record<string, unknown>,
+) {
+    if (overlay.id !== 'stations') return;
+    const ward = index.value?.get('ward', Number(properties.ward_code));
+    const parent = ward ? index.value?.ancestors('ward', ward.c)[0] : undefined;
+    overlayInfo.value = {
+        title: String(properties.name ?? 'Polling station'),
+        detail: `Polling station${ward ? ` listed under ${ward.n} ward${parent ? `, ${parent.n}` : ''}` : ''}. IEBC 2013 location.`,
+    };
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
 async function locate() {
     if (!navigator.geolocation || !manifest.value) {
         locateMessage.value = 'This device cannot share its location.';
@@ -480,6 +497,7 @@ const showView = (v: typeof view.value) => {
                 view = 'list';
             "
             @user-move="autoCentre = false"
+            @overlay-click="onOverlayClick"
         />
         <p
             v-if="loadError"
@@ -610,6 +628,26 @@ const showView = (v: typeof view.value) => {
                             About
                         </button>
                     </template>
+                </div>
+                <div
+                    v-if="overlayInfo"
+                    class="mb-2 flex items-start gap-2 rounded-md border border-hairline px-3 py-2"
+                >
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[15px] font-medium text-ink">
+                            {{ overlayInfo.title }}
+                        </p>
+                        <p class="text-[13px] text-muted-ink">
+                            {{ overlayInfo.detail }}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="min-h-11 px-2 text-[14px] underline underline-offset-4"
+                        @click="overlayInfo = null"
+                    >
+                        Close
+                    </button>
                 </div>
                 <p v-if="locateMessage" class="pb-2 text-[13px] text-muted-ink">
                     {{ locateMessage }}

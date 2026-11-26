@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { codeColour, fillColor, NO_COLOURING } from '@/lib/map/colouring';
-import { TOWNS } from '@/lib/map/overlays';
+import { OVERLAYS } from '@/lib/map/overlays';
 import { buildStyle, EMPTY_FC } from '@/lib/map/style';
 import { THEMES } from '@/lib/map/theme';
 
@@ -61,7 +61,9 @@ describe('buildStyle', () => {
                     ] ?? [],
             ),
         );
-        for (const layer of TOWNS.layers(THEMES.light, 'x'))
+        for (const layer of OVERLAYS.flatMap((o) =>
+            o.layers(THEMES.light, 'x'),
+        ))
             for (const f of (layer as { layout?: { 'text-font'?: string[] } })
                 .layout?.['text-font'] ?? [])
                 fonts.add(f);

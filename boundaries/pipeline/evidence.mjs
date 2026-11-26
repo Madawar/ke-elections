@@ -72,7 +72,7 @@ function countyIndex(gazette) {
 /**
  * Assign each polling station a gazette ward code.
  * `stations` is a FeatureCollection of points with `county`, `constituen` and `ward` names.
- * Returns `{ byCode: Map<code, [lon, lat][]>, counts, unmatched }`; `unmatched` lists the
+ * Returns `{ byCode: Map<code, [lon, lat][]>, assigned: {code, countyCode, point, name}[], counts, unmatched }`; `unmatched` lists the
  * county/constituency/ward name groups that could not be assigned, with station counts.
  */
 export function matchStations(stations, gazette) {
@@ -89,6 +89,7 @@ export function matchStations(stations, gazette) {
     }
 
     const byCode = new Map();
+    const assigned = [];
     const counts = { total: 0, assigned: 0, outside: 0, noCounty: 0, noConstituency: 0, noWard: 0 };
     const unmatched = new Map();
     const miss = (reason, p) => {
@@ -127,9 +128,10 @@ export function matchStations(stations, gazette) {
         counts.assigned++;
         if (!byCode.has(code)) byCode.set(code, []);
         byCode.get(code).push([point[0], point[1]]);
+        assigned.push({ code, countyCode, point: [point[0], point[1]], name: p.name });
     }
 
-    return { byCode, counts, unmatched: [...unmatched.values()] };
+    return { byCode, assigned, counts, unmatched: [...unmatched.values()] };
 }
 
 /**

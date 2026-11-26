@@ -93,6 +93,9 @@ export default defineConfig({
                     'glyphs/**/*.pbf',
                     'icons/*.{png,svg}',
                 ],
+                // Optional overlays load only when switched on, so they are cached on first use
+                // instead of making every install download them (see runtimeCaching).
+                globIgnores: ['boundaries/stations.geojson'],
                 // Hashed bundle files need no revision check.
                 dontCacheBustURLsMatching: /^build\/assets\//,
                 ignoreURLParametersMatching: [/^utm_/, /^fbclid$/, /^v$/],
@@ -104,6 +107,16 @@ export default defineConfig({
                 clientsClaim: true,
                 skipWaiting: true,
                 runtimeCaching: [
+                    {
+                        urlPattern: ({ url }) =>
+                            url.pathname === '/boundaries/stations.geojson',
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'overlays',
+                            expiration: { maxEntries: 8 },
+                            cacheableResponse: { statuses: [200] },
+                        },
+                    },
                     {
                         // Only the public map pages: never admin, account or login pages.
                         urlPattern: ({ request, url }) =>
