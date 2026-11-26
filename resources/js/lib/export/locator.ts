@@ -107,7 +107,6 @@ export function mapLegend(
     index: UnitIndex,
     unit: Unit,
     colouring: Colouring,
-    maxRows = 6,
 ): MapLegend | null {
     const mode = colouring.mode;
     if (mode.kind !== 'seat') return null;
@@ -158,35 +157,25 @@ export function mapLegend(
         colour: r.colour,
         count: r.count,
     });
-    // Past `maxRows` rows, the smallest parties fold into "Other parties"; independents and
-    // units with no data always keep their own rows.
-    const parties = rows.filter(
-        (r) => r.key !== 'none' && r.key !== INDEPENDENT,
+    // As on the map's own legend: every party with a colour of its own keeps its row (so does
+    // Independent); only the parties without one fold into "Other parties", in the Other grey.
+    const uncoloured = rows.filter(
+        (r) => r.key !== 'none' && r.key !== 'faded' && r.colour === OTHER,
     );
-    const kept = rows.filter((r) => r.key === INDEPENDENT);
-    const none = rows.filter((r) => r.key === 'none');
-    const room = Math.max(0, maxRows - 1 - kept.length);
-    const rest = parties.slice(room);
-    if (parties.length + kept.length > maxRows && rest.length)
-        return {
-            title: legendTitle(mode.seat, area),
-            rows: [
-                ...[...parties.slice(0, room), ...kept]
-                    .sort(
-                        (a, b) =>
-                            b.count - a.count || a.label.localeCompare(b.label),
-                    )
-                    .map(plain),
-                {
-                    // Their colours vary on the map, so this row gets no swatch.
-                    label: 'Other parties',
-                    colour: null,
-                    count: rest.reduce((n, r) => n + r.count, 0),
-                },
-                ...none.map(plain),
-            ],
-        };
-    return { title: legendTitle(mode.seat, area), rows: rows.map(plain) };
+    const kept = rows.filter(
+        (r) => !uncoloured.includes(r) && r.key !== 'none',
+    );
+    const other = uncoloured.reduce((n, r) => n + r.count, 0);
+    return {
+        title: legendTitle(mode.seat, area),
+        rows: [
+            ...kept.map(plain),
+            ...(other
+                ? [{ label: 'Other parties', colour: OTHER, count: other }]
+                : []),
+            ...rows.filter((r) => r.key === 'none').map(plain),
+        ],
+    };
 }
 
 /** A party's name on the map legend: its abbreviation, or "Independent". */

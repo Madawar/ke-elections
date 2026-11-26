@@ -11,6 +11,15 @@ import type { Box, FooterFonts, TextItem } from './layout';
 import { footerBlock } from './layout';
 import { VIEW_SIZES, type ViewSize } from './sizes';
 import { fitFontSize, textWidth, wrapText } from './text';
+import {
+    type MixBarLayout,
+    type MixFonts,
+    type MixLegendLayout,
+    type MixRowItem,
+    mixBar,
+    mixLegend,
+    mixRows,
+} from './viewMix';
 import { type ViewState, calloutsFor, scopeLineFor } from './viewState';
 
 export type { Box } from './layout';
@@ -29,8 +38,6 @@ export interface RowItem {
     colour: string;
     kind: ViewState['rows'][number]['kind'];
     label: TextItem;
-    /** A long label ("Other parties") continues on a second, smaller line. */
-    label2: TextItem | null;
     bar: Box;
     value: TextItem;
 }
@@ -58,6 +65,16 @@ export interface ViewLayout {
     /** The bars' common zero line. */
     axis: Box;
     rows: RowItem[];
+    /** The 100% seat mix bar under the headline. */
+    mixBar: MixBarLayout | null;
+    /** Its legend, on cards with rows (otherwise the bar chart names the parts). */
+    mixLegend: MixLegendLayout | null;
+    /** The rows inside a focused unit, in code order, as many as fit. */
+    mixRows: MixRowItem[];
+    rowsBox: Box | null;
+    /** Rows left out for room ("and N more constituencies"). */
+    rowsMore: number;
+    moreLine: TextItem | null;
     footerBox: Box;
     footerFonts: FooterFonts;
 }
@@ -77,6 +94,8 @@ interface Spec {
     /** Lines the headline may take before it shrinks, and at the smallest size. */
     headlineLines: number;
     headlineMax: number;
+    /** The smallest headline size, as a share of the base (0.78 unless set). */
+    headlineMin?: number;
     scope: number;
     /** Chart rows: text size, preferred and largest row height, bar thickness. */
     row: { label: number; h: number; max: number; bar: number };
@@ -88,6 +107,9 @@ interface Spec {
     /** Width of the callout column beside the map ("mapCallouts"). */
     calloutColW: number;
     arrangements: Arrangement[];
+    mix: MixFonts;
+    /** On cards with rows, the map's width beside the headline, as a share of the width. */
+    insetMap: number;
 }
 
 /**
@@ -115,6 +137,8 @@ const SPECS: Record<ViewSize, Spec> = {
         colW: 456,
         calloutColW: 300,
         arrangements: ['side', 'stack'],
+        mix: { bar: 44, legend: 21, row: 24, rowMin: 34, rowMax: 44 },
+        insetMap: 0.3,
     },
     portrait: {
         pad: 64,
@@ -132,6 +156,8 @@ const SPECS: Record<ViewSize, Spec> = {
         colW: 452,
         calloutColW: 320,
         arrangements: ['side', 'stack', 'mapCallouts'],
+        mix: { bar: 46, legend: 22, row: 24, rowMin: 34, rowMax: 48 },
+        insetMap: 0.32,
     },
     story: {
         pad: 72,
@@ -150,6 +176,8 @@ const SPECS: Record<ViewSize, Spec> = {
         colW: 0,
         calloutColW: 300,
         arrangements: ['mapCallouts', 'tall'],
+        mix: { bar: 46, legend: 24, row: 27, rowMin: 38, rowMax: 54 },
+        insetMap: 0.34,
     },
     x: {
         pad: 56,
@@ -167,6 +195,8 @@ const SPECS: Record<ViewSize, Spec> = {
         colW: 760,
         calloutColW: 270,
         arrangements: [],
+        mix: { bar: 38, legend: 20, row: 23, rowMin: 32, rowMax: 42 },
+        insetMap: 0,
     },
 };
 
@@ -238,7 +268,7 @@ function fitHeadline(
     w: number,
     spec: Spec,
 ): { size: number; lines: string[] } {
-    const min = Math.round(spec.headline * 0.78);
+    const min = Math.round(spec.headline * (spec.headlineMin ?? 0.78));
     const whole = (lines: string[]) => lines.join(' ') === headline.trim();
     const clean = (lines: string[]) =>
         lines.length === 1 ||
@@ -347,29 +377,18 @@ function chart(
         someOn && !on ? 'muted' : 'ink';
 
     let size = Math.max(18, Math.round(spec.row.label * Math.max(0.82, scale)));
-    // The label column is as wide as the one-word labels; a longer label of several words
-    // ("Other parties") wraps onto two smaller lines instead of widening it.
-    const small = Math.round(size * 0.82);
-    const single = labels.filter((l) => !l.includes(' '));
-    let labelCol = widest(single.length ? single : labels, size);
-    const wrapped = labels.map((l) => {
-        if (!l.includes(' ') || textWidth(l, size, true) <= labelCol)
-            return null;
-        const longestWord = widest(l.split(' '), small);
-        const lines = wrapText(
-            l,
-            Math.max(labelCol, longestWord),
-            small,
-            2,
-            true,
-        );
-        labelCol = Math.max(labelCol, widest(lines, small));
-        return lines;
-    });
-    const inlineBar =
-        area.w - labelCol - widest(values, size) - Math.round(size * 1.15);
+    // One label size for the whole chart, "Other parties" included: the label column is as
+    // wide as the widest label, and where that leaves the bars too short every label shrinks
+    // together (to a floor) before the rows go onto two lines (stacked).
+    const inlineBarAt = (at: number) =>
+        area.w -
+        widest(labels, at) -
+        widest(values, at) -
+        Math.round(at * 1.15);
     const stacked =
-        inlineBar < area.w * 0.42 && rowH >= spec.row.label * 1.3 + 18;
+        inlineBarAt(size) < area.w * 0.42 && rowH >= spec.row.label * 1.3 + 18;
+    if (!stacked) while (size > 18 && inlineBarAt(size) < area.w * 0.3) size--;
+    const labelCol = widest(labels, size);
 
     let rows: RowItem[];
     let axis: Box;
@@ -382,20 +401,28 @@ function chart(
                 Math.round(rowH - size * 1.3 - 10),
             ),
         );
+        // Each label shares its line with the right-aligned count; if one is too long, every
+        // label shrinks with it, so the chart keeps one label size.
+        const rooms = view.rows.map(
+            (_, i) =>
+                area.w - textWidth(values[i], size, true) - Math.round(size),
+        );
+        const labelSize = Math.min(
+            ...view.rows.map((r, i) =>
+                fitFontSize(
+                    r.label,
+                    rooms[i],
+                    size,
+                    Math.round(size * 0.75),
+                    true,
+                ),
+            ),
+        );
         rows = view.rows.map((r, i): RowItem => {
             const rowTop = top + i * rowH;
             const baseline = Math.round(rowTop + size * 0.95);
             const on = r.highlighted;
-            // The label shares its line with the right-aligned count; a long one shrinks a little.
-            const room =
-                area.w - textWidth(values[i], size, true) - Math.round(size);
-            const labelSize = fitFontSize(
-                r.label,
-                room,
-                size,
-                Math.round(size * 0.75),
-                true,
-            );
+            const room = rooms[i];
             return {
                 key: r.key,
                 highlighted: on,
@@ -409,7 +436,6 @@ function chart(
                     weight: on ? 700 : 400,
                     tone: tone(on),
                 },
-                label2: null,
                 bar: box(
                     area.x,
                     Math.round(baseline + size * 0.32),
@@ -442,12 +468,6 @@ function chart(
             const baseline = Math.round(mid + size * 0.36);
             const barW = Math.max(3, Math.round((r.count / largest) * maxBar));
             const on = r.highlighted;
-            const lines = wrapped[i];
-            // Two lines sit either side of the bar's middle; one shorter line on it.
-            const first =
-                lines && lines.length > 1
-                    ? Math.round(mid - small * 0.12)
-                    : Math.round(mid + small * 0.36);
             return {
                 key: r.key,
                 highlighted: on,
@@ -455,23 +475,12 @@ function chart(
                 kind: r.kind,
                 label: {
                     x: area.x,
-                    y: lines ? first : baseline,
-                    text: lines ? lines[0] : r.label,
-                    size: lines ? small : size,
+                    y: baseline,
+                    text: r.label,
+                    size,
                     weight: on ? 700 : 400,
                     tone: tone(on),
                 },
-                label2:
-                    lines && lines[1]
-                        ? {
-                              x: area.x,
-                              y: first + Math.round(small * 1.08),
-                              text: lines[1],
-                              size: small,
-                              weight: on ? 700 : 400,
-                              tone: tone(on),
-                          }
-                        : null,
                 bar: box(barX, Math.round(mid - barH / 2), barW, barH),
                 value: {
                     x: barX + barW + gapV,
@@ -537,7 +546,8 @@ function callouts(
         const subSize = fitFontSize(sub, textW, f.sub, Math.round(f.sub * 0.8));
         const labelY = y + Math.round(f.label * 0.95);
         const numberY = labelY + Math.round(numberSize * 0.98);
-        const subY = numberY + Math.round(subSize * 1.5);
+        // Figures have no descenders: the sub line sits just under the number's baseline.
+        const subY = numberY + Math.round(subSize * 0.8 + numberSize * 0.24);
         return {
             key: c.label,
             lid: {
@@ -626,9 +636,22 @@ function arrange(
         case 'side': {
             const map = box(b.x, b.y, b.w - spec.colW - gap, b.h);
             const x = map.x + map.w + gap;
+            // A long chart (a dozen parties) may tighten its rows to about three quarters; if it
+            // still does not fit under the callouts, the column is the chart alone (the mix bar
+            // above already gives the largest shares).
+            const fits = (room: number) => room >= rows * spec.row.h * 0.72;
+            const withCallouts = fits(b.h - spec.callout.h - gap);
+            if (!withCallouts && !fits(b.h)) return null;
+            if (!withCallouts)
+                return {
+                    map,
+                    calloutBox: box(map.x + map.w + gap, b.y, spec.colW, 0),
+                    calloutFlow: 'row',
+                    calloutGap: gap,
+                    chartBox: box(map.x + map.w + gap, b.y, spec.colW, b.h),
+                    chartTitle: b.h >= chartH,
+                };
             const room = b.h - spec.callout.h - gap;
-            // A long chart (a dozen parties) may tighten its rows to about three quarters.
-            if (room < rows * spec.row.h * 0.72) return null;
             const title = room >= chartH;
             // The column is centred on the map when it needs less than the full height.
             const chartUsed = Math.min(
@@ -723,39 +746,95 @@ export function viewLayout(
     const scope = scopeLineFor(view);
     const nCallouts = Math.max(1, calloutsFor(view).length);
     const nRows = Math.max(1, view.rows.length);
+    const withRows = view.mix.rows.length > 0;
+    const none = box(pad, h - 1, 0, 0);
+    const base = (t: ReturnType<typeof titleBlock>, footerBox: Box) => ({
+        w,
+        h,
+        strip: strip(w, spec.stripH, view.seat),
+        headline: t.headline,
+        headlineLines: t.headlineLines,
+        scopeLine: t.scopeLine,
+        footerBox,
+        footerFonts: spec.footer,
+    });
     const finish = (
         t: ReturnType<typeof titleBlock>,
         body: Body,
         footerBox: Box,
+        bar: MixBarLayout,
     ): ViewLayout => {
         const c = chart(body.chartBox, view, spec, body.chartTitle);
         return {
-            w,
-            h,
-            strip: strip(w, spec.stripH, view.seat),
-            headline: t.headline,
-            headlineLines: t.headlineLines,
-            scopeLine: t.scopeLine,
+            ...base(t, footerBox),
             map: body.map,
             calloutBox: body.calloutBox,
-            callouts: callouts(
-                body.calloutBox,
-                view,
-                { ...spec, gap: body.calloutGap },
-                body.calloutFlow,
-            ),
+            callouts: body.calloutBox.h
+                ? callouts(
+                      body.calloutBox,
+                      view,
+                      { ...spec, gap: body.calloutGap },
+                      body.calloutFlow,
+                  )
+                : [],
             chartBox: body.chartBox,
             chartTitle: c.title,
             axis: c.axis,
             rows: c.rows,
-            footerBox,
-            footerFonts: spec.footer,
+            mixBar: bar,
+            mixLegend: null,
+            mixRows: [],
+            rowsBox: null,
+            rowsMore: 0,
+            moreLine: null,
+        };
+    };
+    /** Bar, legend and rows from `y` down to `bottom`, across `x`..`x + width`. */
+    const withMixRows = (
+        t: ReturnType<typeof titleBlock>,
+        map: Box,
+        x: number,
+        width: number,
+        y: number,
+        bottom: number,
+        footerBox: Box,
+    ): ViewLayout => {
+        const bar = mixBar(box(x, y, width, spec.mix.bar), view);
+        const legend = mixLegend(
+            x,
+            Math.round(y + spec.mix.bar + gap * 0.55),
+            width,
+            view,
+            bar,
+            spec.mix.legend,
+        );
+        const rowsTop = Math.round(legend.box.y + legend.box.h + gap * 0.9);
+        const r = mixRows(
+            box(x, rowsTop, width, bottom - rowsTop),
+            view,
+            spec.mix,
+        );
+        return {
+            ...base(t, footerBox),
+            map,
+            calloutBox: none,
+            callouts: [],
+            chartBox: none,
+            chartTitle: null,
+            axis: box(0, 0, 0, 0),
+            rows: [],
+            mixBar: bar,
+            mixLegend: legend,
+            mixRows: r.rows,
+            rowsBox: r.box,
+            rowsMore: r.more,
+            moreLine: r.moreLine,
         };
     };
 
     if (size === 'x') {
-        // Map on the left at full height; headline, chart and callouts on the right; the
-        // footer runs under both.
+        // Map on the left at full height; headline, the mix and the chart or rows on the right;
+        // the footer runs under both.
         const top = Math.round(spec.stripH * 2 + pad * 0.75);
         const fh = footerHeight(w - 2 * pad, spec.footer, view, text.url);
         const footerBox = box(pad, h - pad * 0.7 - fh, w - 2 * pad, fh);
@@ -770,7 +849,11 @@ export function viewLayout(
         const colX = Math.round(pad + mapW + gap * 1.5);
         const colW = w - pad - colX;
         const t = titleBlock(colX, top, colW, spec, text.headline, scope);
-        const lowerY = Math.round(t.bottom + gap);
+        const barY = Math.round(t.bottom + gap * 0.7);
+        if (withRows)
+            return withMixRows(t, map, colX, colW, barY, bodyBottom, footerBox);
+        const bar = mixBar(box(colX, barY, colW, spec.mix.bar), view);
+        const lowerY = Math.round(barY + spec.mix.bar + gap * 0.8);
         const chartBox = box(
             colX,
             lowerY,
@@ -798,18 +881,12 @@ export function viewLayout(
                     chartBox.h >= titleHeight(spec) + nRows * spec.row.h,
             },
             footerBox,
+            bar,
         );
     }
 
     const innerW = w - pad - Math.max(pad, spec.insetRight ?? 0);
-    const t = titleBlock(
-        pad,
-        Math.round(Math.max(spec.stripH * 2 + pad * 0.8, spec.safeTop)),
-        innerW,
-        spec,
-        text.headline,
-        scope,
-    );
+    const top = Math.round(Math.max(spec.stripH * 2 + pad * 0.8, spec.safeTop));
     const fh = footerHeight(innerW, spec.footer, view, text.url);
     const footerBox = box(
         pad,
@@ -817,7 +894,59 @@ export function viewLayout(
         innerW,
         fh,
     );
-    const bodyTop = Math.round(t.bottom + gap);
+
+    if (withRows) {
+        const bottom = Math.round(footerBox.y - gap);
+        // Few rows (a constituency's wards): the map goes full width above the mix and the
+        // rows, as large as the room they leave.
+        const full = titleBlock(pad, top, innerW, spec, text.headline, scope);
+        const bar = mixBar(box(pad, 0, innerW, spec.mix.bar), view);
+        const legendH = mixLegend(0, 0, innerW, view, bar, spec.mix.legend).box
+            .h;
+        const rowsNeed = view.mix.rows.length * spec.mix.rowMax;
+        const below =
+            spec.mix.bar + gap * 0.55 + legendH + gap * 0.9 + rowsNeed;
+        const mapTop = Math.round(full.bottom + gap * 0.8);
+        const mapH = Math.round(bottom - below - gap - mapTop);
+        if (mapH >= h * 0.2) {
+            const map = box(pad, mapTop, innerW, mapH);
+            return withMixRows(
+                full,
+                map,
+                pad,
+                innerW,
+                Math.round(mapTop + mapH + gap),
+                bottom,
+                footerBox,
+            );
+        }
+        // Many rows: the map sits beside the headline; the mix, its legend and the rows fill
+        // the width. Beside the map the headline is narrower: it may shrink further, so it is
+        // never cut.
+        const mapW = Math.round(innerW * spec.insetMap);
+        const t = titleBlock(
+            pad,
+            top,
+            innerW - mapW - gap,
+            { ...spec, headlineMin: 0.6 },
+            text.headline,
+            scope,
+        );
+        const insetH = Math.round(
+            Math.min(
+                mapW * 1.25,
+                Math.max(mapW / text.mapAspect, t.bottom - top),
+            ),
+        );
+        const map = box(pad + innerW - mapW, top, mapW, insetH);
+        const y = Math.round(Math.max(t.bottom, map.y + map.h) + gap * 0.8);
+        return withMixRows(t, map, pad, innerW, y, bottom, footerBox);
+    }
+
+    const t = titleBlock(pad, top, innerW, spec, text.headline, scope);
+    const barY = Math.round(t.bottom + gap * 0.7);
+    const bar = mixBar(box(pad, barY, innerW, spec.mix.bar), view);
+    const bodyTop = Math.round(barY + spec.mix.bar + gap);
     const body = box(
         pad,
         bodyTop,
@@ -849,5 +978,6 @@ export function viewLayout(
                 nCallouts,
             )!,
         footerBox,
+        bar,
     );
 }

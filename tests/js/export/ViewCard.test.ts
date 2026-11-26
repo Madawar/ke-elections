@@ -12,6 +12,8 @@ import {
 import { footerBlock, type TextItem } from '@/lib/export/layout';
 import { textWidth } from '@/lib/export/text';
 import { ATTRIBUTION, THEMES } from '@/lib/map/theme';
+import { withIndependentColour } from '@/lib/seats';
+import { MIX_SEATS, mixIndex } from './mixFixtures';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
 
 const SIZES = Object.keys(VIEW_SIZES) as ViewSize[];
@@ -60,7 +62,8 @@ describe('ViewCard', () => {
     });
 
     it('shows the headline, scope, chart, callouts, source, date and link', () => {
-        const wrapper = mount(ViewCard, { props: props() });
+        // Portrait keeps both callouts beside a dozen chart rows (square gives them up for room).
+        const wrapper = mount(ViewCard, { props: props({ size: 'portrait' }) });
         const text = wrapper.text();
         expect(
             wrapper
@@ -202,7 +205,7 @@ describe('story safe zones', () => {
                     l.scopeLine,
                     ...(l.chartTitle ? [l.chartTitle] : []),
                     ...l.rows.flatMap((r) =>
-                        [r.label, r.label2, r.value].filter(
+                        [r.label, r.value].filter(
                             (t): t is TextItem => t !== null,
                         ),
                     ),
@@ -219,7 +222,9 @@ describe('story safe zones', () => {
                 expect(t.y, t.text).toBeLessThanOrEqual(1920 - 400);
             }
             expect(l.footerBox.y + l.footerBox.h).toBeLessThanOrEqual(1520);
-            expect(l.map.h).toBeGreaterThan(300);
+            // With rows (MPs of a county) the map is an inset beside the headline by design.
+            if (!view.mix.rows.length) expect(l.map.h).toBeGreaterThan(280);
+            else expect(l.mixRows.length).toBe(view.mix.rows.length);
         }
     });
 });
@@ -243,7 +248,7 @@ describe('chart labels', () => {
             });
             for (const row of l.rows) {
                 // Rows with the label above the bar (narrow columns) are not level by design.
-                if (row.label2 || row.value.anchor === 'end') continue;
+                if (row.value.anchor === 'end') continue;
                 const mid = row.bar.y + row.bar.h / 2;
                 // The label's middle (baseline minus about a third of its size) is on the bar's.
                 expect(
@@ -272,5 +277,51 @@ describe('a dozen parties', () => {
             for (const row of l.rows)
                 expect(row.value.size, size).toBeGreaterThanOrEqual(18);
         }
+    });
+});
+
+describe('ViewCard seat mix', () => {
+    const mixSeats = withIndependentColour(MIX_SEATS, THEMES.dark.independent);
+    const nairobiMca = snapshotView({
+        seats: mixSeats,
+        index: mixIndex,
+        seat: 'mca',
+        focus: { level: 'county', code: 47 },
+        only: [],
+        showSurroundings: false,
+        theme: 'dark',
+    });
+    const card = (size: ViewSize) =>
+        mount(ViewCard, {
+            props: props({
+                view: nairobiMca,
+                size,
+                headline: headlineFor(nairobiMca),
+                mapAspect: 1.5,
+            }),
+        });
+
+    it('draws the mix bar in the legend order, with shares inside the parts that fit', () => {
+        const w = card('story');
+        const parts = w.findAll('[data-mix-segment]');
+        expect(parts.map((p) => p.attributes('data-mix-segment'))).toEqual(
+            nairobiMca.mix.segments.map((s) => s.key),
+        );
+        expect(parts[0].text()).toBe('47%');
+        expect(w.text()).toContain('includes');
+        expect(w.text()).toContain('KANU 2 (2%)');
+    });
+
+    it('lists every constituency on a story and the first ones plus "and N more" on a square', () => {
+        expect(card('story').findAll('[data-mix-row]')).toHaveLength(17);
+        const square = card('square');
+        const shown = square.findAll('[data-mix-row]').length;
+        expect(shown).toBeLessThan(17);
+        expect(square.text()).toContain(
+            `and ${17 - shown} more constituencies`,
+        );
+        expect(square.findAll('[data-mix-row]')[0].text()).toContain(
+            'Constituency 274',
+        );
     });
 });

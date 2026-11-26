@@ -148,7 +148,9 @@ describe('snapshotView', () => {
             ['Independent', 1],
             ['WDM-K', 1],
         ]);
-        expect(scopeLineFor(view)).toBe('In Nairobi City’s 17 constituencies');
+        expect(scopeLineFor(view)).toBe(
+            '17 constituencies in Nairobi City County',
+        );
         expect(scopeLineFor(mcaUdaOdm())).toBe(
             'Across Kenya, highlighting UDA and ODM',
         );

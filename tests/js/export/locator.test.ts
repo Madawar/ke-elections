@@ -9,7 +9,8 @@ import {
 import { seatColouring } from '@/lib/seats';
 import { NO_COLOURING } from '@/lib/map/colouring';
 import { OTHER, THEMES } from '@/lib/map/theme';
-import { SEATS, index, unit } from './fixtures';
+import { SEATS, UNITS, index, unit } from './fixtures';
+import { UnitIndex } from '@/lib/units';
 
 describe('cardSeats', () => {
     it('lists the seats of a county with holder, party and colour, or no data', () => {
@@ -271,33 +272,67 @@ describe('mapLegend with filters', () => {
         expect(labels).not.toContain('ZZZ');
     });
 
-    it('folds small parties into an "Other parties" row with no swatch', () => {
+    it('gives every party with a colour its own row, and folds only the uncoloured into "Other parties"', () => {
+        // Four wards in Mathare: SPA and SPB have colours, SPX and SPY have none, IND is apart.
         const data = {
             ...SEATS,
+            parties: [
+                ...SEATS.parties,
+                {
+                    abbrev: 'SPX',
+                    name: 'Sample X',
+                    coalition_2022: null,
+                    colour: null,
+                },
+                {
+                    abbrev: 'SPY',
+                    name: 'Sample Y',
+                    coalition_2022: null,
+                    colour: null,
+                },
+            ],
             holders: [
                 ...SEATS.holders,
                 { ...SEATS.holders[3], code: 1447, party: 'SPA' },
+                { ...SEATS.holders[3], code: 1449, party: 'SPB' },
+                { ...SEATS.holders[3], code: 1450, party: 'SPX' },
+                { ...SEATS.holders[3], code: 1446, party: 'SPY' },
             ],
         };
+        const idx = UnitIndex.fromRows([
+            ...UNITS,
+            ...[1446, 1449, 1450].map((c) => ({
+                l: 'ward' as const,
+                c,
+                n: `Ward ${c}`,
+                p: 290,
+                b: [36.86, -1.26, 36.87, -1.25] as [
+                    number,
+                    number,
+                    number,
+                    number,
+                ],
+            })),
+        ]);
         const colouring = seatColouring(data, 'mca', {
             noData: '#E3E8E5',
             faded: '#D5DCD8',
         });
         const legend = mapLegend(
             data,
-            index,
+            idx,
             unit('constituency', 290),
             colouring,
-            1,
         )!;
-        // Independents never fold: they keep their row beside "Other parties".
         expect(legend.rows).toEqual([
             {
                 label: 'Independent',
                 colour: THEMES.light.independent,
                 count: 1,
             },
-            { label: 'Other parties', colour: null, count: 1 },
+            { label: 'SPA', colour: '#E69F00', count: 1 },
+            { label: 'SPB', colour: '#56B4E9', count: 1 },
+            { label: 'Other parties', colour: OTHER, count: 2 },
         ]);
     });
 });

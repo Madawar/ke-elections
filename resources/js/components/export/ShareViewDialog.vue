@@ -83,6 +83,22 @@ const caption = computed(() =>
     ),
 );
 const mapAspect = computed(() => viewMapAspect(props.view));
+/** When this size has no room for every row, say how many it lists and which size lists all. */
+const rowsHint = computed(() => {
+    const at = (s: ViewSize) =>
+        viewLayout(s, shown.value, {
+            headline: headline.value,
+            url: url.value,
+            mapAspect: mapAspect.value,
+        });
+    const here = at(size.value);
+    if (!here.rowsMore) return '';
+    const all = shown.value.mix.rows.length;
+    const fits = SIZES.filter((s) => !at(s).rowsMore).map(
+        (s) => VIEW_SIZE_LABELS[s],
+    );
+    return `This size lists ${here.mixRows.length} of the ${all} ${shown.value.mix.rowWord}.${fits.length ? ` ${fits.join(' and ')} ${fits.length === 1 ? 'lists' : 'list'} them all.` : ''}`;
+});
 const filename = computed(() => viewFilename(props.view, size.value));
 
 const mapImage = ref<string | null>(null);
@@ -348,6 +364,13 @@ async function copyCaption() {
                         </p>
                     </div>
 
+                    <p
+                        v-if="rowsHint"
+                        data-rows-hint
+                        class="mt-3 border-l-4 border-ink pl-3 text-[14px]"
+                    >
+                        {{ rowsHint }}
+                    </p>
                     <div
                         ref="card"
                         data-preview

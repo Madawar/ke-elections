@@ -19,6 +19,7 @@ import {
 } from '@/lib/seats';
 import type { Level, UnitIndex } from '@/lib/units';
 import { sourceLine, sourceParts } from './format';
+import { type SeatMix, seatMix } from './seatMix';
 
 export const SEAT_KEYS = Object.keys(SEAT_LABEL) as SeatKey[];
 
@@ -54,6 +55,8 @@ export interface PartyView {
     scope: { level: Level; code: number; name: string } | null;
     /** How many of the seat's units the counts cover ("1,450 wards"); null when not known. */
     units: { count: number; word: string } | null;
+    /** The seat mix bar and the rows inside the focused unit. */
+    mix: SeatMix;
     /** The highlighted party abbreviations, in the order they were picked. */
     only: string[];
     showSurroundings: boolean;
@@ -233,6 +236,13 @@ export function snapshotView({
             ? { level: scope.unit.l, code: scope.unit.c, name: scope.unit.n }
             : null,
         units: unitsInView(index, seat, scope?.codes),
+        mix: seatMix(
+            seats,
+            seat,
+            focus && focusUnit ? focus : null,
+            index,
+            only,
+        ),
         only: [...new Set(only)],
         showSurroundings,
         theme,
@@ -300,17 +310,31 @@ const list = (items: string[]) =>
         ? (items[0] ?? '')
         : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
+const LEVEL_SUFFIX: Record<Level, string> = {
+    province: ' former province',
+    county: ' County',
+    constituency: ' constituency',
+    ward: ' ward',
+};
+
 /**
- * Where the numbers come from ("Across Kenya’s 1,450 wards", "In Nairobi City’s 17
- * constituencies", "In Mathare"), plus what is highlighted.
+ * Exactly what is counted ("1,450 wards across Kenya", "40 wards in Machakos County", "In
+ * Mathare constituency" for a single seat), plus what is highlighted.
  */
 export function scopeLineFor(view: ViewState): string {
-    const units = view.units
-        ? `’s ${fmt(view.units.count)} ${view.units.word}`
+    const place = view.scope
+        ? `${view.scope.name}${LEVEL_SUFFIX[view.scope.level]}`
+        : 'Kenya';
+    const counted = view.units
+        ? `${fmt(view.units.count)} ${view.units.word}`
         : '';
     const where = view.scope
-        ? `In ${view.scope.name}${units}`
-        : `Across Kenya${units}`;
+        ? counted
+            ? `${counted} in ${place}`
+            : `In ${place}`
+        : counted
+          ? `${counted} across Kenya`
+          : 'Across Kenya';
     const h = view.highlights;
     if (!h.length) return where;
     const what =
