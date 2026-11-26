@@ -30,9 +30,19 @@
             }
         </style>
 
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png">
+        <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+        <link rel="apple-touch-icon" href="/icons/apple-touch-180.png">
+        <link rel="manifest" href="/manifest.webmanifest">
+        {{-- Browser chrome follows the ground colour of the theme in use (design tokens) --}}
+        @if (($appearance ?? 'system') === 'dark')
+            <meta name="theme-color" content="#0F2430">
+        @elseif (($appearance ?? 'system') === 'light')
+            <meta name="theme-color" content="#EEF1EF">
+        @else
+            <meta name="theme-color" content="#EEF1EF" media="(prefers-color-scheme: light)">
+            <meta name="theme-color" content="#0F2430" media="(prefers-color-scheme: dark)">
+        @endif
 
         @fonts
 

@@ -39,3 +39,8 @@ yarn-error.log
 # cloud composer workaround (scripts/cloud/composer-install.sh)
 /composer.cloud.json
 /composer.cloud.lock
+
+# vite-plugin-pwa build output (npm run build)
+/public/sw.js
+/public/workbox-*.js
+/public/manifest.webmanifest
