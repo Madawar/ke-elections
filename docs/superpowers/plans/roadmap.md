@@ -75,14 +75,16 @@ a feature finishes.
     candidate pages and nominations". Look at Kiongozi Online first.
 11. **Optional:** one-tap coalition buttons (Kenya Kwanza, Azimio) in the party highlight.
 
+## Owner answers (2026-11-26)
+- **Pocketbook context trigger:** the **middle of the screen**. The context is the unit under the
+  centre of the visible map at the current zoom level, updated on `moveend`. A tap still focuses.
+- **The by-elections the owner meant:** **Ol Kalou** (Jubilee to DCP, 16 Jul 2026) and
+  **Mbeere**: Mbeere North MP (DP to UDA, 27 Nov 2025) and its wards Muminji and Evurore (to UDA,
+  26 Feb 2026). All are in the data, and they're the reference cases for "changed hands since
+  2022".
+
 ## Open questions for the owner
-- Pocketbook context trigger: should it follow the place at the centre of the screen at the
-  current zoom, or the finger or cursor?
 - Past results work (step 4): yes or no, and in that order?
-- Which "two" by-elections the owner meant. IEBC held three by-election polling days in 2026:
-  - 26 Feb: Isiolo South MP, plus the Muminji, Evurore and West Kabras MCAs.
-  - 14 May: Emurua Dikirr MP, plus the Porro and Endo MCAs.
-  - 16 Jul: Ol Kalou MP.
 - None-mode inner borders inside a focused unit are now heavier (plan item (e)). Is that OK, given
   the owner liked "boundaries only"?
 
