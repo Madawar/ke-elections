@@ -124,7 +124,7 @@ async function build() {
         const view = shown.value;
         pending = queue.then(() => {
             if (t !== token) throw new Superseded();
-            return renderViewMap(view, props.context, THEMES[name], name, box);
+            return renderViewMap(view, props.context, THEMES[name], box);
         });
         queue = pending.catch(() => {});
         images.set(key, pending);

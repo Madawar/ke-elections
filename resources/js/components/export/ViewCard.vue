@@ -189,6 +189,16 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 >
                     {{ row.label.text }}
                 </text>
+                <text
+                    v-if="row.label2"
+                    :x="row.label2.x"
+                    :y="row.label2.y"
+                    :font-size="row.label2.size"
+                    :font-weight="row.label2.weight ?? 400"
+                    :fill="tone(row.label2.tone)"
+                >
+                    {{ row.label2.text }}
+                </text>
                 <rect
                     data-bar
                     :x="row.bar.x"

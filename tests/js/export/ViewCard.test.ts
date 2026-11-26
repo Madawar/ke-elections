@@ -3,8 +3,15 @@ import { describe, expect, it } from 'vitest';
 import ViewCard from '@/components/export/ViewCard.vue';
 import { VIEW_SIZES, type ViewSize } from '@/lib/export/sizes';
 import { headlineFor, snapshotView } from '@/lib/export/viewState';
-import { type Box, breakHeadline, viewLayout } from '@/lib/export/viewLayout';
-import { THEMES } from '@/lib/map/theme';
+import {
+    type Box,
+    HEADLINE_STRETCH,
+    breakHeadline,
+    viewLayout,
+} from '@/lib/export/viewLayout';
+import { footerBlock, type TextItem } from '@/lib/export/layout';
+import { textWidth } from '@/lib/export/text';
+import { ATTRIBUTION, THEMES } from '@/lib/map/theme';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
 
 const SIZES = Object.keys(VIEW_SIZES) as ViewSize[];
@@ -65,7 +72,8 @@ describe('ViewCard', () => {
         expect(text).toContain('IEBC gazette notices');
         expect(text).toContain('Data as of 16 July 2026');
         expect(text).toContain('example.org/?seat=mca&parties=uda,odm');
-        expect(wrapper.findAll('[data-row]')).toHaveLength(9);
+        expect(wrapper.findAll('[data-row]')).toHaveLength(8);
+        expect(wrapper.get('[data-row="other"]').text()).toContain('371 (26%)');
         expect(wrapper.findAll('[data-callout]')).toHaveLength(2);
         expect(wrapper.get('image[data-map]').attributes('href')).toBe(
             'data:image/png;base64,AAAA',
@@ -160,5 +168,67 @@ describe('breakHeadline', () => {
                 2,
             ),
         ).toEqual(['MCA seats across Kenya: UDA 523, ODM 312']);
+    });
+});
+
+describe('story safe zones', () => {
+    it('keeps every line of text out of the bottom 400 px and right 120 px that TikTok and Reels cover', () => {
+        const url =
+            'https://kenyaelectoralmap.example/county/47?seat=mp&parties=uda,odm';
+        const long =
+            'An edited headline that runs on for much longer than the generated one does, to check it wraps and stays clear';
+        for (const [view, headline] of [
+            [mca, headlineFor(mca)],
+            [nairobi, headlineFor(nairobi)],
+            [mca, long],
+        ] as const) {
+            const l = viewLayout('story', view, {
+                headline,
+                url,
+                mapAspect: view.scope ? 1.57 : 0.82,
+            });
+            const footer = footerBlock(l.footerBox, l.footerFonts, {
+                source: view.source,
+                asOf: '16 July 2026',
+                attribution: ATTRIBUTION,
+                url,
+            });
+            const texts: [TextItem, number][] = [
+                ...l.headlineLines.map((t): [TextItem, number] => [
+                    t,
+                    HEADLINE_STRETCH,
+                ]),
+                ...[
+                    l.scopeLine,
+                    ...(l.chartTitle ? [l.chartTitle] : []),
+                    ...l.rows.flatMap((r) =>
+                        [r.label, r.label2, r.value].filter(
+                            (t): t is TextItem => t !== null,
+                        ),
+                    ),
+                    ...l.callouts.flatMap((c) => [c.label, c.number, c.sub]),
+                    ...footer.lines,
+                ].map((t): [TextItem, number] => [t, 1]),
+            ];
+            for (const [t, stretch] of texts) {
+                const width =
+                    textWidth(t.text, t.size, (t.weight ?? 400) >= 600) *
+                    stretch;
+                const right = t.anchor === 'end' ? t.x : t.x + width;
+                expect(right, t.text).toBeLessThanOrEqual(1080 - 120);
+                expect(t.y, t.text).toBeLessThanOrEqual(1920 - 400);
+            }
+            expect(l.footerBox.y + l.footerBox.h).toBeLessThanOrEqual(1520);
+            expect(l.map.h).toBeGreaterThan(300);
+        }
+    });
+});
+
+describe('credits', () => {
+    it('separate their parts with semicolons, never "·"', () => {
+        expect(ATTRIBUTION).not.toContain('·');
+        expect(ATTRIBUTION).toBe(
+            'Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data); 13 wards: American Red Cross (HDX), CC BY 4.0; Codes: Kenya Gazette Notice 13771 (2026); Towns: © OpenStreetMap contributors',
+        );
     });
 });

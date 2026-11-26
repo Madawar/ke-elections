@@ -13,9 +13,22 @@ const MAX_LINES = 12;
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
 
-function sourceText(view: ViewState): string {
+const list = (items: string[]) =>
+    items.length <= 1
+        ? (items[0] ?? '')
+        : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+/** The sources, naming at most `max` of them and counting the rest. */
+function sourcesText(view: ViewState, max = Infinity): string {
+    const parts = view.sources.length ? view.sources : [view.source];
+    if (parts.length <= max) return list(parts);
+    const rest = parts.length - max;
+    return `${parts.slice(0, max).join(', ')} and ${rest} more ${rest === 1 ? 'source' : 'sources'}`;
+}
+
+function sourceText(view: ViewState, max = Infinity): string {
     const asOf = formatAsOf(view.asOf);
-    return `Source: ${view.source}${asOf ? `, data as of ${asOf}` : ''}.${view.sample ? ' Sample data, not real records.' : ''}`;
+    return `Source: ${sourcesText(view, max)}${asOf ? `, data as of ${asOf}` : ''}.${view.sample ? ' Sample data, not real records.' : ''}`;
 }
 
 /** "UDA (United Democratic Alliance): 523 of 1,450 seats, 36%" */
@@ -42,27 +55,40 @@ export function captionFor(
     platform: CaptionPlatform = 'instagram',
     headline = headlineFor(view),
 ): string {
-    const source = sourceText(view);
     if (platform === 'x') {
-        // Headline first; it is shortened, never the source, link or tags.
-        const tail = `\n\n${source}\n${url}\n${TAGS}`;
-        return `${clip(headline, Math.max(20, X_MAX - tail.length))}${tail}`;
+        // The source, link and tags always fit: the source names at most two sites, then one;
+        // only the headline is shortened.
+        let tail = '';
+        for (const max of [2, 1]) {
+            tail = `\n\n${sourceText(view, max)}\n${url}\n${TAGS}`;
+            if (tail.length <= X_MAX - 20) break;
+        }
+        return `${clip(headline, Math.max(1, X_MAX - tail.length))}${tail}`;
     }
+    // The source, link and tags always go in; party lines are dropped from the end to make room.
+    const head = clip(headline, 300);
+    const tail = [sourceText(view, 10), url, '', TAGS].join('\n');
     const shown = view.highlights.length
         ? view.highlights
         : view.parties.slice(0, 3);
-    const lines = shown.slice(0, MAX_LINES).map((p) => partyLine(view, p));
-    if (shown.length > MAX_LINES)
-        lines.push(`And ${shown.length - MAX_LINES} more parties.`);
-    const text = [
-        clip(headline, 300),
-        '',
-        ...(view.total ? lines : []),
-        ...(view.total ? [''] : []),
-        source,
-        url,
-        '',
-        TAGS,
-    ].join('\n');
-    return clip(text, INSTAGRAM_MAX);
+    let lines = view.total
+        ? shown.slice(0, MAX_LINES).map((p) => partyLine(view, p))
+        : [];
+    const build = (body: string[], more: number) =>
+        [
+            head,
+            '',
+            ...body,
+            ...(more ? [`And ${more} more parties.`] : []),
+            ...(body.length || more ? [''] : []),
+            tail,
+        ].join('\n');
+    let text = build(lines, view.total ? shown.length - lines.length : 0);
+    while (text.length > INSTAGRAM_MAX && lines.length) {
+        lines = lines.slice(0, -1);
+        text = build(lines, shown.length - lines.length);
+    }
+    return text.length > INSTAGRAM_MAX
+        ? `${clip(head, Math.max(1, INSTAGRAM_MAX - tail.length - 2))}\n\n${tail}`
+        : text;
 }

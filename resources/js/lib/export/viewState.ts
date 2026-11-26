@@ -7,7 +7,7 @@
 import { SEAT_LABEL, buildLegend, shareOf } from '@/lib/legend';
 import { type SeatKey, SEAT_LEVEL } from '@/lib/map/colouring';
 import type { FocusSelection } from '@/lib/map/focus';
-import { INDEPENDENT_NEUTRAL, OTHER, type ThemeName } from '@/lib/map/theme';
+import { OTHER, type ThemeName } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
 import {
     INDEPENDENT,
@@ -17,23 +17,23 @@ import {
     seatLegend,
 } from '@/lib/seats';
 import type { Level, UnitIndex } from '@/lib/units';
-import { sourceLine } from './format';
+import { sourceLine, sourceParts } from './format';
 
 export const SEAT_KEYS = Object.keys(SEAT_LABEL) as SeatKey[];
 
 export interface ViewRow {
-    /** The legend row key: a party abbreviation, "IND" or "other". */
+    /** The legend row key: a party abbreviation or "other". */
     key: string;
-    /** As drawn on the card: the abbreviation, "Independent" or "Other". */
+    /** As drawn on the card: the abbreviation, or "Other and independent". */
     label: string;
-    /** The full name as the data spells it ("Other parties" for the folded row). */
+    /** The full name as the data spells it. */
     name: string;
     colour: string;
     count: number;
     /** Share of the seats in view, as the legend shows it ("36%", "<1%"). */
     share: string;
     highlighted: boolean;
-    kind: 'party' | 'independent' | 'other';
+    kind: 'party' | 'other';
     /** The parties the row stands for. */
     members: string[];
 }
@@ -80,6 +80,8 @@ export interface PartyView {
     /** "YYYY-MM-DD": the date the data describes. */
     asOf: string | null;
     source: string;
+    /** The same sources one by one, for text that has to stay short (the X caption). */
+    sources: string[];
     sample: boolean;
     /** The deep link to this view: unit path plus `?seat=…&parties=…`. */
     path: string;
@@ -157,89 +159,28 @@ export function snapshotView({
     const total = legend.rows.reduce((n, r) => n + (r.count ?? 0), 0);
     const chosen = new Set(only);
     const names = new Map(perParty.map((r) => [r.abbrev, r.name]));
-    const indColour = INDEPENDENT_NEUTRAL[theme];
 
-    const row = (
-        key: string,
-        label: string,
-        name: string,
-        colour: string,
-        count: number,
-        kind: ViewRow['kind'],
-        members: string[],
-    ): ViewRow => ({
-        key,
-        label,
-        name,
-        colour,
-        count,
-        share: shareOf(count, total),
-        highlighted: members.length > 0 && members.every((a) => chosen.has(a)),
-        kind,
-        members,
-    });
-
-    // The legend folds every party without a colour into "Other", independents too. The card
-    // gives independents a row of their own, so they never read as one more party in the grey.
-    const rows: ViewRow[] = legend.rows.flatMap((r) => {
+    // Exactly the legend's rows: the same parties, counts and shares, "Other and independent" last.
+    const rows: ViewRow[] = legend.rows.map((r) => {
         const members = legend.members[r.key] ?? [];
-        if (r.key !== 'other')
-            return [
-                row(
-                    r.key,
-                    r.label,
-                    r.name ?? r.label,
-                    r.colour,
-                    r.count ?? 0,
-                    'party',
-                    members,
-                ),
-            ];
-        const ind = members.includes(INDEPENDENT)
-            ? (countOf.get(INDEPENDENT) ?? 0)
-            : 0;
-        const rest = members.filter((a) => a !== INDEPENDENT);
-        const out: ViewRow[] = [];
-        if (ind)
-            out.push(
-                row(
-                    INDEPENDENT,
-                    'Independent',
-                    'Independent',
-                    indColour,
-                    ind,
-                    'independent',
-                    [INDEPENDENT],
-                ),
-            );
-        if ((r.count ?? 0) - ind > 0)
-            out.push(
-                row(
-                    'other',
-                    'Other',
-                    'Other parties',
-                    OTHER,
-                    (r.count ?? 0) - ind,
-                    'other',
-                    rest,
-                ),
-            );
-        return out;
+        const other = r.key === 'other';
+        const count = r.count ?? 0;
+        return {
+            key: r.key,
+            label: other ? (r.name ?? r.label) : r.label,
+            name: r.name ?? r.label,
+            colour: r.colour,
+            count,
+            share: shareOf(count, total),
+            highlighted:
+                members.length > 0 && members.every((a) => chosen.has(a)),
+            kind: other ? 'other' : 'party',
+            members,
+        };
     });
-    // As the legend: largest first and "Other" last; on a tie, parties before independents.
-    rows.sort(
-        (a, b) =>
-            Number(a.kind === 'other') - Number(b.kind === 'other') ||
-            b.count - a.count ||
-            Number(a.kind === 'independent') -
-                Number(b.kind === 'independent') ||
-            a.label.localeCompare(b.label),
-    );
 
     const colourOf = (abbrev: string) =>
-        abbrev === INDEPENDENT
-            ? indColour
-            : (rows.find((r) => r.key === abbrev)?.colour ?? OTHER);
+        rows.find((r) => r.key === abbrev)?.colour ?? OTHER;
     const party = (abbrev: string) => {
         const count = countOf.get(abbrev) ?? 0;
         return {
@@ -258,11 +199,11 @@ export function snapshotView({
     const covered = new Set(onRows.flatMap((r) => r.members));
     const highlights = [
         ...onRows.map((r) =>
-            r.kind === 'party' || r.kind === 'independent'
+            r.kind === 'party'
                 ? party(r.key)
                 : {
-                      label: 'other parties',
-                      name: 'Other parties',
+                      label: r.label,
+                      name: r.name,
                       colour: r.colour,
                       count: r.count,
                       share: r.share,
@@ -301,6 +242,7 @@ export function snapshotView({
         parties: perParty.map((r) => party(r.abbrev)),
         asOf: seats.data_as_of ?? seats.as_of ?? null,
         source: sourceLine(holdersInView.map((h) => h.source_url)),
+        sources: sourceParts(holdersInView.map((h) => h.source_url)),
         sample,
         path: viewPath(seat, focus && focusUnit ? focus : null, only),
     };
@@ -324,22 +266,9 @@ function unitsInView(
     return count > 1 ? { count, word: UNIT_WORD[level] } : null;
 }
 
-/** The same view drawn in the other theme (only the independents' neutral depends on it). */
-export function withTheme(view: ViewState, theme: ThemeName): ViewState {
-    if (view.theme === theme) return view;
-    const swap = (c: string) =>
-        c === INDEPENDENT_NEUTRAL[view.theme] ? INDEPENDENT_NEUTRAL[theme] : c;
-    return {
-        ...view,
-        theme,
-        rows: view.rows.map((r) => ({ ...r, colour: swap(r.colour) })),
-        highlights: view.highlights.map((h) => ({
-            ...h,
-            colour: swap(h.colour),
-        })),
-        parties: view.parties.map((p) => ({ ...p, colour: swap(p.colour) })),
-    };
-}
+/** The same view drawn in the other theme. */
+export const withTheme = (view: ViewState, theme: ThemeName): ViewState =>
+    view.theme === theme ? view : { ...view, theme };
 
 const list = (items: string[]) =>
     items.length <= 1

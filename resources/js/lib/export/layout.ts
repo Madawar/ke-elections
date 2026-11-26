@@ -320,7 +320,14 @@ export function footerBlock(
     });
     y += fonts.url * 0.45 + lead(fonts.url);
     const url = input.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const urlSize = fitFontSize(url, area.w, fonts.url, fonts.small);
+    // A deep link is never cut, so a long one shrinks further than other text.
+    const urlSize = fitFontSize(
+        url,
+        area.w,
+        fonts.url,
+        Math.round(fonts.small * 0.75),
+        true, // drawn at weight 600
+    );
     const brandFits =
         textWidth(BRAND, fonts.url, true) +
             textWidth(url, urlSize, true) +

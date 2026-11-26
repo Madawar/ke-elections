@@ -29,6 +29,8 @@ export interface RowItem {
     colour: string;
     kind: ViewState['rows'][number]['kind'];
     label: TextItem;
+    /** A long label ("Other and independent") continues on a second, smaller line. */
+    label2: TextItem | null;
     bar: Box;
     value: TextItem;
 }
@@ -65,6 +67,11 @@ interface Spec {
     /** Room kept clear at the top and bottom (story apps draw their own controls there). */
     safeTop: number;
     safeBottom: number;
+    /**
+     * Room kept clear of text on the right (TikTok and Reels put their buttons there). Stories
+     * keep text out of the bottom ~400 px and right ~120 px those apps cover.
+     */
+    insetRight?: number;
     stripH: number;
     headline: number;
     /** Lines the headline may take before it shrinks, and at the smallest size. */
@@ -128,19 +135,20 @@ const SPECS: Record<ViewSize, Spec> = {
     },
     story: {
         pad: 72,
-        safeTop: 170,
-        safeBottom: 120,
+        safeTop: 120,
+        safeBottom: 400,
+        insetRight: 120,
         stripH: 16,
         headline: 74,
         headlineLines: 2,
         headlineMax: 3,
         scope: 33,
-        row: { label: 30, h: 50, max: 60, bar: 28 },
+        row: { label: 28, h: 46, max: 52, bar: 26 },
         callout: { label: 32, number: 120, sub: 26, h: 206 },
         footer: { text: 23, small: 18, url: 27 },
-        gap: 44,
+        gap: 36,
         colW: 0,
-        calloutColW: 330,
+        calloutColW: 300,
         arrangements: ['mapCallouts', 'tall'],
     },
     x: {
@@ -339,11 +347,27 @@ function chart(
         someOn && !on ? 'muted' : 'ink';
 
     let size = Math.max(18, Math.round(spec.row.label * Math.max(0.82, scale)));
+    // The label column is as wide as the one-word labels; a longer label of several words
+    // ("Other and independent") wraps onto two smaller lines instead of widening it.
+    const small = Math.round(size * 0.82);
+    const single = labels.filter((l) => !l.includes(' '));
+    let labelCol = widest(single.length ? single : labels, size);
+    const wrapped = labels.map((l) => {
+        if (!l.includes(' ') || textWidth(l, size, true) <= labelCol)
+            return null;
+        const longestWord = widest(l.split(' '), small);
+        const lines = wrapText(
+            l,
+            Math.max(labelCol, longestWord),
+            small,
+            2,
+            true,
+        );
+        labelCol = Math.max(labelCol, widest(lines, small));
+        return lines;
+    });
     const inlineBar =
-        area.w -
-        widest(labels, size) -
-        widest(values, size) -
-        Math.round(size * 1.15);
+        area.w - labelCol - widest(values, size) - Math.round(size * 1.15);
     const stacked =
         inlineBar < area.w * 0.42 && rowH >= spec.row.label * 1.3 + 18;
 
@@ -362,6 +386,16 @@ function chart(
             const rowTop = top + i * rowH;
             const baseline = Math.round(rowTop + size * 0.95);
             const on = r.highlighted;
+            // The label shares its line with the right-aligned count; a long one shrinks a little.
+            const room =
+                area.w - textWidth(values[i], size, true) - Math.round(size);
+            const labelSize = fitFontSize(
+                r.label,
+                room,
+                size,
+                Math.round(size * 0.75),
+                true,
+            );
             return {
                 key: r.key,
                 highlighted: on,
@@ -370,12 +404,12 @@ function chart(
                 label: {
                     x: area.x,
                     y: baseline,
-                    text:
-                        wrapText(r.label, area.w * 0.6, size, 1, true)[0] ?? '',
-                    size,
+                    text: wrapText(r.label, room, labelSize, 1, true)[0] ?? '',
+                    size: labelSize,
                     weight: on ? 700 : 400,
                     tone: tone(on),
                 },
+                label2: null,
                 bar: box(
                     area.x,
                     Math.round(baseline + size * 0.32),
@@ -398,7 +432,7 @@ function chart(
         const barH = Math.max(10, Math.round(spec.row.bar * scale));
         const gapL = Math.round(size * 0.7);
         const gapV = Math.round(size * 0.45);
-        const barX = area.x + widest(labels, size) + gapL;
+        const barX = area.x + labelCol + gapL;
         const maxBar = Math.max(
             40,
             area.x + area.w - widest(values, size) - gapV - barX,
@@ -408,6 +442,8 @@ function chart(
             const baseline = Math.round(mid + size * 0.36);
             const barW = Math.max(3, Math.round((r.count / largest) * maxBar));
             const on = r.highlighted;
+            const lines = wrapped[i];
+            const first = Math.round(mid - small * 0.12);
             return {
                 key: r.key,
                 highlighted: on,
@@ -415,12 +451,23 @@ function chart(
                 kind: r.kind,
                 label: {
                     x: area.x,
-                    y: baseline,
-                    text: r.label,
-                    size,
+                    y: lines ? first : baseline,
+                    text: lines ? lines[0] : r.label,
+                    size: lines ? small : size,
                     weight: on ? 700 : 400,
                     tone: tone(on),
                 },
+                label2:
+                    lines && lines[1]
+                        ? {
+                              x: area.x,
+                              y: first + Math.round(small * 1.08),
+                              text: lines[1],
+                              size: small,
+                              weight: on ? 700 : 400,
+                              tone: tone(on),
+                          }
+                        : null,
                 bar: box(barX, Math.round(mid - barH / 2), barW, barH),
                 value: {
                     x: barX + barW + gapV,
@@ -736,7 +783,7 @@ export function viewLayout(
         );
     }
 
-    const innerW = w - 2 * pad;
+    const innerW = w - pad - Math.max(pad, spec.insetRight ?? 0);
     const t = titleBlock(
         pad,
         Math.round(Math.max(spec.stripH * 2 + pad * 0.8, spec.safeTop)),
@@ -748,7 +795,7 @@ export function viewLayout(
     const fh = footerHeight(innerW, spec.footer, view, text.url);
     const footerBox = box(
         pad,
-        Math.round(h - spec.safeBottom - pad * 0.8 - fh),
+        Math.round(h - Math.max(spec.safeBottom, pad * 0.8) - fh),
         innerW,
         fh,
     );

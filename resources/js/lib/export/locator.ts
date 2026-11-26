@@ -178,6 +178,8 @@ export interface LocatorMapContext {
     colouring: Colouring;
     /** The map as on screen: only the unit drawn, or with its surroundings faint when shown. */
     focus?: { index: UnitIndex; showSurroundings: boolean };
+    /** Draw seat colours at this opacity instead of the screen's (see StyleInput). */
+    seatFillOpacity?: number;
 }
 
 const centre = (b: Unit['b']): [number, number] => [
@@ -253,6 +255,7 @@ export function unitStyle(
         colouring: ctx.colouring,
         provinceOfCounty: ctx.provinceOfCounty,
         wards: true,
+        seatFillOpacity: ctx.seatFillOpacity,
         focus: ctx.focus
             ? {
                   outside: ctx.focus.showSurroundings

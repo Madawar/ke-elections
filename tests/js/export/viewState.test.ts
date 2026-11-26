@@ -7,6 +7,7 @@ import {
     snapshotView,
     viewPath,
 } from '@/lib/export/viewState';
+import { buildLegend, shareOf } from '@/lib/legend';
 import { OTHER } from '@/lib/map/theme';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
 
@@ -82,7 +83,7 @@ describe('headlineFor', () => {
             theme: 'light',
         });
         expect(headlineFor(view)).toBe(
-            'MCA seats across Kenya: UDA 523, ODM 312, Independent 114 and 2 more parties',
+            'MCA seats across Kenya: UDA 523, ODM 312, JP 76 and 2 more parties',
         );
     });
 
@@ -95,31 +96,40 @@ describe('headlineFor', () => {
 });
 
 describe('snapshotView', () => {
-    it('takes the legend rows, splitting independents out of "Other"', () => {
+    it('takes exactly the legend rows: same parties, counts and shares, "Other and independent" last', () => {
         const view = mcaUdaOdm();
         expect(view.kind).toBe('party');
         expect(view.total).toBe(1450);
         expect(view.rows.map((r) => [r.label, r.count, r.share])).toEqual([
             ['UDA', 523, '36%'],
             ['ODM', 312, '22%'],
-            ['Independent', 114, '8%'],
             ['JP', 76, '5%'],
             ['WDM-K', 68, '5%'],
             ['UDM', 36, '2%'],
             ['FORD-K', 33, '2%'],
             ['ANC', 31, '2%'],
-            ['Other', 257, '18%'],
+            ['Other and independent', 371, '26%'],
         ]);
+        // The same rows, counts, colours and shares the on-screen legend draws.
+        const legend = buildLegend(VIEW_SEATS, 'mca', null, ['UDA', 'ODM']);
+        const total = legend.rows.reduce((n, r) => n + (r.count ?? 0), 0);
+        expect(
+            view.rows.map((r) => [r.key, r.count, r.colour, r.share]),
+        ).toEqual(
+            legend.rows.map((r) => [
+                r.key,
+                r.count,
+                r.colour,
+                shareOf(r.count ?? 0, total),
+            ]),
+        );
         const other = view.rows.at(-1)!;
         expect(other.kind).toBe('other');
         expect(other.colour).toBe(OTHER);
-        // Independents get their own neutral colour, never the "Other" grey.
-        const ind = view.rows[2];
-        expect(ind.kind).toBe('independent');
-        expect(ind.colour).not.toBe(OTHER);
+        expect(other.members).toContain('IND');
         expect(
             view.rows.filter((r) => r.highlighted).map((r) => r.key),
-        ).toEqual(['UDA', 'ODM']);
+        ).toEqual(legend.highlighted);
     });
 
     it('scopes the counts and the heading to the focused unit', () => {
@@ -132,7 +142,7 @@ describe('snapshotView', () => {
             ['UDA', 4],
             ['JP', 3],
             ['WDM-K', 1],
-            ['Independent', 1],
+            ['Other and independent', 1],
         ]);
         expect(scopeLineFor(view)).toBe('In Nairobi City’s 17 constituencies');
         expect(scopeLineFor(mcaUdaOdm())).toBe(
