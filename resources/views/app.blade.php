@@ -37,8 +37,19 @@
         @fonts
 
         @vite(['resources/css/app.css', 'resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
+        @isset($meta)
+            <meta name="description" content="{{ $meta['description'] }}">
+            <meta property="og:type" content="website">
+            <meta property="og:site_name" content="Kenya Electoral Map">
+            <meta property="og:title" content="{{ $meta['title'] }}">
+            <meta property="og:description" content="{{ $meta['description'] }}">
+            <meta property="og:url" content="{{ $meta['url'] }}">
+            <meta property="og:image" content="{{ url('/images/og-default.png') }}">
+            <meta name="twitter:card" content="summary_large_image">
+            <link rel="canonical" href="{{ $meta['url'] }}">
+        @endisset
         <x-inertia::head>
-            <title>{{ config('app.name', 'Laravel') }}</title>
+            <title>{{ $meta['title'] ?? config('app.name', 'Laravel') }}</title>
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">
