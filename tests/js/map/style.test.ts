@@ -230,4 +230,139 @@ describe('buildStyle', () => {
             );
         });
     });
+
+    describe('seat colouring finer than the seat level', () => {
+        const theme = THEMES.light;
+        const read = (file: string) =>
+            JSON.parse(
+                readFileSync(resolve(root, 'public/boundaries', file), 'utf8'),
+            ).features.map(
+                (f: { properties: Record<string, number> }) => f.properties,
+            );
+        const constituencies = read('constituencies.geojson');
+        const wards = read('wards.geojson');
+        const props = (list: Record<string, number>[], code: number) =>
+            list.find((p) => p.code === code)!;
+        const governor = {
+            mode: { kind: 'seat', seat: 'governor' },
+            colours: new Map([
+                [1, '#111111'],
+                [47, '#474747'],
+            ]),
+            fallback: '#cccccc',
+        } as const;
+        const mp = {
+            mode: { kind: 'seat', seat: 'mp' },
+            colours: new Map([
+                [289, '#289289'],
+                [290, '#290290'],
+            ]),
+            fallback: '#cccccc',
+        } as const;
+        const layerPaint = (st: typeof style, id: string) =>
+            (
+                st.layers.find((l) => l.id === id) as {
+                    paint: Record<string, unknown>;
+                }
+            ).paint;
+        /** Reads a `match` on a feature property, as MapLibre would for one feature. */
+        const evalMatch = (
+            expr: unknown,
+            properties: Record<string, number>,
+        ) => {
+            const [op, [, property], ...rest] = expr as [
+                string,
+                [string, string],
+                ...unknown[],
+            ];
+            expect(op).toBe('match');
+            const fallback = rest.pop();
+            for (let i = 0; i < rest.length; i += 2)
+                if (rest[i] === properties[property]) return rest[i + 1];
+            return fallback;
+        };
+        const build = (
+            colouring: never,
+            level?: 'county' | 'constituency' | 'ward',
+        ) =>
+            buildStyle({
+                manifest,
+                theme,
+                provinceOfCounty,
+                colouring,
+                focus: level ? { level } : undefined,
+            });
+        const pinnedOpacity = (st: typeof style, id: string) =>
+            JSON.stringify(layerPaint(st, id)['fill-opacity']);
+
+        it('colours a focused constituency by its county governor', () => {
+            const st = build(governor as never, 'constituency');
+            expect(
+                evalMatch(
+                    layerPaint(st, 'constituencies-fill')['fill-color'],
+                    props(constituencies, 290),
+                ),
+            ).toBe('#474747');
+            expect(pinnedOpacity(st, 'constituencies-fill')).toContain('0.86');
+            expect(pinnedOpacity(st, 'constituencies-fill')).not.toContain(
+                'interpolate',
+            );
+        });
+
+        it('colours a focused ward by its county governor', () => {
+            const st = build(governor as never, 'ward');
+            expect(
+                evalMatch(
+                    layerPaint(st, 'wards-fill')['fill-color'],
+                    props(wards, 1448),
+                ),
+            ).toBe('#474747');
+            expect(pinnedOpacity(st, 'wards-fill')).not.toContain(
+                'interpolate',
+            );
+            // The level above is hidden by the focus filter; its opacity is left as it was.
+            expect(pinnedOpacity(st, 'constituencies-fill')).toContain(
+                'interpolate',
+            );
+        });
+
+        it('colours a focused ward by its constituency MP', () => {
+            const st = build(mp as never, 'ward');
+            expect(
+                evalMatch(
+                    layerPaint(st, 'wards-fill')['fill-color'],
+                    props(wards, 1448),
+                ),
+            ).toBe('#290290');
+            expect(pinnedOpacity(st, 'wards-fill')).not.toContain(
+                'interpolate',
+            );
+        });
+
+        it('lets the county layer colour a focused county, so children do not stack on it', () => {
+            const st = build(governor as never, 'county');
+            expect(pinnedOpacity(st, 'counties-fill')).toContain('0.86');
+            expect(pinnedOpacity(st, 'constituencies-fill')).toContain(
+                'interpolate',
+            );
+            // The children still know their county's colour.
+            expect(
+                evalMatch(
+                    layerPaint(st, 'constituencies-fill')['fill-color'],
+                    props(constituencies, 290),
+                ),
+            ).toBe('#474747');
+        });
+
+        it('is unchanged when nothing is focused', () => {
+            const st = build(governor as never);
+            expect(layerPaint(st, 'constituencies-fill')['fill-color']).toBe(
+                theme.ink,
+            );
+            expect(layerPaint(st, 'wards-fill')['fill-color']).toBe(theme.ink);
+            expect(pinnedOpacity(st, 'constituencies-fill')).toContain(
+                'interpolate',
+            );
+        });
+    });
 });

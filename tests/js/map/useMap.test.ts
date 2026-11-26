@@ -20,6 +20,15 @@ const fake = vi.hoisted(() => ({
         zoom: number;
         fitZoom: number;
         moving: boolean;
+        easeTo: ReturnType<typeof vi.fn>;
+        scrollZoom: {
+            enable: ReturnType<typeof vi.fn>;
+            disable: ReturnType<typeof vi.fn>;
+        };
+        touchZoomRotate: {
+            enable: ReturnType<typeof vi.fn>;
+            disable: ReturnType<typeof vi.fn>;
+        };
     },
 }));
 vi.mock('maplibre-gl', () => {
@@ -37,7 +46,16 @@ vi.mock('maplibre-gl', () => {
                 handlers,
                 layers,
                 filters,
-                touchZoomRotate: { disableRotation: () => {} },
+                touchZoomRotate: {
+                    disableRotation: () => {},
+                    enable: vi.fn(),
+                    disable: vi.fn(),
+                },
+                scrollZoom: { enable: vi.fn(), disable: vi.fn() },
+                // An ease with no duration is over before the call returns.
+                easeTo: vi.fn((o: { duration?: number }) => {
+                    self.moving = (o.duration ?? 0) > 0;
+                }),
                 on: (name: string, cb: Handler) => handlers.set(name, cb),
                 getLayer: (id: string) => (layers.has(id) ? { id } : undefined),
                 getSource: (id: string) =>
@@ -52,7 +70,9 @@ vi.mock('maplibre-gl', () => {
                     filters.set(id, f),
                 ),
                 setFeatureState: () => {},
-                fitBounds: vi.fn(),
+                fitBounds: vi.fn((_b: unknown, o: { duration?: number }) => {
+                    self.moving = (o.duration ?? 0) > 0;
+                }),
                 queryRenderedFeatures: vi.fn(() => []),
                 zoom: 6,
                 moving: false,
@@ -170,6 +190,11 @@ describe('useMap focus', () => {
         map().handlers.get('load')!();
         await nextTick();
         map().setFilter.mockClear();
+        // Loading fitted Kenya; start each test with the camera at rest.
+        map().easeTo.mockClear();
+        map().fitBounds.mockClear();
+        map().moving = false;
+        map().handlers.get('moveend')!();
     });
 
     it('filters every focus layer, keeping each layer’s own filter', () => {
@@ -228,17 +253,21 @@ describe('useMap focus', () => {
         expect(JSON.stringify(painted?.[2])).toContain('"case"');
     });
 
-    it('fits the unit’s own bounds inside the current padding', () => {
-        out.api!.setPadding({ top: 72, bottom: 420, left: 16, right: 64 });
+    it('fits the unit inside the padding and keeps that padding on the map', () => {
+        out.api!.setPadding({ top: 72, bottom: 420, left: 56, right: 56 });
         out.api!.select('constituency', 280, { animate: false });
         const [bounds, options] = map().fitBounds.mock.calls.at(-1)!;
         expect(bounds).toEqual(index.get('constituency', 280)!.b);
         expect(options.padding).toEqual({
             top: 72,
             bottom: 420,
-            left: 16,
-            right: 64,
+            left: 56,
+            right: 56,
         });
+        // Absolute padding makes the map's middle the middle of the visible area, so zooming
+        // around the centre keeps the unit centred.
+        expect(options.absolutePadding).toBe(true);
+        expect(options.duration).toBe(0);
     });
 
     it('reports a tap outside the focused unit, but not one on it', () => {
@@ -261,6 +290,24 @@ describe('useMap focus', () => {
         map().queryRenderedFeatures.mockReturnValue([]);
         map().handlers.get('click')!({ point: { x: 5, y: 5 } });
         expect(out.outside).not.toHaveBeenCalled();
+    });
+
+    it('zooms around the middle of the visible map while focused, and around the cursor otherwise', () => {
+        out.api!.setFocus({ level: 'county', code: 47 });
+        expect(map().scrollZoom.enable).toHaveBeenLastCalledWith({
+            around: 'center',
+        });
+        expect(map().touchZoomRotate.enable).toHaveBeenLastCalledWith({
+            around: 'center',
+        });
+        out.api!.setFocus(null);
+        expect(map().scrollZoom.enable).toHaveBeenLastCalledWith(undefined);
+        expect(map().touchZoomRotate.enable).toHaveBeenLastCalledWith(
+            undefined,
+        );
+        // MapLibre ignores enable() on a handler that is already on, so each is switched off first.
+        expect(map().scrollZoom.disable).toHaveBeenCalled();
+        expect(map().touchZoomRotate.disable).toHaveBeenCalled();
     });
 
     describe('zooming out by hand', () => {
@@ -307,7 +354,7 @@ describe('useMap focus', () => {
 
         it('does not stay deaf after a move that changed nothing', () => {
             out.api!.setFocus({ level: 'ward', code: 1448 });
-            out.api!.select('ward', 1448);
+            out.api!.select('ward', 1448, { animate: false });
             userZoom(5);
             expect(out.zoomOut).toHaveBeenCalledWith(null);
         });
@@ -315,6 +362,53 @@ describe('useMap focus', () => {
         it('does nothing when nothing is focused', () => {
             userZoom(4);
             expect(out.zoomOut).not.toHaveBeenCalled();
+        });
+
+        it('eases to centre the new unit at the zoom the person is at', () => {
+            out.api!.setPadding({ top: 72, bottom: 420, left: 56, right: 56 });
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            userZoom(8.9);
+            const b = index.get('constituency', 290)!.b;
+            expect(map().easeTo).toHaveBeenCalledTimes(1);
+            const [options] = map().easeTo.mock.calls[0];
+            expect(options.center[0]).toBeCloseTo((b[0] + b[2]) / 2);
+            expect(options.center[1]).toBeCloseTo((b[1] + b[3]) / 2);
+            expect(options.zoom).toBe(8.9);
+            expect(options.padding).toEqual({
+                top: 72,
+                bottom: 420,
+                left: 56,
+                right: 56,
+            });
+        });
+
+        it('treats that ease as the page’s own move, not the person zooming on', () => {
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            userZoom(8.9);
+            expect(out.zoomOut).toHaveBeenCalledTimes(1);
+            // The ease is still running when its zoom events arrive: no second step.
+            userZoom(4);
+            expect(out.zoomOut).toHaveBeenCalledTimes(1);
+            expect(map().easeTo).toHaveBeenCalledTimes(1);
+            map().moving = false;
+            map().handlers.get('moveend')!();
+            userZoom(4);
+            expect(out.zoomOut).toHaveBeenCalledTimes(2);
+        });
+
+        it('centres Kenya when the focus steps out to all of it', () => {
+            out.api!.setFocus({ level: 'county', code: 47 });
+            userZoom(4);
+            expect(out.zoomOut).toHaveBeenCalledWith(null);
+            const [options] = map().easeTo.mock.calls[0];
+            expect(options.zoom).toBe(4);
+            expect(options.center[0]).toBeCloseTo((33.9 + 41.91) / 2);
+        });
+
+        it('does not ease when nothing steps', () => {
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            userZoom(12);
+            expect(map().easeTo).not.toHaveBeenCalled();
         });
     });
 });

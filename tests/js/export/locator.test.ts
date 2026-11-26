@@ -153,6 +153,34 @@ describe('map styles for the card', () => {
         ).toBe(THEMES.light.ink);
     });
 
+    it('colours the card map by the county governor when a constituency is focused', () => {
+        const colouring = {
+            mode: { kind: 'seat' as const, seat: 'governor' as const },
+            colours: new Map([[47, '#474747']]),
+            fallback: '#cccccc',
+        };
+        const style = unitStyle(
+            { ...ctx, colouring, focus: { index, showSurroundings: false } },
+            unit('constituency', 290) as never,
+        );
+        const fill = style.layers.find(
+            (l) => l.id === 'constituencies-fill',
+        ) as {
+            paint: Record<string, unknown>;
+        };
+        // The unit's own layer shows the colour at full strength, not the faint zoom-banded wash.
+        expect(JSON.stringify(fill.paint['fill-opacity'])).not.toContain(
+            'interpolate',
+        );
+        expect(fill.paint['fill-color']).toEqual([
+            'match',
+            ['get', 'county_code'],
+            47,
+            '#474747',
+            '#cccccc',
+        ]);
+    });
+
     it('keeps the neighbours, faint and grey, when the surroundings are shown', () => {
         const focused = { ...ctx, focus: { index, showSurroundings: true } };
         const style = unitStyle(focused, unit('ward', 1448) as never);

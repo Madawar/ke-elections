@@ -7,6 +7,27 @@ export interface MapPadding {
     right: number;
 }
 
+/**
+ * Where to ease the camera to put a unit in the middle of the visible map without changing the
+ * zoom. Passing the padding along is what makes "the middle" the middle of the visible part.
+ */
+export function centreOn(
+    bounds: [number, number, number, number],
+    padding: MapPadding,
+    zoom: number,
+    reducedMotion = false,
+) {
+    return {
+        center: [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2] as [
+            number,
+            number,
+        ],
+        zoom,
+        padding,
+        duration: reducedMotion ? 0 : 300,
+    };
+}
+
 export const SIDE_PANEL_WIDTH = 380;
 /** The zoom buttons sit at the right edge, so both sides keep this much clear and the unit stays centred. */
 const CONTROLS_CLEARANCE = 56;

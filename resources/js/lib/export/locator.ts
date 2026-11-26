@@ -258,6 +258,7 @@ export function unitStyle(
                   outside: ctx.focus.showSurroundings
                       ? focusOutside({ level: unit.l, code: unit.c })
                       : undefined,
+                  level: unit.l,
               }
             : undefined,
     });

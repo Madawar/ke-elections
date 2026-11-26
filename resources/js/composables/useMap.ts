@@ -15,6 +15,7 @@ import {
     focusOutside,
     stepUpFor,
 } from '@/lib/map/focus';
+import { centreOn } from '@/lib/map/camera';
 import {
     KENYA_BOUNDS,
     MAX_BOUNDS,
@@ -99,7 +100,10 @@ export function useMap(
             provinceOfCounty: opts.provinceOfCounty,
             wards: wardsLoaded,
             focus: focus
-                ? { outside: surroundings ? focusOutside(focus) : undefined }
+                ? {
+                      outside: surroundings ? focusOutside(focus) : undefined,
+                      level: focus.level,
+                  }
                 : undefined,
         });
 
@@ -212,10 +216,31 @@ export function useMap(
         if (!m.isMoving()) ownMove = false;
     }
 
+    /**
+     * While a unit is focused, wheel and pinch zoom around the middle of the visible map (the map's
+     * padding moves that middle clear of the sheet or panel), so the unit stays put as it shrinks.
+     */
+    function applyZoomAnchor() {
+        const m = map.value;
+        if (!m) return;
+        // enable() does nothing while a handler is already on, so switch it off first.
+        const options = focus ? { around: 'center' as const } : undefined;
+        m.scrollZoom.disable();
+        m.scrollZoom.enable(options);
+        m.touchZoomRotate.disable();
+        m.touchZoomRotate.enable(options);
+    }
+
+    /**
+     * Fit the bounds inside the padding, and keep that padding on the map (absolutePadding), so
+     * the map's own middle is the middle of the visible area and zooming around the centre keeps
+     * the unit where it is. Plain padding would only shape this one fit.
+     */
     function fit(bounds: Bounds, animate = true) {
         ownCamera((m) =>
             m.fitBounds(bounds, {
                 padding,
+                absolutePadding: true,
                 maxZoom: 14,
                 duration: animate ? 600 : 0,
             }),
@@ -280,7 +305,11 @@ export function useMap(
         const bounds = opts.boundsOf(sel.level, sel.code);
         const camera =
             bounds && map.value
-                ? map.value.cameraForBounds(bounds, { padding, maxZoom: 14 })
+                ? map.value.cameraForBounds(bounds, {
+                      padding,
+                      absolutePadding: true,
+                      maxZoom: 14,
+                  })
                 : undefined;
         return camera?.zoom ?? 0;
     }
@@ -322,6 +351,7 @@ export function useMap(
         m.on('error', (e) => console.warn('[map]', e.error?.message ?? e));
         m.on('load', () => {
             ready.value = true;
+            applyZoomAnchor();
             addOverlays();
             if (wantWards || pinnedLevel(opts.colouring.value.mode) === 'ward')
                 ensureWards();
@@ -347,8 +377,26 @@ export function useMap(
         m.on('zoomend', () => {
             if (ownMove || !focus) return;
             const next = stepUpFor(focus, m.getZoom(), fitZoomOf, opts.index);
-            if (next?.level !== focus.level || next?.code !== focus.code)
-                opts.onZoomOut?.(next);
+            if (next?.level === focus.level && next?.code === focus.code)
+                return;
+            opts.onZoomOut?.(next);
+            // Centre the new unit (or Kenya) at the zoom the person is at; never zoom back in.
+            const bounds = next
+                ? opts.boundsOf(next.level, next.code)
+                : KENYA_BOUNDS;
+            if (bounds)
+                ownCamera((map) =>
+                    map.easeTo(
+                        centreOn(
+                            bounds,
+                            padding,
+                            map.getZoom(),
+                            window.matchMedia?.(
+                                '(prefers-reduced-motion: reduce)',
+                            ).matches,
+                        ),
+                    ),
+                );
         });
         m.on('click', (e) => {
             for (const overlay of opts.overlays.value) {
@@ -421,6 +469,7 @@ export function useMap(
         /** Show only this unit (and what is inside it); null shows everything again. */
         setFocus(sel: FocusSelection | null) {
             focus = sel;
+            applyZoomAnchor();
             restyle();
         },
         /** Keep the rest of the map faintly in view, in grey, instead of hiding it. */

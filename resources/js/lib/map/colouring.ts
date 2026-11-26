@@ -63,10 +63,14 @@ export function provinceColour(
     ] as unknown as ExpressionSpecification;
 }
 
-/** A `match` on the feature code; a constant when there are no entries (MapLibre rejects empty matches). */
+/**
+ * A `match` on a feature property (its own code by default); a constant when there are no
+ * entries (MapLibre rejects empty matches).
+ */
 export function codeColour(
     colours: Map<number, string>,
     fallback: string,
+    property = 'code',
 ): ExpressionSpecification | string {
     if (colours.size === 0) return fallback;
     const pairs = [...colours.entries()]
@@ -74,22 +78,42 @@ export function codeColour(
         .flatMap(([code, colour]) => [code, colour]);
     return [
         'match',
-        ['get', 'code'],
+        ['get', property],
         ...pairs,
         fallback,
     ] as unknown as ExpressionSpecification;
 }
 
+const DEPTH: Record<MapLevel, number> = { county: 0, constituency: 1, ward: 2 };
+
+/** Is `level` below the level the seat colouring is about (wards, for a Governor)? */
+export const isFinerThanSeat = (level: MapLevel, mode: ColourMode): boolean => {
+    const pinned = pinnedLevel(mode);
+    return pinned !== null && DEPTH[level] > DEPTH[pinned];
+};
+
+/**
+ * The fill colour for a level. With `byAncestor` (a unit is focused), levels below the seat level
+ * take the colour of the unit that holds the seat above them, so a focused ward is still coloured
+ * by its governor even though the county layer is out of the picture.
+ */
 export function fillColor(
     colouring: Colouring,
     level: MapLevel,
     provinceOfCounty: Map<number, number>,
     neutral: string,
+    byAncestor = false,
 ): ExpressionSpecification | string {
     const { mode } = colouring;
     if (mode.kind === 'province')
         return provinceColour(level, provinceOfCounty);
     if (mode.kind === 'seat' && SEAT_LEVEL[mode.seat] === level)
         return codeColour(colouring.colours, colouring.fallback);
+    if (mode.kind === 'seat' && byAncestor && isFinerThanSeat(level, mode))
+        return codeColour(
+            colouring.colours,
+            colouring.fallback,
+            `${SEAT_LEVEL[mode.seat]}_code`,
+        );
     return neutral;
 }

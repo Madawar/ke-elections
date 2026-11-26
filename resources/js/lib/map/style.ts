@@ -7,6 +7,7 @@ import {
     type Colouring,
     NO_COLOURING,
     fillColor,
+    isFinerThanSeat,
     pinnedLevel,
 } from './colouring';
 import { type MapLevel, levelOpacityStops } from './levels';
@@ -33,6 +34,8 @@ export type OutsideTests = Partial<
 /** Present while a unit is focused: borders turn neutral and the unit's outline turns strong. */
 export interface FocusStyle {
     outside?: OutsideTests;
+    /** The focused unit's level; a seat colouring above it is carried down to that level's fill. */
+    level?: MapLevel;
 }
 /** Outside the focused unit, fills are at most this opaque, in a neutral grey. */
 export const OUTSIDE_FILL_OPACITY = 0.15;
@@ -76,6 +79,7 @@ export function fillOpacity(
     level: MapLevel,
     colouring: Colouring,
     outside?: ExpressionSpecification,
+    focusLevel?: MapLevel,
 ): ExpressionSpecification {
     const pinned = pinnedLevel(colouring.mode);
     // Outside the focused unit a fill is only a faint grey wash. With seat colouring only the
@@ -84,6 +88,14 @@ export function fillOpacity(
         !outside || wash === 0
             ? inner
             : (['case', outside, wash, inner] as ExpressionSpecification);
+    // Focused on a level below the seat colouring (a ward, for a Governor): the layer for that level
+    // is the one that shows the colour, as the coloured level above it is out of the picture.
+    if (focusLevel === level && isFinerThanSeat(level, colouring.mode)) {
+        const coloured = state(0.97, 0.92, 0.86);
+        return (
+            outside ? ['case', outside, 0, coloured] : coloured
+        ) as ExpressionSpecification;
+    }
     if (pinned === level)
         return dim(
             state(0.97, 0.92, 0.86),
@@ -316,7 +328,13 @@ export function buildStyle({
             source: SOURCE_OF[level],
             paint: {
                 'fill-color': focusedColour(
-                    fillColor(colouring, level, provinceOfCounty, theme.ink),
+                    fillColor(
+                        colouring,
+                        level,
+                        provinceOfCounty,
+                        theme.ink,
+                        focus !== undefined,
+                    ),
                     focus?.outside?.[SOURCE_OF[level]],
                     theme.muted,
                 ) as string,
@@ -324,6 +342,7 @@ export function buildStyle({
                     level,
                     colouring,
                     focus?.outside?.[SOURCE_OF[level]],
+                    focus?.level,
                 ),
             },
         }),

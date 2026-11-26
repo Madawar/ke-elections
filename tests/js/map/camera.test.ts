@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapPadding } from '@/lib/map/camera';
+import { centreOn, mapPadding } from '@/lib/map/camera';
 
 describe('mapPadding', () => {
     it('keeps a phone unit centred in the map above a half-height sheet', () => {
@@ -43,5 +43,23 @@ describe('mapPadding', () => {
         expect(middleX).toBe((380 + viewport.width) / 2);
         const middleY = (p.top + (viewport.height - p.bottom)) / 2;
         expect(middleY).toBe(viewport.height / 2);
+    });
+});
+
+describe('centreOn', () => {
+    const padding = { top: 72, bottom: 420, left: 56, right: 56 };
+
+    it('eases to the middle of the unit at the zoom the person is at', () => {
+        const o = centreOn([36.84, -1.27, 36.88, -1.25], padding, 7.3);
+        expect(o.center[0]).toBeCloseTo(36.86);
+        expect(o.center[1]).toBeCloseTo(-1.26);
+        expect(o.zoom).toBe(7.3);
+        // The padding is what puts the middle of the unit in the middle of the visible map.
+        expect(o.padding).toEqual(padding);
+        expect(o.duration).toBe(300);
+    });
+
+    it('does not animate for people who prefer reduced motion', () => {
+        expect(centreOn([0, 0, 2, 2], padding, 5, true).duration).toBe(0);
     });
 });

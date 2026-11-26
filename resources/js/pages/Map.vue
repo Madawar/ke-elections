@@ -16,6 +16,7 @@ import SearchBox from '@/components/map/SearchBox.vue';
 import UnitList from '@/components/map/UnitList.vue';
 import UnitPanel from '@/components/map/UnitPanel.vue';
 import type { Picked } from '@/composables/useMap';
+import { LEVEL_NAME, announceSelection } from '@/lib/map/announce';
 import { mapPadding } from '@/lib/map/camera';
 import {
     type Colouring,
@@ -48,12 +49,6 @@ type ServerUnit = {
 } | null;
 const props = defineProps<{ unit: ServerUnit }>();
 
-const LEVEL_NAME = {
-    province: 'former province',
-    county: 'county',
-    constituency: 'constituency',
-    ward: 'ward',
-} as const;
 const SEAT_LABEL: Record<SeatKey, string> = {
     governor: 'Governor',
     senator: 'Senator',
@@ -276,6 +271,7 @@ function selectUnit(
     map?.setFocus(focusOf(unit));
     if (!unit) {
         map?.clearSelection();
+        announce.value = announceSelection(null, []);
         if (fit) map?.fitKenya(animate);
         if (push) replaceUrl('/', null);
         document.title = 'Kenya Electoral Map';
@@ -294,7 +290,7 @@ function selectUnit(
                 name: a.n,
             })),
         });
-    announce.value = `Selected: ${unit.n} ${LEVEL_NAME[unit.l]}, ${ancestors.map((a) => a.n).join(', ')}`;
+    announce.value = announceSelection(unit, ancestors);
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
