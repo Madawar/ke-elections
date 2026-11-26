@@ -85,6 +85,14 @@ export const CATEGORICAL = [
     '#000000',
 ];
 export const OTHER = '#9AA5A0';
+/**
+ * Independents on the share-this-view card: a neutral of their own (no party colour), darker
+ * than the "Other" grey, so the two greys never read as one group.
+ */
+export const INDEPENDENT_NEUTRAL: Record<ThemeName, string> = {
+    light: '#5E6A66',
+    dark: '#6E7B76',
+};
 
 /** Former provinces get muted tints so the "Former province" colouring stays calm. */
 export const PROVINCE_TINTS = [

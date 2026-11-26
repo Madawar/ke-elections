@@ -24,6 +24,12 @@ export const SEAT_LABEL: Record<SeatKey, string> = {
     mca: 'MCA',
 };
 
+/** A share of the seats in view, in whole percent; "<1%" for a share under one half. */
+export function shareOf(count: number, total: number): string {
+    const p = (count / (total || 1)) * 100;
+    return count > 0 && p < 0.5 ? '<1%' : `${Math.round(p)}%`;
+}
+
 /** The most party rows the legend shows; every other party is folded into "Other". */
 export const MAX_PARTY_ROWS = 7;
 

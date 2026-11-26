@@ -5,6 +5,7 @@ import { useAppearance } from '@/composables/useAppearance';
 import { computed, onMounted, ref, shallowRef, watch } from 'vue';
 import InPowerExport from '@/components/export/InPowerExport.vue';
 import LocatorExport from '@/components/export/LocatorExport.vue';
+import ShareViewDialog from '@/components/export/ShareViewDialog.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
 import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
@@ -36,6 +37,11 @@ import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
 import { formatAsOf } from '@/lib/export/format';
+import {
+    type ViewState,
+    parseViewQuery,
+    snapshotView,
+} from '@/lib/export/viewState';
 import {
     type SeatsData,
     EMPTY_SEATS,
@@ -99,6 +105,7 @@ onMounted(async () => {
         index.value = units;
         seats.value = data;
         manifest.value = m;
+        applySharedView(data);
         if (props.unit)
             selectUnit(units.get(props.unit.level, props.unit.code) ?? null, {
                 push: false,
@@ -207,6 +214,20 @@ function toggleParty(key: string) {
 watch(colourKey, (k) => {
     onlyParties.value = pruneParties(seats.value, k, onlyParties.value);
 });
+/**
+ * A shared view's link (`?seat=mca&parties=uda,odm`) sets the colouring and the highlight once the
+ * data is in, then leaves the address bar on the plain unit path.
+ */
+function applySharedView(data: SeatsData) {
+    const { seat, parties } = parseViewQuery(location.search, data);
+    if (seat) {
+        colourKey.value = seat;
+        onlyParties.value = parties;
+    }
+    const query = new URLSearchParams(location.search);
+    if (query.has('seat') || query.has('parties'))
+        history.replaceState(history.state, '', location.pathname);
+}
 const partyChips = computed(() =>
     colourKey.value === 'none' || colourKey.value === 'province'
         ? []
@@ -536,6 +557,26 @@ function shareUnit() {
     if (u && u.l !== 'province') exportUnit.value = u as Unit & { l: MapLevel };
 }
 
+// ---- share this view --------------------------------------------------------------------
+// The view is fixed when the dialog opens, so the card doesn't change under the person.
+const isSeatMode = computed(
+    () => colourKey.value !== 'none' && colourKey.value !== 'province',
+);
+const sharedView = shallowRef<ViewState | null>(null);
+function shareView() {
+    const k = colourKey.value;
+    if (!index.value || k === 'none' || k === 'province') return;
+    sharedView.value = snapshotView({
+        seats: seats.value,
+        index: index.value,
+        seat: k,
+        focus: focusOf(selection.value),
+        only: onlyParties.value,
+        showSurroundings: showSurroundings.value,
+        theme: theme.value,
+    });
+}
+
 const showView = (v: typeof view.value) => {
     view.value = view.value === v ? 'unit' : v;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
@@ -645,8 +686,14 @@ const showView = (v: typeof view.value) => {
                 :note="legend.note"
                 :highlighted="legend.highlighted"
                 :filtered="legend.filtered"
+                :shareable="isSeatMode"
+                :share-emphasis="
+                    isSeatMode &&
+                    (onlyParties.length > 0 || !!focusOf(selection))
+                "
                 @toggle="toggleParty"
                 @clear="onlyParties = []"
+                @share="shareView"
             />
         </div>
 
@@ -763,15 +810,19 @@ const showView = (v: typeof view.value) => {
                     :towns="townsIn"
                     :highlight-seat="highlightSeat"
                     v-model:show-surroundings="showSurroundings"
+                    :can-share-view="isSeatMode"
                     @go="(u) => selectUnit(u)"
                     @share="shareUnit"
+                    @share-view="shareView"
                 />
                 <NationalOverview
                     v-else
                     :seats="seats"
                     :highlight-party="highlightParty"
+                    :can-share-view="isSeatMode"
                     @colour-by="(s) => (colourKey = s)"
                     @share="exportNational = true"
+                    @share-view="shareView"
                 />
             </template>
         </BottomSheet>
@@ -788,6 +839,18 @@ const showView = (v: typeof view.value) => {
             :colouring="colouring"
             :show-surroundings="showSurroundings"
             @update:open="(v) => !v && (exportUnit = null)"
+        />
+        <ShareViewDialog
+            v-if="sharedView && index && manifest"
+            :open="true"
+            :view="sharedView"
+            :context="{
+                manifest,
+                provinceOfCounty,
+                index,
+                seats,
+            }"
+            @update:open="(v) => !v && (sharedView = null)"
         />
         <InPowerExport
             v-model:open="exportNational"

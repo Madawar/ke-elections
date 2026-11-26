@@ -23,10 +23,13 @@ const props = defineProps<{
     highlightSeat?: string;
     /** Whether the rest of the map stays faintly in view around the focused unit. */
     showSurroundings?: boolean;
+    /** A seat colouring is on, so the map itself can be shared ("Share this view"). */
+    canShareView?: boolean;
 }>();
 const emit = defineEmits<{
     go: [unit: Unit];
     share: [];
+    shareView: [];
     'update:showSurroundings': [on: boolean];
 }>();
 
@@ -267,6 +270,15 @@ const sourceHost = (url: string) => {
                         "
                     />
                 </span>
+            </button>
+            <button
+                v-if="canShareView"
+                type="button"
+                data-share-view
+                class="mb-2 flex h-11 w-full items-center justify-center rounded-md bg-ink px-3 text-[15px] font-medium text-surface"
+                @click="emit('shareView')"
+            >
+                Share this view
             </button>
             <div class="flex gap-2">
                 <button

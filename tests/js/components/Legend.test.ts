@@ -380,4 +380,21 @@ describe('Legend as a bar chart', () => {
             legendTitle('MP', 'Nairobi City', ['UDA', 'ODM', 'JP', 'ANC']),
         ).toBe('MP seats in Nairobi City by party: showing 4 parties');
     });
+
+    it('offers "Share this view" when shareable, standing out while something is in focus', async () => {
+        expect(mountLegend().find('[data-share-view]').exists()).toBe(false);
+        const plain = mountLegend({ shareable: true });
+        const button = plain.get('[data-share-view]');
+        expect(button.text()).toBe('Share this view');
+        expect(button.classes()).not.toContain('bg-ink');
+        await button.trigger('click');
+        expect(plain.emitted('share')).toHaveLength(1);
+        const emphasised = mountLegend({
+            shareable: true,
+            shareEmphasis: true,
+        });
+        expect(emphasised.get('[data-share-view]').classes()).toContain(
+            'bg-ink',
+        );
+    });
 });

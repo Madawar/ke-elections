@@ -2,7 +2,7 @@
 // The map legend. With counts it is a bar chart: one bar per party on a single scale that starts
 // at zero, largest first, "Other" last. Without counts (former provinces) it is a plain key.
 import { computed } from 'vue';
-import type { LegendRow } from '@/lib/legend';
+import { type LegendRow, shareOf } from '@/lib/legend';
 
 const props = defineProps<{
     title: string;
@@ -16,12 +16,18 @@ const props = defineProps<{
     highlighted?: string[];
     /** Some highlight is on (even one no row stands for): shows "Show all". */
     filtered?: boolean;
+    /** Offer "Share this view" (any seat colouring). */
+    shareable?: boolean;
+    /** Make "Share this view" stand out: parties are highlighted or a unit is focused. */
+    shareEmphasis?: boolean;
 }>();
 const emit = defineEmits<{
     /** A row was pressed: switch that party's highlight on or off. */
     toggle: [key: string];
     /** "Show all": clear every highlight. */
     clear: [];
+    /** "Share this view": make a social image of the map as it is now. */
+    share: [];
 }>();
 const isOn = (key: string) => props.highlighted?.includes(key) ?? false;
 const open = defineModel<boolean>('open', { default: true });
@@ -44,11 +50,8 @@ const largest = computed(() =>
 const total = computed(() =>
     props.rows.reduce((n, r) => n + (r.count ?? 0), 0),
 );
-/** A party's share of the seats in view, in whole percent; "<1%" for a share under one half. */
-const share = (count: number) => {
-    const p = (count / (total.value || 1)) * 100;
-    return count > 0 && p < 0.5 ? '<1%' : `${Math.round(p)}%`;
-};
+/** A party's share of the seats in view. */
+const share = (count: number) => shareOf(count, total.value);
 const widthOf = (count: number) =>
     `${Number(((count / largest.value) * 100).toFixed(1))}%`;
 const spoken = (r: LegendRow) =>
@@ -161,16 +164,38 @@ const spoken = (r: LegendRow) =>
                 </li>
             </ul>
         </div>
-        <!-- Outside the scrolling rows, so the source and "Show all" stay in view when the legend is capped -->
-        <div v-if="open && (filtered || note)" class="shrink-0 px-3 pb-2">
-            <button
-                v-if="filtered"
-                type="button"
-                class="min-h-11 text-[14px] underline underline-offset-4"
-                @click="emit('clear')"
+        <!-- Outside the scrolling rows, so the source, "Show all" and "Share this view" stay in view when the legend is capped -->
+        <div
+            v-if="open && (filtered || note || shareable)"
+            class="shrink-0 px-3 pb-2"
+        >
+            <div
+                v-if="filtered || shareable"
+                class="flex items-center justify-between gap-2"
             >
-                Show all
-            </button>
+                <button
+                    v-if="filtered"
+                    type="button"
+                    class="min-h-11 text-[14px] underline underline-offset-4"
+                    @click="emit('clear')"
+                >
+                    Show all
+                </button>
+                <button
+                    v-if="shareable"
+                    type="button"
+                    data-share-view
+                    class="ml-auto flex min-h-11 items-center rounded-md px-3 text-[14px] font-medium"
+                    :class="
+                        shareEmphasis
+                            ? 'bg-ink text-surface'
+                            : 'border border-hairline text-ink hover:bg-ground'
+                    "
+                    @click="emit('share')"
+                >
+                    Share this view
+                </button>
+            </div>
             <p v-if="note" class="mt-1 text-[12px] text-muted-ink">
                 {{ note }}
             </p>
