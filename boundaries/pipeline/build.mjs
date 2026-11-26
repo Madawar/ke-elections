@@ -3,12 +3,12 @@
 // writes none of the outputs or the report (boundaries/build/ward-evidence.csv is still
 // written, since it is what a failing replace row is reviewed against).
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import * as turf from '@turf/turf';
 import { WARD_SIMPLIFY, buildUnitsIndex, deriveLayers, labelPoints, simplifyWards } from './derive.mjs';
-import { loadGazette, loadProvinces } from './gazette.mjs';
+import { loadGazette, loadProvinces, parseCsv } from './gazette.mjs';
 import { checkReferencePoints, matchStations, parseReferencePoints, replaceSignals, scoreWards, toCsv } from './evidence.mjs';
 import { renderOutputs, writeOutputs } from './outputs.mjs';
 import { renderReport } from './report.mjs';
@@ -122,6 +122,7 @@ function gatherEvidence({ baseline, final, log, stations, arcAll, gazette, point
         if (r.arcUid !== null && r.arcUid !== p.arcUid) problems.push(`Replace row ${p.iebcCode} uses Red Cross ${p.arcUid}, but the evidence matched ${r.arcUid}`);
         return {
             ...r,
+            sourceName: log.find((e) => e.step === 'replaced' && e.detail.code === p.iebcCode)?.detail.sourceName,
             arcUid: p.arcUid,
             reason: p.reason,
             signals: own.length > 0 ? own : [`with its group (${group.join(', ')})`],
@@ -212,6 +213,10 @@ async function main() {
     const tooFar = changes.filter((c) => Math.abs(c.change) > MAX_AREA_CHANGE);
     if (tooFar.length > 0) problems.push(`${tooFar.length} wards changed area by more than ${MAX_AREA_CHANGE * 100}% when simplified: ${tooFar.map((c) => c.code).join(', ')}`);
     const simplifiedCoverage = await coverage(wards);
+    // The reference points must hold in what ships, not only at full detail.
+    for (const x of checkReferencePoints(points, { wards, arc: arcAll, rows: [] })) {
+        if (x.oursCode !== x.expectedCode) problems.push(`Reference point ${x.place} is in ward ${x.oursCode} after simplification, not ${x.expectedCode}`);
+    }
     const { constituencies, counties, provinces: provinceLayer } = await deriveLayers(wards, gazette, provinces);
     const layers = { provinces: provinceLayer, counties, constituencies, wards };
 
@@ -263,7 +268,12 @@ async function main() {
             coverage: { assembled: assembledCoverage, simplified: simplifiedCoverage },
             patchChecks,
             files,
-            evidence: { ...evidence, stations: stationMatch, uncertainRule: UNCERTAIN },
+            evidence: {
+                ...evidence,
+                stations: stationMatch,
+                uncertainRule: UNCERTAIN,
+                rejectedRefs: existsSync(path('boundaries/build/reference-candidates.csv')) ? parseCsv(text('boundaries/build/reference-candidates.csv')) : [],
+            },
         }),
     );
     console.log(`Replaced ${evidence.replacements.length} wards; ${evidence.uncertain.length} still uncertain (see boundaries/build-report.md)`);

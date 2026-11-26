@@ -27,7 +27,7 @@ the owner's machine.
 | 2 Gazette loader, provinces, code validation | Complete, review clean | `587a887` |
 | 3 Ward assembly with 13 Red Cross fills | Complete, review clean | `3fd0506` |
 | 4 Derived layers, outputs, build report | Complete. Review needed fixes; fix round 1 was re-reviewed clean | `3af9490`, `4a2d9d0`, `216cf8a` |
-| 4b Evidence-based ward corrections | **Still open.** Deferred so the owner could get a browsable map first; a few ward polygons are still misfiled | — |
+| 4b Evidence-based ward corrections | Complete, self-reviewed (no subagent tool in that session). 38 `mode=replace` rows, each passing the two-signal rule or tied by geometry to a cluster that does (Mandera East 212–215, Murera/Theta, Marachi East/North, Karachuonyo 1230/1231/1236, Mwanganthia/Abothuguchi Central, Mogotio/Lembus, Kitengela/Oloosirkon). The 94 reference points are OSM towns named after their ward, at least 100 m from either layer's lines (`boundaries/scripts/reference_points.mjs`). 82 wards are "still uncertain" in the build report. Kitengela is marginal: only the brief's point supports it. A failing build now writes no outputs, and `manifest.json` keeps `towns.geojson` | `455613f` + follow-up |
 | 5 Towns and glyphs | Complete. Towns from the HOT OSM export on HDX (Overpass is unreachable from cloud sessions), each tagged with its ward | `b7f1381` |
 | 6 Unit directory, routes, meta tags | Complete. `og-default.png` rendered from the map | `8cfd425` |
 | 6b Visual direction tokens | Complete (`docs/design/visual-direction.md`) | `e4ce241` |
