@@ -17,6 +17,9 @@ const fake = vi.hoisted(() => ({
         setPaintProperty: ReturnType<typeof vi.fn>;
         fitBounds: ReturnType<typeof vi.fn>;
         queryRenderedFeatures: ReturnType<typeof vi.fn>;
+        zoom: number;
+        fitZoom: number;
+        moving: boolean;
     },
 }));
 vi.mock('maplibre-gl', () => {
@@ -51,7 +54,12 @@ vi.mock('maplibre-gl', () => {
                 setFeatureState: () => {},
                 fitBounds: vi.fn(),
                 queryRenderedFeatures: vi.fn(() => []),
-                getZoom: () => 6,
+                zoom: 6,
+                moving: false,
+                isMoving: () => self.moving,
+                fitZoom: 14,
+                getZoom: () => self.zoom,
+                cameraForBounds: () => ({ zoom: self.fitZoom }),
                 getCanvas: () => ({ style: {} }),
                 resize: () => {},
                 remove: () => {},
@@ -91,6 +99,7 @@ function harness(
     out: {
         api?: ReturnType<typeof useMap>;
         outside?: ReturnType<typeof vi.fn>;
+        zoomOut?: ReturnType<typeof vi.fn>;
     } = {},
 ) {
     const colouring = ref(NO_COLOURING);
@@ -110,6 +119,7 @@ function harness(
                     boundsOf: (l, c) => index.get(l, c)?.b,
                     onSelect: () => {},
                     onOutsideClick: out.outside,
+                    onZoomOut: out.zoomOut,
                     onUnsupported,
                 });
                 return () => h('div', { ref: el });
@@ -142,6 +152,7 @@ describe('useMap focus', () => {
     const out: {
         api?: ReturnType<typeof useMap>;
         outside?: ReturnType<typeof vi.fn>;
+        zoomOut?: ReturnType<typeof vi.fn>;
     } = {};
     let colouring: ReturnType<typeof harness>['colouring'];
     const map = () => fake.current!;
@@ -151,6 +162,7 @@ describe('useMap focus', () => {
         fake.throws = false;
         fake.current = null;
         out.outside = vi.fn();
+        out.zoomOut = vi.fn();
         const h = harness(() => {}, out);
         colouring = h.colouring;
         mount(h.component);
@@ -249,5 +261,60 @@ describe('useMap focus', () => {
         map().queryRenderedFeatures.mockReturnValue([]);
         map().handlers.get('click')!({ point: { x: 5, y: 5 } });
         expect(out.outside).not.toHaveBeenCalled();
+    });
+
+    describe('zooming out by hand', () => {
+        const userZoom = (to: number) => {
+            map().zoom = to;
+            map().handlers.get('zoomstart')!({});
+            map().handlers.get('zoomend')!();
+        };
+
+        it('asks to step the focus up once the unit is zoomed out of', () => {
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            userZoom(8.9);
+            expect(out.zoomOut).toHaveBeenCalledWith({
+                level: 'constituency',
+                code: index.get('ward', 1448)!.p,
+            });
+        });
+
+        it('can step several levels in one zoom, down to all of Kenya', () => {
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            userZoom(4);
+            expect(out.zoomOut).toHaveBeenCalledWith(null);
+        });
+
+        it('does nothing while the unit is still in view', () => {
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            userZoom(12);
+            expect(out.zoomOut).not.toHaveBeenCalled();
+        });
+
+        it('ignores zooms the page made itself, such as fitting a unit', () => {
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            // A fit that is still animating when its zoom events arrive.
+            map().moving = true;
+            out.api!.select('ward', 1448);
+            userZoom(5);
+            expect(out.zoomOut).not.toHaveBeenCalled();
+            // Once that move has ended, the next zoom is the person's.
+            map().moving = false;
+            map().handlers.get('moveend')!();
+            userZoom(5);
+            expect(out.zoomOut).toHaveBeenCalledWith(null);
+        });
+
+        it('does not stay deaf after a move that changed nothing', () => {
+            out.api!.setFocus({ level: 'ward', code: 1448 });
+            out.api!.select('ward', 1448);
+            userZoom(5);
+            expect(out.zoomOut).toHaveBeenCalledWith(null);
+        });
+
+        it('does nothing when nothing is focused', () => {
+            userZoom(4);
+            expect(out.zoomOut).not.toHaveBeenCalled();
+        });
     });
 });

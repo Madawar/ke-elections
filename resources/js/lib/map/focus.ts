@@ -1,7 +1,7 @@
 // Focus mode: with a unit selected, draw only that unit and what is inside it. "Hidden" is a
 // filter that matches nothing (not layout visibility), so restyling can never bring a layer back.
 import type { ExpressionSpecification, FilterSpecification } from 'maplibre-gl';
-import type { MapLevel } from './levels';
+import { CONSTITUENCY_MIN_ZOOM, type MapLevel, WARD_MIN_ZOOM } from './levels';
 import type { Unit, UnitIndex } from '@/lib/units';
 
 export interface FocusSelection {
@@ -188,4 +188,50 @@ export function combineFilter(
 ): FilterSpecification | null {
     if (!focus) return base ?? null;
     return base ? (['all', base, focus] as FilterSpecification) : focus;
+}
+
+/** Where the county fills take over from the national view. */
+export const COUNTY_MIN_ZOOM = 6;
+const LEVEL_MIN_ZOOM: Record<MapLevel, number> = {
+    county: COUNTY_MIN_ZOOM,
+    constituency: CONSTITUENCY_MIN_ZOOM,
+    ward: WARD_MIN_ZOOM,
+};
+
+/**
+ * The zoom below which a focused unit gives way to its parent: half a level under the zoom where
+ * its own level takes over, or 1.25 under the zoom that fits the unit, whichever is lower. The
+ * second part keeps huge units (Turkana, Marsabit) focused when they are first shown.
+ */
+export const focusFloor = (level: MapLevel, fitZoom: number): number =>
+    Math.min(LEVEL_MIN_ZOOM[level] - 0.5, fitZoom - 1.25);
+
+function parentOf(
+    sel: FocusSelection,
+    index: UnitIndex,
+): FocusSelection | null {
+    if (sel.level === 'county') return null;
+    const parent = index.get(sel.level, sel.code)?.p;
+    if (parent === null || parent === undefined) return null;
+    return {
+        level: sel.level === 'ward' ? 'constituency' : 'county',
+        code: parent,
+    };
+}
+
+/**
+ * The focus after the person has zoomed out to `zoom`: the same unit while it is still in view,
+ * otherwise its parent, and so on (a fast zoom-out can step several levels). Null means all of
+ * Kenya. Zooming back in never narrows the focus again.
+ */
+export function stepUpFor(
+    sel: FocusSelection | null,
+    zoom: number,
+    fitZoomOf: (sel: FocusSelection) => number,
+    index: UnitIndex,
+): FocusSelection | null {
+    let current = sel;
+    while (current && zoom < focusFloor(current.level, fitZoomOf(current)))
+        current = parentOf(current, index);
+    return current;
 }

@@ -13,6 +13,7 @@ import {
     combineFilter,
     focusFilters,
     focusOutside,
+    stepUpFor,
 } from '@/lib/map/focus';
 import {
     KENYA_BOUNDS,
@@ -53,6 +54,11 @@ export interface UseMapOptions {
     ) => void;
     /** A tap landed on the map, outside the focused unit (the page steps up one level). */
     onOutsideClick?: () => void;
+    /**
+     * The person zoomed out of the focused unit, so the focus moves up (null: all of Kenya). The
+     * camera is already where they put it; the page only updates the selection.
+     */
+    onZoomOut?: (next: FocusSelection | null) => void;
     onUnsupported: () => void;
     /** The user moved the camera by hand (auto-centre pauses until the next selection). */
     onUserMove?: () => void;
@@ -73,6 +79,8 @@ export function useMap(
     let selected: Picked | null = null;
     let focus: FocusSelection | null = null;
     let surroundings = false;
+    /** True while a camera move that the page started (not the person) is under way. */
+    let ownMove = false;
     let hovered: Picked | null = null;
     let wardsLoaded = false;
     let wantWards = false;
@@ -194,12 +202,24 @@ export function useMap(
         }
     }
 
+    /** Run a camera move of the page's own; its zoom events are not the person zooming out. */
+    function ownCamera(move: (m: MapLibreMap) => void) {
+        const m = map.value;
+        if (!m) return;
+        ownMove = true;
+        move(m);
+        // A move that changed nothing fires no end event to clear the flag.
+        if (!m.isMoving()) ownMove = false;
+    }
+
     function fit(bounds: Bounds, animate = true) {
-        map.value?.fitBounds(bounds, {
-            padding,
-            maxZoom: 14,
-            duration: animate ? 600 : 0,
-        });
+        ownCamera((m) =>
+            m.fitBounds(bounds, {
+                padding,
+                maxZoom: 14,
+                duration: animate ? 600 : 0,
+            }),
+        );
     }
 
     function select(
@@ -253,6 +273,16 @@ export function useMap(
                 layers: [`${SOURCE_OF[focus.level]}-fill`],
             })
             .some((f) => f.id === focus!.code);
+    }
+
+    /** The zoom the camera would fit this unit at, with the current padding. */
+    function fitZoomOf(sel: FocusSelection): number {
+        const bounds = opts.boundsOf(sel.level, sel.code);
+        const camera =
+            bounds && map.value
+                ? map.value.cameraForBounds(bounds, { padding, maxZoom: 14 })
+                : undefined;
+        return camera?.zoom ?? 0;
     }
 
     onMounted(async () => {
@@ -311,6 +341,14 @@ export function useMap(
         m.on('zoomstart', (e) => {
             if ((e as { originalEvent?: Event }).originalEvent)
                 opts.onUserMove?.();
+        });
+        // The page's own camera moves (fitting a unit) zoom too, and must not step the focus.
+        m.on('moveend', () => (ownMove = false));
+        m.on('zoomend', () => {
+            if (ownMove || !focus) return;
+            const next = stepUpFor(focus, m.getZoom(), fitZoomOf, opts.index);
+            if (next?.level !== focus.level || next?.code !== focus.code)
+                opts.onZoomOut?.(next);
         });
         m.on('click', (e) => {
             for (const overlay of opts.overlays.value) {
@@ -399,11 +437,13 @@ export function useMap(
         zoomIn: () => map.value?.zoomIn(),
         zoomOutStep: () => map.value?.zoomOut(),
         flyTo: (lng: number, lat: number, z = 11) =>
-            map.value?.flyTo({
-                center: [lng, lat],
-                zoom: z,
-                padding,
-                duration: 800,
-            }),
+            ownCamera((m) =>
+                m.flyTo({
+                    center: [lng, lat],
+                    zoom: z,
+                    padding,
+                    duration: 800,
+                }),
+            ),
     };
 }

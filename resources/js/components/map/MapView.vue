@@ -5,6 +5,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { ref, toRef } from 'vue';
 import { type Picked, type Bounds, useMap } from '@/composables/useMap';
 import type { Colouring } from '@/lib/map/colouring';
+import type { FocusSelection } from '@/lib/map/focus';
 import type { MapLevel } from '@/lib/map/levels';
 import type { MapOverlay } from '@/lib/map/overlays';
 import type { ThemeName } from '@/lib/map/theme';
@@ -25,6 +26,7 @@ const emit = defineEmits<{
     select: [unit: Picked];
     hover: [unit: Picked | null, point: { x: number; y: number }];
     outsideClick: [];
+    zoomOut: [next: FocusSelection | null];
     overlayClick: [overlay: MapOverlay, properties: Record<string, unknown>];
     unsupported: [];
     userMove: [];
@@ -44,6 +46,7 @@ const api = useMap(container, {
     onHover: (u, p) => emit('hover', u, p),
     onOverlayClick: (o, p) => emit('overlayClick', o, p),
     onOutsideClick: () => emit('outsideClick'),
+    onZoomOut: (next) => emit('zoomOut', next),
     onUnsupported: () => emit('unsupported'),
     onUserMove: () => emit('userMove'),
 });

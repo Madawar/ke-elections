@@ -2,7 +2,13 @@ import { featureFilter } from '@maplibre/maplibre-gl-style-spec';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FOCUS_LAYERS, focusFilters, focusOutside } from '@/lib/map/focus';
+import {
+    FOCUS_LAYERS,
+    focusFilters,
+    focusFloor,
+    focusOutside,
+    stepUpFor,
+} from '@/lib/map/focus';
 import { OVERLAYS, overlaySourceId } from '@/lib/map/overlays';
 import { buildStyle } from '@/lib/map/style';
 import { THEMES } from '@/lib/map/theme';
@@ -249,5 +255,56 @@ describe('focusOutside', () => {
         expect(
             outsideCodes({ level: 'constituency', code: 280 }, 'counties'),
         ).toHaveLength(47);
+    });
+});
+
+describe('focusFloor', () => {
+    it('is half a zoom level below where the unit level takes over, unless the unit itself is bigger', () => {
+        expect(focusFloor('ward', 14)).toBe(9);
+        expect(focusFloor('constituency', 12)).toBe(6.5);
+        expect(focusFloor('county', 9.5)).toBe(5.5);
+        // A huge unit that is shown at a low zoom gets a floor 1.25 levels below that zoom.
+        expect(focusFloor('county', 6)).toBe(4.75);
+    });
+});
+
+describe('stepUpFor', () => {
+    // What the camera would fit each unit at: small units zoom in far, huge ones barely.
+    const fitZoomOf = (sel: { level: string; code: number }) =>
+        ({ ward: 14, constituency: 12, county: sel.code === 23 ? 6 : 9.5 })[
+            sel.level as 'ward' | 'constituency' | 'county'
+        ];
+    const ngei = { level: 'ward', code: 1448 } as const;
+    const nairobi = { level: 'county', code: 47 } as const;
+    const turkana = { level: 'county', code: 23 } as const;
+
+    it('keeps the focus while the unit is shown at or near its own zoom', () => {
+        expect(stepUpFor(ngei, 14, fitZoomOf, index)).toEqual(ngei);
+        expect(stepUpFor(ngei, 9.2, fitZoomOf, index)).toEqual(ngei);
+    });
+
+    it('steps Ngei up to Mathare, then Nairobi City, then nothing as the map zooms out', () => {
+        const mathare = {
+            level: 'constituency',
+            code: index.get('ward', 1448)!.p,
+        };
+        expect(stepUpFor(ngei, 8.9, fitZoomOf, index)).toEqual(mathare);
+        expect(stepUpFor(ngei, 6.4, fitZoomOf, index)).toEqual(nairobi);
+        expect(stepUpFor(ngei, 5, fitZoomOf, index)).toBeNull();
+    });
+
+    it('steps a county to nothing below its floor, and not before', () => {
+        expect(stepUpFor(nairobi, 5.6, fitZoomOf, index)).toEqual(nairobi);
+        expect(stepUpFor(nairobi, 5, fitZoomOf, index)).toBeNull();
+    });
+
+    it('does not step a huge county up the moment it is shown', () => {
+        expect(stepUpFor(turkana, 6, fitZoomOf, index)).toEqual(turkana);
+        expect(stepUpFor(turkana, 5, fitZoomOf, index)).toEqual(turkana);
+        expect(stepUpFor(turkana, 4.5, fitZoomOf, index)).toBeNull();
+    });
+
+    it('leaves nothing as nothing', () => {
+        expect(stepUpFor(null, 3.6, fitZoomOf, index)).toBeNull();
     });
 });

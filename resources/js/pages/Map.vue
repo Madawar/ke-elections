@@ -22,7 +22,8 @@ import {
     type SeatKey,
     NO_COLOURING,
 } from '@/lib/map/colouring';
-import { type MapLevel, levelForZoom, zoomOutTarget } from '@/lib/map/levels';
+import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
+import type { FocusSelection } from '@/lib/map/focus';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
@@ -53,7 +54,6 @@ const LEVEL_NAME = {
     constituency: 'constituency',
     ward: 'ward',
 } as const;
-const DEPTH = { province: 0, county: 1, constituency: 2, ward: 3 } as const;
 const SEAT_LABEL: Record<SeatKey, string> = {
     governor: 'Governor',
     senator: 'Senator',
@@ -263,13 +263,14 @@ const boundsOf = (level: MapLevel, code: number) =>
 
 function selectUnit(
     unit: Unit | null,
-    { push = true, fit = true, animate = true } = {},
+    { push = true, fit = true, animate = true, recentre = true } = {},
 ) {
     overlayInfo.value = null;
+    tip.value = null;
     highlightSeat.value = undefined;
     highlightParty.value = undefined;
     selection.value = unit;
-    autoCentre.value = true;
+    autoCentre.value = recentre;
     view.value = 'unit';
     const map = mapRef.value;
     map?.setFocus(focusOf(unit));
@@ -296,6 +297,15 @@ function selectUnit(
     announce.value = `Selected: ${unit.n} ${LEVEL_NAME[unit.l]}, ${ancestors.map((a) => a.n).join(', ')}`;
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+// The person zoomed out of the focused unit: the focus (and the panel) move up to its parent, and
+// the camera stays where their gesture left it.
+function onZoomOut(next: FocusSelection | null) {
+    const unit = next
+        ? (index.value?.get(next.level, next.code) ?? null)
+        : null;
+    selectUnit(unit, { fit: false, recentre: false });
 }
 
 function onPickPerson({ holder, unit }: PersonResult) {
@@ -396,15 +406,8 @@ function scheduleRecentre() {
 watch([sheetHeight, isDesktop, () => mapRef.value?.ready], scheduleRecentre);
 useEventListener(window, 'resize', scheduleRecentre);
 
-// When the person zooms out past a level, the panel follows to the selection's ancestor at that level.
-const panelUnit = computed(() => {
-    const s = selection.value;
-    const zoom = mapRef.value?.zoom ?? 0;
-    if (!s || autoCentre.value || !index.value) return s;
-    const level = levelForZoom(zoom);
-    if (DEPTH[s.l] <= DEPTH[level]) return s;
-    return index.value.ancestors(s.l, s.c).find((a) => a.l === level) ?? s;
-});
+// Zooming out steps the selection up (see onZoomOut), so the panel always shows the selection.
+const panelUnit = computed(() => selection.value);
 
 const townsIn = computed(() => {
     const u = panelUnit.value;
@@ -534,6 +537,7 @@ const showView = (v: typeof view.value) => {
             "
             @user-move="autoCentre = false"
             @outside-click="zoomOut"
+            @zoom-out="onZoomOut"
             @overlay-click="onOverlayClick"
         />
         <p
