@@ -2,7 +2,7 @@
 // county -> province override map. Pure functions over CSV text.
 
 /** Parse CSV text (RFC 4180 quoting, LF or CRLF) into an array of objects keyed by header. */
-function parseCsv(text) {
+export function parseCsv(text) {
     const rows = [];
     let row = [];
     let field = '';

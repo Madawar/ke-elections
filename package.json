@@ -39,6 +39,7 @@
         "@vue/test-utils": "^2.6.0",
         "concurrently": "^10.0.3",
         "happy-dom": "^21.0.4",
+        "mapshaper": "^0.8.10",
         "typescript": "^5.2.2",
         "vite": "npm:@voidzero-dev/vite-plus-core@8.3.8001",
         "vite-plus": "1.8.0",
