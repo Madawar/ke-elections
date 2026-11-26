@@ -200,6 +200,70 @@ folded into Other, and "Other" means only the small parties with no colour of th
   seating charts, and a square card. Look at them.
 - [ ] **Step 6:** Commit: `feat(map): independents as their own group everywhere`.
 
+### Task 1c: Seat mix bars on unit cards
+
+The owner asked on 2026-11-26: "The export infographic for a county, can it have a mix of the
+constituents, like the multicoloured progress bar showing the percentage mix per county."
+
+**Files:**
+- Create: `resources/js/lib/export/seatMix.ts`, with `seatMix(seats, key, unit, index)`
+  returning `{ total, segments: {key, label, colour, count, share}[], rows: MixRow[] }`.
+- Modify: `resources/js/lib/export/viewState.ts`, `viewLayout.ts` and
+  `resources/js/components/export/ViewCard.vue`.
+- Tests: `tests/js/export/seatMix.test.ts`, plus extensions to `tests/js/export/viewLayout.test.ts`
+  and `tests/js/export/ViewCard.test.ts`.
+
+**The mix bar:**
+- It sits under the headline: a 100%-width stacked bar for the current scope.
+- Segments are in the same order and use the same colours as the legend rows from
+  `buildLegend`, including Independents per Task 1b.
+- Segments under 3% merge into "Other parties".
+- A percentage label is printed inside a segment only when the segment is wide enough for it.
+  Otherwise the share appears in the legend only.
+
+**Rows inside a focused unit**, when it has children at the seat level:
+- **MCA mode with a county focused:** one row per constituency, holding the constituency name,
+  a stacked bar of its wards' MCA parties, and "N wards".
+- **MCA mode with a constituency focused:** one row per ward, showing its MCA's party colour
+  chip, the holder's name and the party.
+- **MP mode with a county focused:** one row per constituency, showing the MP's party colour
+  chip, the MP's name and the party. This is a "who holds what" list.
+- **Governor, Senator and Woman Rep with a county focused:** no rows. The card shows those
+  holders.
+- **Ordering:** rows follow IEBC code order. They're never sorted by party, because the order
+  must stay neutral.
+
+**Fitting:**
+- Story and portrait fit up to about 17 rows; Nairobi has 17 constituencies.
+- Square and X show the first N rows by code, plus "and N more constituencies", and suggest the
+  story size in the dialog.
+- Names are never truncated mid-word. Shrink type down to a floor, then wrap.
+
+**Neutral and checked:**
+- Everything joins on codes.
+- No adjectives.
+- The scope line says exactly what is counted, e.g. "40 wards in Machakos County".
+- Story safe zones from Task 1 still apply.
+
+- [ ] **Step 1:** Write failing tests:
+  - `seatMix` for county 47 in MCA mode: the segments total 85 wards, and there are 17 rows whose
+    counts sum to 85.
+  - MP mode for county 47 gives 17 rows of single holders.
+  - Small segments merge into "Other parties".
+  - Rows come in code order.
+  - The layout fits 17 rows on story and portrait. Square shows "and N more".
+  - No text overlaps or overflows, and the safe zones hold.
+- [ ] **Step 2:** Run them. Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run `npm run test:js`, `types:check` and the Sail build. Expected: PASS.
+- [ ] **Step 5:** Playwright exports:
+  - Machakos County MCA, in story and square.
+  - Nairobi City MCA and MP, in story and portrait.
+  - Mathare MCA, which has ward rows.
+  - Both themes.
+  - Look at them.
+- [ ] **Step 6:** Commit: `feat(export): seat mix bars on unit cards`.
+
 ### Task 2: Animated video for TikTok, Reels and stories
 
 **Files:**
