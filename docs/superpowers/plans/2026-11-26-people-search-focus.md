@@ -344,6 +344,16 @@ navigate back kind of button". Zoom-out stepping stays as well.
   - Its accessible name is "Back to <parent>". It's at least 44px tall.
   - Tapping it steps up one level and re-fits and centres the parent, using the same path as the
     zoom-out control.
+- **Taps outside the focused unit:** the owner noticed on 2026-11-26 that clicking outside zooms
+  out. This replaces Task 2's "a tap outside steps up" rule.
+  - With "Show surroundings" off, a tap outside the focused unit does nothing: no step-up and no
+    camera move.
+  - With "Show surroundings" on, a tap on a visible neighbouring unit selects that unit at the
+    tapped level and re-fits it.
+  - Stepping up is done by the back button, the browser or phone back, the zoom-out control, a
+    breadcrumb, or a wheel or pinch zoom-out.
+  - Test: in `useMap` and `Map.vue` logic, an outside tap with surroundings off leaves the
+    selection unchanged; with surroundings on, it selects the tapped neighbour.
 - **History:**
   - Each focus change made by the user (tap, search pick, breadcrumb, back button) pushes a
     history entry for the unit's URL. A zoom-driven step-up replaces the current entry instead,
