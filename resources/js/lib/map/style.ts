@@ -1,0 +1,304 @@
+import type {
+    ExpressionSpecification,
+    LayerSpecification,
+    StyleSpecification,
+} from 'maplibre-gl';
+import {
+    type Colouring,
+    NO_COLOURING,
+    fillColor,
+    pinnedLevel,
+} from './colouring';
+import { type MapLevel, levelOpacityStops } from './levels';
+import type { MapTheme } from './theme';
+
+export const GLYPHS = '/glyphs/{fontstack}/{range}.pbf';
+export const SOURCES = [
+    'provinces',
+    'counties',
+    'constituencies',
+    'wards',
+] as const;
+export const EMPTY_FC = { type: 'FeatureCollection', features: [] } as const;
+export const MAP_LEVELS: MapLevel[] = ['county', 'constituency', 'ward'];
+export const SOURCE_OF: Record<
+    MapLevel,
+    'counties' | 'constituencies' | 'wards'
+> = { county: 'counties', constituency: 'constituencies', ward: 'wards' };
+
+export const fileUrl = (manifest: Record<string, string>, file: string) =>
+    `/boundaries/${file}?v=${manifest[file] ?? ''}`;
+
+const selected = [
+    'boolean',
+    ['feature-state', 'selected'],
+    false,
+] as ExpressionSpecification;
+const hovered = [
+    'boolean',
+    ['feature-state', 'hover'],
+    false,
+] as ExpressionSpecification;
+const state = (sel: number, hov: number, base: number) =>
+    ['case', selected, sel, hovered, hov, base] as ExpressionSpecification;
+
+/** Interpolate over zoom, multiplying a per-feature value by the level's cross-fade factor. */
+function banded(
+    level: MapLevel,
+    value: (factor: number) => ExpressionSpecification | number,
+): ExpressionSpecification {
+    const stops = levelOpacityStops(level).flatMap(([z, f]) => [z, value(f)]);
+    return [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        ...stops,
+    ] as ExpressionSpecification;
+}
+
+const scaled = (e: ExpressionSpecification, f: number) =>
+    f === 0 ? 0 : f === 1 ? e : (['*', f, e] as ExpressionSpecification);
+
+export function fillOpacity(
+    level: MapLevel,
+    colouring: Colouring,
+): ExpressionSpecification {
+    const pinned = pinnedLevel(colouring.mode);
+    if (pinned === level) return state(0.97, 0.92, 0.86);
+    const tinted =
+        colouring.mode.kind === 'province'
+            ? state(0.95, 0.9, 0.72)
+            : state(0.16, 0.08, 0);
+    return banded(level, (f) => scaled(tinted, f));
+}
+
+/** Boundary lines, thickest for counties; constituency and ward lines fade in ahead of their fills. */
+function lineLayers(theme: MapTheme): LayerSpecification[] {
+    const width = (stops: number[]) =>
+        [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            ...stops,
+        ] as ExpressionSpecification;
+    return [
+        {
+            id: 'wards-line',
+            type: 'line',
+            source: 'wards',
+            minzoom: 8.6,
+            paint: {
+                'line-color': theme.wardLine,
+                'line-width': width([9, 0.3, 12, 1, 15, 1.6]),
+                'line-opacity': width([8.6, 0, 9.4, 1]),
+            },
+        },
+        {
+            id: 'constituencies-line',
+            type: 'line',
+            source: 'constituencies',
+            minzoom: 6.2,
+            paint: {
+                'line-color': theme.constituencyLine,
+                'line-width': width([6.2, 0.4, 9, 1, 12, 1.8]),
+                'line-opacity': width([6.2, 0, 7.1, 0.9]),
+            },
+        },
+        {
+            id: 'counties-line',
+            type: 'line',
+            source: 'counties',
+            layout: { 'line-join': 'round' },
+            paint: {
+                'line-color': theme.countyLine,
+                'line-width': width([4, 0.8, 7, 1.6, 12, 2.8]),
+                'line-opacity': 0.9,
+            },
+        },
+        ...SOURCES.filter((s) => s !== 'provinces').map(
+            (source): LayerSpecification => ({
+                id: `${source}-selected`,
+                type: 'line',
+                source,
+                layout: { 'line-join': 'round' },
+                paint: {
+                    'line-color': theme.selected,
+                    'line-width': width([4, 2.4, 12, 4]),
+                    'line-opacity': ['case', selected, 1, 0],
+                },
+            }),
+        ),
+    ];
+}
+
+function labelLayers(
+    theme: MapTheme,
+    showProvinces: boolean,
+): LayerSpecification[] {
+    const opacity = (stops: number[]) =>
+        [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            ...stops,
+        ] as ExpressionSpecification;
+    const base = (
+        level: string,
+        font: string,
+        size: number[],
+        extra: Partial<LayerSpecification> & {
+            minzoom?: number;
+            maxzoom?: number;
+        },
+        textOpacity: number[],
+    ) =>
+        ({
+            id: `labels-${level}`,
+            type: 'symbol',
+            source: 'labels',
+            filter: ['==', ['get', 'level'], level],
+            ...extra,
+            layout: {
+                'text-field': ['get', 'name'],
+                'text-font': [font],
+                'text-size': ['interpolate', ['linear'], ['zoom'], ...size],
+                'text-allow-overlap': false,
+                'text-padding': 3,
+                'text-max-width': 7,
+                'symbol-sort-key': ['get', 'code'],
+                'text-letter-spacing': level === 'county' ? 0.02 : 0,
+            },
+            paint: {
+                'text-color': theme.label,
+                'text-halo-color': theme.labelHalo,
+                'text-halo-width': 1.6,
+                'text-opacity': opacity(textOpacity),
+            },
+        }) as LayerSpecification;
+    return [
+        base(
+            'ward',
+            'Noto Sans Regular',
+            [9.3, 10, 13, 13],
+            { minzoom: 9.1 },
+            [9.1, 0, 9.7, 1],
+        ),
+        base(
+            'constituency',
+            'Noto Sans Regular',
+            [6.8, 10.5, 9.5, 13],
+            { minzoom: 6.6, maxzoom: 10.3 },
+            [6.6, 0, 7.2, 1, 9.6, 1, 10.3, 0],
+        ),
+        base(
+            'county',
+            'Noto Sans Medium',
+            [4, 10, 7, 14],
+            { maxzoom: 8 },
+            [4, 1, 7.2, 1, 7.9, 0],
+        ),
+        {
+            ...base(
+                'province',
+                'Noto Sans Medium',
+                [4, 11, 6, 14],
+                { maxzoom: 6.4 },
+                [4, 0.85, 6, 0.85, 6.4, 0],
+            ),
+            layout: {
+                ...(
+                    base(
+                        'province',
+                        'Noto Sans Medium',
+                        [4, 11, 6, 14],
+                        {},
+                        [0, 1],
+                    ) as { layout: object }
+                ).layout,
+                visibility: showProvinces ? 'visible' : 'none',
+                'text-letter-spacing': 0.08,
+            },
+        } as LayerSpecification,
+    ];
+}
+
+export interface StyleInput {
+    manifest: Record<string, string>;
+    theme: MapTheme;
+    colouring?: Colouring;
+    provinceOfCounty: Map<number, number>;
+    /** Load ward geometry now (otherwise the source starts empty and is filled on demand). */
+    wards?: boolean;
+}
+
+export function buildStyle({
+    manifest,
+    theme,
+    colouring = NO_COLOURING,
+    provinceOfCounty,
+    wards = false,
+}: StyleInput): StyleSpecification {
+    const geojson = (file: string) => ({
+        type: 'geojson' as const,
+        data: fileUrl(manifest, file),
+        promoteId: 'code',
+    });
+    const fills = (['county', 'constituency', 'ward'] as MapLevel[]).map(
+        (level): LayerSpecification => ({
+            id: `${SOURCE_OF[level]}-fill`,
+            type: 'fill',
+            source: SOURCE_OF[level],
+            paint: {
+                'fill-color': fillColor(
+                    colouring,
+                    level,
+                    provinceOfCounty,
+                    theme.ink,
+                ) as string,
+                'fill-opacity': fillOpacity(level, colouring),
+            },
+        }),
+    );
+    return {
+        version: 8,
+        glyphs: GLYPHS,
+        sources: {
+            provinces: geojson('provinces.geojson'),
+            counties: geojson('counties.geojson'),
+            constituencies: geojson('constituencies.geojson'),
+            wards: wards
+                ? geojson('wards.geojson')
+                : {
+                      type: 'geojson',
+                      data: EMPTY_FC as never,
+                      promoteId: 'code',
+                  },
+            labels: {
+                type: 'geojson',
+                data: fileUrl(manifest, 'labels.geojson'),
+            },
+        },
+        layers: [
+            {
+                id: 'background',
+                type: 'background',
+                paint: { 'background-color': theme.ground },
+            },
+            {
+                id: 'land',
+                type: 'fill',
+                source: 'counties',
+                paint: { 'fill-color': theme.land },
+            },
+            ...fills,
+            ...lineLayers(theme),
+            {
+                id: 'overlays-anchor',
+                type: 'background',
+                layout: { visibility: 'none' },
+                paint: {},
+            },
+            ...labelLayers(theme, colouring.mode.kind === 'province'),
+        ],
+    };
+}
