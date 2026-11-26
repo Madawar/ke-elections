@@ -234,8 +234,8 @@ The controller's look at the Task 2 screenshots found two more:
   `resources/js/lib/map/colouring.ts`, `resources/js/components/map/Legend.vue`,
   `resources/js/components/map/LayersPanel.vue`, `resources/js/components/map/AboutSheet.vue`
   and `resources/js/pages/Map.vue`
-- Create: `resources/js/components/map/SeatChips.vue`, `resources/js/components/map/Onboarding.vue`
-  and `resources/js/lib/onboarding.ts`
+- Create: `resources/js/components/map/SeatChips.vue`, `resources/js/components/map/Onboarding.vue`,
+  `resources/js/lib/onboarding.ts` and `resources/js/components/map/BackButton.vue`
 - Test: `tests/js/map/style.test.ts` (extend), `tests/js/components/SeatChips.test.ts`,
   `tests/js/components/Onboarding.test.ts`, and `tests/js/seats.test.ts` (extend, for the scoped
   legend counts)
@@ -299,6 +299,30 @@ otherwise build it here.
 - With reduced motion, use no animation; otherwise a short fade only.
 - Copy rules from `CLAUDE.md`: sentence case, no emoji, no "→".
 
+**(g) Back button and the phone's back gesture.** The owner asked on 2026-11-26 for "a
+navigate back kind of button". Zoom-out stepping stays as well.
+- **The button:**
+  - It floats at the top left of the map, under the search bar, and is visible only while a unit
+    is focused.
+  - It holds a chevron-left SVG icon (no text arrow) and the parent's name: the constituency from
+    a ward, the county from a constituency, "All of Kenya" from a county.
+  - Its accessible name is "Back to <parent>". It's at least 44px tall.
+  - Tapping it steps up one level and re-fits and centres the parent, using the same path as the
+    zoom-out control.
+- **History:**
+  - Each focus change made by the user (tap, search pick, breadcrumb, back button) pushes a
+    history entry for the unit's URL. A zoom-driven step-up replaces the current entry instead,
+    so zooming doesn't flood the history.
+  - On `popstate` (the browser back button or Android's back gesture), restore that entry's
+    focus and fit the camera to it.
+  - From the home page with nothing focused, back leaves the site as usual.
+  - Keep Inertia's history handling consistent: use its router if `Map.vue` already does.
+- **Tests:**
+  - A `BackButton` component test: hidden when unfocused, the label names the parent, and a
+    click emits a step-up.
+  - A unit test of the history logic: a push on a tap, a replace on a zoom step-up, and
+    `popstate` restoring the previous unit.
+
 - [ ] **Step 1:** Write failing tests:
   - `style.test.ts`: every boundary line layer has a casing layer below it, no line colour
     expression refers to party colours, the constituency line width is at least 1.6× the ward
@@ -320,5 +344,7 @@ otherwise build it here.
   (None, Governor, Senator, Woman Rep, MP, MCA):
   - With Kenya unfocused, with Nairobi City focused, and with Mathare focused.
   - Also the onboarding steps 1–4, and the chip row with the sheet at half and full.
+  - Also the back button at each level, going Ngei, Mathare, Nairobi City, Kenya, plus
+    `page.goBack()` stepping through the same chain.
   - Look at them, and fix any border or label that doesn't read against its fill.
-- [ ] **Step 6:** Commit: `feat(map): clear borders in colour views, seat chips, onboarding`.
+- [ ] **Step 6:** Commit: `feat(map): clear borders in colour views, seat chips, back button, onboarding`.
