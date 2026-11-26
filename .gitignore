@@ -1,0 +1,13 @@
+# raw downloads (fetched by the boundary pipeline; licences vary)
+boundaries/raw/
+
+/vendor/
+/node_modules/
+.env
+.env.*
+!.env.example
+.phpunit.result.cache
+/public/build/
+/public/hot
+/storage/*.key
+.DS_Store
