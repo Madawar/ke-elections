@@ -14,7 +14,7 @@ Building "Kenya Electoral Map" (Laravel + MySQL + Filament + MapLibre, PWA) in 4
 
 **How to apply:** use superpowers skills (brainstorming → writing-plans → TDD etc.); don't start a phase without approval; plan lives at docs/superpowers/specs/2026-11-26-kenya-electoral-map-design.md. Raw boundary downloads in boundaries/raw/ are gitignored; the mikelmaron git clone fails over HTTP/2, so fetch via the codeload tarball.
 
-**State (2026-11-26):** Phase 1 Tasks 1–4 are done on `feature/phase-1-map`. The owner is
+**State (2026-11-26):** Phase 1 Tasks 1–4 are done and merged into `develop` (the branch `feature/phase-1-map` was deleted). Each next prompt makes its own `feature/<slug>` branch and a PR into `develop`. The owner is
 continuing in Claude Code cloud sessions, environment "Elections App"
 `env_01StAectAimqiN9aWCso1VPu`, using the prompts in `docs/superpowers/plans/cloud-prompts.md`.
 Status and decisions live in `docs/superpowers/plans/2026-11-26-phase-1-progress.md`.

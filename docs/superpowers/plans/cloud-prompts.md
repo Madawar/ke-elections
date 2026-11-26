@@ -3,7 +3,9 @@
 Paste one prompt per session at claude.ai/code. Use repo `Madawar/ke-elections` and the
 "Elections App" environment.
 
-Every session works on `feature/phase-1-map` and pushes there. Sessions don't share memory, so
+Git flow: every session starts from `develop` and creates its own `feature/<slug>` branch. When
+it's done, it pushes the branch and opens a PR into `develop`. Merge each PR before running the
+next prompt, because each task builds on the last. Sessions don't share memory, so
 each prompt points at the files that carry state:
 - `CLAUDE.md`
 - The plan
@@ -19,8 +21,11 @@ next.
 ```
 Repo ke-elections. Read CLAUDE.md and docs/superpowers/plans/2026-11-26-phase-1-progress.md first.
 
-1. git fetch origin && git checkout feature/phase-1-map && git pull --ff-only
-2. Run: CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR=$PWD bash scripts/cloud/session-start.sh
+1. git fetch origin && git checkout develop && git pull --ff-only, then
+   git checkout -b feature/cloud-env-check
+2. The SessionStart hook should already have run session-start.sh at startup; look for
+   [session-start] lines. If it didn't, run:
+   CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR=$PWD bash scripts/cloud/session-start.sh
    It installs composer/npm deps, writes .env (DB_HOST=127.0.0.1), starts MySQL, creates the
    electoral_map and testing databases, migrates, and builds assets. It can take several
    minutes. Run it in the background and wait for it rather than letting a 2-minute timeout
@@ -33,7 +38,8 @@ Repo ke-elections. Read CLAUDE.md and docs/superpowers/plans/2026-11-26-phase-1-
      docs/cloud-setup.md under "Not verified yet", and tell me to paste it into the environment
      settings.
    - For a blocked domain, give me the exact domain to allow.
-5. Commit any fix as "chore(cloud): …" and push to feature/phase-1-map.
+5. Commit any fix as "chore(cloud): …", push feature/cloud-env-check and open a PR into
+   develop. If nothing needed fixing, don't push and don't open a PR.
 6. Report: PHP and MySQL versions, each [session-start] line, test pass/fail counts, any blocked
    domains, and a verdict of READY or NOT READY.
 ```
@@ -41,14 +47,16 @@ Repo ke-elections. Read CLAUDE.md and docs/superpowers/plans/2026-11-26-phase-1-
 ## 1. Task 4b: evidence-based ward corrections
 
 ```
-Repo ke-elections, branch feature/phase-1-map (fetch, check it out, git pull --ff-only).
+Repo ke-elections. Git flow: git fetch origin && git checkout develop && git pull --ff-only, then
+git checkout -b feature/ward-corrections. Never commit to main or develop.
 - Read CLAUDE.md and docs/superpowers/plans/2026-11-26-phase-1-progress.md.
 - In docs/superpowers/plans/2026-11-26-phase-1-boundaries-and-map.md, read "Global Constraints"
   and "Task 4b: Evidence-based ward corrections". That task text is your requirements.
 - Read docs/boundary-quality-report.md and boundaries/build-report.md for background.
 
-Setup: CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR=$PWD bash scripts/cloud/session-start.sh (wait
-for it), then npm run boundaries:fetch. The raw sources are not in git.
+Setup: if no [session-start] lines appeared at startup, run
+CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR=$PWD bash scripts/cloud/session-start.sh and wait for it.
+Then run npm run boundaries:fetch. The raw sources are not in git.
 - The fetch needs codeload.github.com and data.humdata.org.
 - If they're blocked, stop and tell me which domain to allow.
 
@@ -69,7 +77,7 @@ Rules:
   nesting must hold.
 
 Commit "fix(boundaries): evidence-based ward corrections from Red Cross and polling stations"
-and push to feature/phase-1-map.
+then push feature/ward-corrections and open a PR into develop.
 
 Update the Task 4b row in docs/superpowers/plans/2026-11-26-phase-1-progress.md with the
 commits and outcome, then commit and push that too.
@@ -81,7 +89,8 @@ results, and output sizes.
 ## 2. Task 5: towns layer and self-hosted label glyphs
 
 ```
-Repo ke-elections, branch feature/phase-1-map (fetch, check it out, git pull --ff-only).
+Repo ke-elections. Git flow: git fetch origin && git checkout develop && git pull --ff-only, then
+git checkout -b feature/towns-glyphs. Never commit to main or develop.
 - Read CLAUDE.md and docs/superpowers/plans/2026-11-26-phase-1-progress.md.
 - Your requirements are "Global Constraints" and "Task 5" in
   docs/superpowers/plans/2026-11-26-phase-1-boundaries-and-map.md.
@@ -98,14 +107,15 @@ Process:
 - Then get one fresh subagent review against the task text, and fix its Critical and Important
   findings.
 
-Commit with the plan's commit message and push to feature/phase-1-map. Update the progress note
+Commit with the plan's commit message, push feature/towns-glyphs and open a PR into develop. Update the progress note
 row for Task 5.
 ```
 
 ## 3. Task 6: unit directory, routes and server-rendered meta tags
 
 ```
-Repo ke-elections, branch feature/phase-1-map (fetch, check it out, git pull --ff-only).
+Repo ke-elections. Git flow: git fetch origin && git checkout develop && git pull --ff-only, then
+git checkout -b feature/unit-routes. Never commit to main or develop.
 - Read CLAUDE.md and docs/superpowers/plans/2026-11-26-phase-1-progress.md.
 - Your requirements are "Global Constraints" and "Task 6" in
   docs/superpowers/plans/2026-11-26-phase-1-boundaries-and-map.md.
@@ -120,13 +130,14 @@ Process:
 - Then get one fresh subagent review against the task text, and fix its Critical and Important
   findings.
 
-Commit with the plan's commit message and push. Update the progress note row for Task 6.
+Commit with the plan's commit message, push feature/unit-routes and open a PR into develop. Update the progress note row for Task 6.
 ```
 
 ## 4. Continue the rest of Phase 1 (6b to 11)
 
 ```
-Repo ke-elections, branch feature/phase-1-map (fetch, check it out, git pull --ff-only).
+Repo ke-elections. Git flow: git fetch origin && git checkout develop && git pull --ff-only, then
+git checkout -b feature/phase-1-ui. Never commit to main or develop.
 - Read CLAUDE.md, docs/superpowers/plans/2026-11-26-phase-1-progress.md and the whole of
   docs/superpowers/plans/2026-11-26-phase-1-boundaries-and-map.md, including Global Constraints,
   the visual direction, the "no AI look" rules, and the zoom, label and division requirements.
@@ -143,7 +154,7 @@ Process for each task:
   - Fix its Critical and Important findings.
   - Commit with the plan's message.
   - Update the task's row in the progress note.
-  - Push.
+  - Push feature/phase-1-ui.
 
 Task 6b:
 - Mockups: https://claude.ai/artifact/FQP7fsRPSAr7SgiWiE9BTx
@@ -152,7 +163,7 @@ Task 6b:
 
 Task 11:
 - Run the browser check at 390×844 and on desktop.
-- Then open a PR from feature/phase-1-map into develop.
+- Then open a PR from feature/phase-1-ui into develop.
 - Never commit to main or develop, and never merge.
 
 Stop and tell me if a task needs a decision only I can make.

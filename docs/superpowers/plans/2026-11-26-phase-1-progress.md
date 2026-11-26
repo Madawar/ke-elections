@@ -6,12 +6,14 @@ the owner's machine.
 
 - Plan: `docs/superpowers/plans/2026-11-26-phase-1-boundaries-and-map.md`
 - Spec: `docs/superpowers/specs/2026-11-26-kenya-electoral-map-design.md`
-- Branch: `feature/phase-1-map` (git flow). When the phase is done, open a PR into `develop`.
+- Branches (git flow): Tasks 1–4 were merged into `develop` from `feature/phase-1-map`, which has
+  since been deleted. Each remaining task, or group of tasks, starts a `feature/<slug>` branch from
+  `develop` and goes back through a PR into `develop`.
 
 ## How to continue
-1. Check out `feature/phase-1-map`. In a cloud session, also run
+1. Branch from `develop`. In a cloud session the SessionStart hook runs
+   `scripts/cloud/session-start.sh` at startup. If no `[session-start]` lines appeared, run it by hand:
    `CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR=$PWD bash scripts/cloud/session-start.sh`.
-   It runs by itself only once `.claude/settings.json` is on the default branch.
 2. Use the superpowers `subagent-driven-development` skill against the plan, starting at the
    first task not marked complete below. It gives each task a fresh implementer, then a
    spec-and-quality review.
@@ -114,9 +116,8 @@ scripts) and `fdec2ff` (owner additions to the plan).
   `php artisan test` and `npm run test:js` pass there. The first check run was stopped about six
   minutes into the session script. The first cloud session should run that script, then both
   test suites, and fix any gaps (for example a blocked domain) before starting new work.
-- **The SessionStart hook:** it lives in `.claude/settings.json`, which exists only on
-  `feature/phase-1-map` until the phase merges into `develop`. Until then, run
-  `scripts/cloud/session-start.sh` by hand, as in "How to continue".
+- **The SessionStart hook:** it lives in `.claude/settings.json`, which is on `develop`, so new
+  cloud sessions run `scripts/cloud/session-start.sh` at startup.
 - **Raw boundary sources** (`boundaries/raw/`, about 120 MB) aren't in git. Fetch them with
   `npm run boundaries:fetch` before Task 4b or 5. That needs `codeload.github.com` and
   `data.humdata.org` in the network allowlist, and `overpass-api.de` and
