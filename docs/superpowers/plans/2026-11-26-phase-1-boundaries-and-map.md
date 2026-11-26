@@ -62,7 +62,74 @@ with Vue and Inertia, and can export a social "locator" image.
 - **Phone breakpoint:** below 768px the panel is a bottom sheet; above, a side panel.
 - **Attribution:** this exact text is shown in the About sheet and on every export:
   `Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data) · 13 wards: American Red Cross (HDX), CC BY 4.0 · Codes: Kenya Gazette Notice 13771 (2026) · Towns: © OpenStreetMap contributors`.
-- **Git:** work on branch `phase-1-map`. Commit after each task.
+- **Git:** work on branch `feature/phase-1-map` (git flow). Commit after each task.
+
+### Added by the owner during execution (2026-11-26)
+- **Git flow:** `main` holds releases only, and `develop` is where work comes together.
+  - Phase work happens on `feature/phase-1-map`, branched from `develop`.
+  - Never commit to `main` or `develop` directly.
+  - The remote is `github.com/Madawar/ke-elections`, and its default branch is `develop`.
+  - Pull requests go from `feature/*` into `develop`.
+- **Visual direction A, "Ballot box":**
+  - Light ground `#EEF1EF`, surface `#FFFFFF`, ink `#13233A`, muted text `#4C5B6B`, hairlines `#D5DCD8`.
+  - Seat colours are the IEBC ballot-paper and box-lid colours: Governor `#3E8FD0`, Senator
+    `#F2C230`, Woman Rep `#7A4FA0`, MP `#2E8B57`, MCA `#C8A97E`, President white.
+  - Type is Archivo (variable width) only.
+  - Dark mode follows direction B, "Tally night": ground `#0F2430`, surface `#16303F`.
+  - Mockups: https://claude.ai/artifact/FQP7fsRPSAr7SgiWiE9BTx
+- **The UI must not look AI-generated:**
+  - No gradient washes, glows, emoji or sparkle icons.
+  - No identical rounded cards with the same soft shadow everywhere.
+  - No ALL-CAPS eyebrow labels and no "A · B · C" middle-dot meta strings.
+  - No "→" tacked onto links, no monospace for data labels, no fade-in-on-scroll.
+  - Copy is plain sentence case and specific, never marketing or chatty.
+  - Spend boldness in one place: the map and the ballot-lid colour strip.
+
+### Owner feedback on the preview map (2026-11-26): zooms, labels, divisions (binding on Tasks 7–8)
+- **Zoom transitions are smooth, not hard cuts.**
+  - Don't switch levels with bare `minzoom`/`maxzoom`. Cross-fade over about 0.6 zoom
+    either side of each threshold (7 and 9.5): the outgoing level's fill opacity
+    interpolates down while the incoming level's interpolates up.
+  - Child boundary lines start faintly before their fills take over, so people can see the
+    next level coming.
+- **Zooming out works as well as zooming in.**
+  - A visible "zoom out" control steps back up one level (ward → constituency → county →
+    all of Kenya). Breadcrumb links do the same.
+  - Keep `maxBounds` around Kenya so the map can't be lost off-screen.
+  - When zooming out past a threshold, keep the selected unit's outline, and move the panel
+    to the selected unit's ancestor at that level, or leave it unchanged. It must never be
+    blank.
+  - Double-tap zoom stays on. Pinch-out is never blocked.
+- **Labels at every level, with collisions handled:**
+
+  | Level | Shown from zoom | Style |
+  |---|---|---|
+  | County | Up to about 7.5, then fades | Medium weight |
+  | Constituency | About 6.8 to 10 | Regular |
+  | Ward | About 9.3 and up | Smaller |
+
+  - These are MapLibre symbol layers using the self-hosted glyphs, placed at the label
+    points from `labels.geojson`.
+  - `text-allow-overlap` is off, `text-padding` is set, and sort keys favour bigger units.
+  - At each level the selected unit's label wins, and the labels of its parent stay
+    visible faintly.
+  - Towns appear only where they don't collide with unit labels.
+  - Labels never cover the bottom sheet's safe area: use map padding.
+- **Divisions read as a hierarchy at every zoom:**
+  - County borders: the thickest and darkest at all zooms.
+  - Constituency borders: medium weight, from about 6.5.
+  - Ward borders: the thinnest, from about 9.
+  - Widths interpolate with zoom.
+  - The coast and the outline of Kenya read clearly against the ground.
+  - The selected unit gets a strong ink outline above every other line.
+- **Tests (Task 7):**
+  - Pure-function tests for the opacity and visibility ramps, e.g.
+    `levelOpacity(level, zoom)` is 1 inside a level's band, 0 well outside it, and in
+    between across the fade.
+  - A test for `zoomOutTarget(selection)`, which returns the parent level's unit and its
+    bounds.
+- **Browser check (Task 11):** step from ward up to the whole of Kenya with the control and
+  with pinch-out, at 390×844, and check labels for collisions at zooms 5, 7, 9 and 11.
 
 ## Review Focus
 
@@ -696,4 +763,4 @@ review failures.
   - Reload offline (DevTools) and the map still shows boundaries.
   - Lighthouse PWA is installable.
 - [ ] **Step 4:** Run `/code-review` on the branch and fix confirmed findings.
-- [ ] **Step 5:** Commit and push branch `phase-1-map` and open a PR for the owner's review.
+- [ ] **Step 5:** Commit and push branch `feature/phase-1-map` and open a PR into `develop` for the owner's review.
