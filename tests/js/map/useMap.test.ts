@@ -19,6 +19,7 @@ const fake = vi.hoisted(() => ({
         queryRenderedFeatures: ReturnType<typeof vi.fn>;
         zoom: number;
         fitZoom: number;
+        fitZooms: Map<string, number>;
         moving: boolean;
         easeTo: ReturnType<typeof vi.fn>;
         scrollZoom: {
@@ -78,8 +79,11 @@ vi.mock('maplibre-gl', () => {
                 moving: false,
                 isMoving: () => self.moving,
                 fitZoom: 14,
+                fitZooms: new Map<string, number>(),
                 getZoom: () => self.zoom,
-                cameraForBounds: () => ({ zoom: self.fitZoom }),
+                cameraForBounds: (b: number[]) => ({
+                    zoom: self.fitZooms.get(String(b)) ?? self.fitZoom,
+                }),
                 getCanvas: () => ({ style: {} }),
                 resize: () => {},
                 remove: () => {},
@@ -311,6 +315,16 @@ describe('useMap focus', () => {
     });
 
     describe('zooming out by hand', () => {
+        // The zoom that fits each unit: a ward is small, Nairobi is big.
+        beforeEach(() => {
+            for (const [level, code, zoom] of [
+                ['ward', 1448, 14],
+                ['constituency', 290, 11],
+                ['county', 47, 9],
+            ] as const)
+                map().fitZooms.set(String(index.get(level, code)!.b), zoom);
+        });
+
         const userZoom = (to: number) => {
             map().zoom = to;
             map().handlers.get('zoomstart')!({});
@@ -319,7 +333,7 @@ describe('useMap focus', () => {
 
         it('asks to step the focus up once the unit is zoomed out of', () => {
             out.api!.setFocus({ level: 'ward', code: 1448 });
-            userZoom(8.9);
+            userZoom(12.5);
             expect(out.zoomOut).toHaveBeenCalledWith({
                 level: 'constituency',
                 code: index.get('ward', 1448)!.p,
@@ -334,7 +348,7 @@ describe('useMap focus', () => {
 
         it('does nothing while the unit is still in view', () => {
             out.api!.setFocus({ level: 'ward', code: 1448 });
-            userZoom(12);
+            userZoom(13);
             expect(out.zoomOut).not.toHaveBeenCalled();
         });
 
@@ -367,13 +381,13 @@ describe('useMap focus', () => {
         it('eases to centre the new unit at the zoom the person is at', () => {
             out.api!.setPadding({ top: 72, bottom: 420, left: 56, right: 56 });
             out.api!.setFocus({ level: 'ward', code: 1448 });
-            userZoom(8.9);
+            userZoom(12.5);
             const b = index.get('constituency', 290)!.b;
             expect(map().easeTo).toHaveBeenCalledTimes(1);
             const [options] = map().easeTo.mock.calls[0];
             expect(options.center[0]).toBeCloseTo((b[0] + b[2]) / 2);
             expect(options.center[1]).toBeCloseTo((b[1] + b[3]) / 2);
-            expect(options.zoom).toBe(8.9);
+            expect(options.zoom).toBe(12.5);
             expect(options.padding).toEqual({
                 top: 72,
                 bottom: 420,
@@ -384,7 +398,7 @@ describe('useMap focus', () => {
 
         it('treats that ease as the page’s own move, not the person zooming on', () => {
             out.api!.setFocus({ level: 'ward', code: 1448 });
-            userZoom(8.9);
+            userZoom(12.5);
             expect(out.zoomOut).toHaveBeenCalledTimes(1);
             // The ease is still running when its zoom events arrive: no second step.
             userZoom(4);
@@ -407,7 +421,7 @@ describe('useMap focus', () => {
 
         it('does not ease when nothing steps', () => {
             out.api!.setFocus({ level: 'ward', code: 1448 });
-            userZoom(12);
+            userZoom(13);
             expect(map().easeTo).not.toHaveBeenCalled();
         });
     });

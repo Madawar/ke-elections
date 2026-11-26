@@ -198,13 +198,26 @@ const LEVEL_MIN_ZOOM: Record<MapLevel, number> = {
     ward: WARD_MIN_ZOOM,
 };
 
+// The camera fits small units no closer than its maximum zoom, so a ward and the constituency
+// around it can report the same fit zoom. These caps keep each level's floor at least a level and
+// a quarter under its child's, so every level is on screen for a while on the way out.
+const FIT_ZOOM_CAP: Record<MapLevel, number> = {
+    ward: 14,
+    constituency: 12.75,
+    county: 11.5,
+};
+
 /**
- * The zoom below which a focused unit gives way to its parent: half a level under the zoom where
- * its own level takes over, or 1.25 under the zoom that fits the unit, whichever is lower. The
- * second part keeps huge units (Turkana, Marsabit) focused when they are first shown.
+ * The zoom below which a focused unit gives way to its parent: 1.25 levels below the zoom that
+ * fits the unit, so a small unit steps up soon after it is zoomed out of. It is never lower than
+ * half a level under where the unit's own level takes over, so a huge unit (Turkana, Marsabit)
+ * shown at a low zoom is not stepped up the moment it appears.
  */
 export const focusFloor = (level: MapLevel, fitZoom: number): number =>
-    Math.min(LEVEL_MIN_ZOOM[level] - 0.5, fitZoom - 1.25);
+    Math.max(
+        LEVEL_MIN_ZOOM[level] - 0.5,
+        Math.min(fitZoom, FIT_ZOOM_CAP[level]) - 1.25,
+    );
 
 function parentOf(
     sel: FocusSelection,
