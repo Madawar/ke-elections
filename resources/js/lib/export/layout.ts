@@ -392,11 +392,18 @@ export function seatBlocks(
         const textW = x + colW - textX;
         const lines: TextItem[] = [];
         let y = top + f.label * 0.85;
+        // Long seat names ("Member of the National Assembly") shrink a little before they cut.
+        const labelSize = fitFontSize(
+            row.label,
+            textW,
+            f.label,
+            Math.round(f.label * 0.8),
+        );
         lines.push({
             x: textX,
             y,
-            text: wrapText(row.label, textW, f.label, 1)[0] ?? '',
-            size: f.label,
+            text: wrapText(row.label, textW, labelSize, 1)[0] ?? '',
+            size: labelSize,
             tone: 'muted',
         });
         let swatch: SeatBlock['swatch'] = null;
@@ -470,7 +477,7 @@ export function seatBlocks(
 export interface LegendBlock {
     panel: Box;
     title: TextItem;
-    items: { swatch: Box & { colour: string }; label: TextItem }[];
+    items: { swatch: (Box & { colour: string }) | null; label: TextItem }[];
 }
 
 /** The map legend: a small panel over the bottom-left corner of the map. */
@@ -479,7 +486,7 @@ export function legendBlock(
     size: number,
     legend: {
         title: string;
-        rows: { label: string; colour: string; count: number }[];
+        rows: { label: string; colour: string | null; count: number }[];
     },
 ): LegendBlock {
     const margin = Math.round(size * 0.7);
@@ -494,12 +501,13 @@ export function legendBlock(
     let widest = textWidth(title, size);
     const placed = legend.rows.map((r) => {
         const text = `${r.label} ${r.count}`;
-        const w = sw + size * 0.35 + textWidth(text, size);
+        const mark = r.colour ? sw + size * 0.35 : 0;
+        const w = mark + textWidth(text, size);
         if (cx > 0 && cx + w > innerW) {
             row++;
             cx = 0;
         }
-        const at = { cx, row, text, colour: r.colour };
+        const at = { cx, row, text, colour: r.colour, mark };
         cx += w + size;
         widest = Math.max(widest, cx - size);
         return at;
@@ -521,15 +529,17 @@ export function legendBlock(
         items: placed.map((p) => {
             const baseline = firstBaseline + (p.row + 1) * line;
             return {
-                swatch: {
-                    x: left + p.cx,
-                    y: baseline - sw + Math.round(size * 0.04),
-                    w: sw,
-                    h: sw,
-                    colour: p.colour,
-                },
+                swatch: p.colour
+                    ? {
+                          x: left + p.cx,
+                          y: baseline - sw + Math.round(size * 0.04),
+                          w: sw,
+                          h: sw,
+                          colour: p.colour,
+                      }
+                    : null,
                 label: {
-                    x: left + p.cx + sw + size * 0.35,
+                    x: left + p.cx + p.mark,
                     y: baseline,
                     text: p.text,
                     size,

@@ -4,7 +4,7 @@
 import { computed } from 'vue';
 import ExportDialog from './ExportDialog.vue';
 import LocatorCard from './LocatorCard.vue';
-import { siteUrl } from '@/lib/export/format';
+import { siteUrl, sourceLine } from '@/lib/export/format';
 import { locatorLayout, legendBlock } from '@/lib/export/layout';
 import {
     cardSeats,
@@ -52,6 +52,12 @@ const url = computed(() => siteUrl(unitPath(props.unit.l, props.unit.c)));
 const asOf = computed(
     () => props.seats.data_as_of ?? props.seats.as_of ?? null,
 );
+// Credit the sites the shown holders actually come from.
+const source = computed(() =>
+    sourceLine(
+        rows.value.flatMap((r) => (r.holder ? [r.holder.sourceUrl] : [])),
+    ),
+);
 const name = computed(() => `${props.unit.n} ${LEVEL[props.unit.l]}`);
 
 function prepare(size: CardSize) {
@@ -82,6 +88,7 @@ function prepare(size: CardSize) {
         :share-title="`${name}, Kenya Electoral Map`"
         :filename="(s) => exportFilename(unit.l, unit.c, s)"
         :prepare="prepare"
+        :inputs="[unit, theme, colouring, seats]"
     >
         <template #default="{ size, images, mapStatus }">
             <LocatorCard
@@ -95,6 +102,7 @@ function prepare(size: CardSize) {
                 :legend="legend"
                 :sample="sample"
                 :as-of="asOf"
+                :source="source"
                 :url="url"
                 :theme="theme"
             />

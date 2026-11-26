@@ -25,7 +25,7 @@ const props = withDefaults(
         theme?: MapTheme;
     }>(),
     {
-        source: 'IEBC gazette notices and parliament.go.ke',
+        source: 'IEBC gazette notices',
         theme: () => THEMES.light,
     },
 );

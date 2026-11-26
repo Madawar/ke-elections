@@ -24,6 +24,7 @@ export interface CardSeat {
         party: string;
         abbrev: string;
         colour: string;
+        sourceUrl: string;
     } | null;
 }
 
@@ -59,6 +60,7 @@ export function cardSeats(data: SeatsData, unit: Unit): CardSeat[] {
                       party: partyLabel(data, h.party),
                       abbrev: h.party ?? '',
                       colour: (h.party && colours.get(h.party)) || OTHER,
+                      sourceUrl: h.source_url,
                   }
                 : null,
         };
@@ -91,7 +93,8 @@ export function codesAtLevel(
 
 export interface MapLegend {
     title: string;
-    rows: { label: string; colour: string; count: number }[];
+    /** A null colour means the row has no single colour on the map (no swatch). */
+    rows: { label: string; colour: string | null; count: number }[];
 }
 
 /**
@@ -113,17 +116,21 @@ export function mapLegend(
             ? (index.ancestors(unit.l, unit.c).find((u) => u.l === level) ??
               unit)
             : unit;
-    const counts = new Map<string, { colour: string; count: number }>();
+    const colours = partyColours(data);
+    const counts = new Map<string, { colour: string | null; count: number }>();
     for (const code of codesAtLevel(index, unit, level)) {
         const h = data.holders.find(
             (x) => x.seat === mode.seat && x.level === level && x.code === code,
         );
-        const label = h?.party
-            ? h.party === INDEPENDENT
-                ? 'Independent'
-                : h.party
-            : 'No approved data';
         const colour = colouring.colours.get(code) ?? colouring.fallback;
+        // A party left out by the "only these parties" filter is drawn faded: say so.
+        const label = !h?.party
+            ? 'No approved data'
+            : colour !== (colours.get(h.party) ?? OTHER)
+              ? 'Not selected'
+              : h.party === INDEPENDENT
+                ? 'Independent'
+                : h.party;
         const row = counts.get(label) ?? { colour, count: 0 };
         row.count++;
         counts.set(label, row);
@@ -137,15 +144,23 @@ export function mapLegend(
                 b.count - a.count ||
                 a.label.localeCompare(b.label),
         );
-    if (rows.length > maxRows) {
-        const kept = rows.slice(0, maxRows - 1);
-        const rest = rows.slice(maxRows - 1);
-        kept.push({
-            label: 'Others',
-            colour: OTHER,
-            count: rest.reduce((n, r) => n + r.count, 0),
-        });
-        return { title: legendTitle(mode.seat, area), rows: kept };
+    // Past `maxRows` parties, the smallest fold into "Others"; units with no data stay apart.
+    const parties = rows.filter((r) => r.label !== 'No approved data');
+    if (parties.length > maxRows) {
+        const rest = parties.slice(maxRows - 1);
+        return {
+            title: legendTitle(mode.seat, area),
+            rows: [
+                ...parties.slice(0, maxRows - 1),
+                {
+                    // Their colours vary on the map, so this row gets no swatch.
+                    label: 'Others',
+                    colour: null,
+                    count: rest.reduce((n, r) => n + r.count, 0),
+                },
+                ...rows.filter((r) => r.label === 'No approved data'),
+            ],
+        };
     }
     return { title: legendTitle(mode.seat, area), rows };
 }

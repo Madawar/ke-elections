@@ -31,3 +31,26 @@ export function siteOrigin(): string {
 }
 
 export const siteUrl = (path = '/'): string => `${siteOrigin()}${path}`;
+
+const OFFICIAL = /(^|\.)(iebc\.or\.ke|gazettes\.africa|kenyalaw\.org)$/;
+
+/**
+ * The source line for a card, from the source links of the records it shows: IEBC gazette
+ * notices (IEBC and gazette archives), then any other sites by name.
+ */
+export function sourceLine(urls: string[]): string {
+    const others = new Set<string>();
+    for (const url of urls) {
+        let host: string;
+        try {
+            host = new URL(url).hostname.replace(/^www\./, '');
+        } catch {
+            continue;
+        }
+        if (!OFFICIAL.test(host)) others.add(host);
+    }
+    const parts = ['IEBC gazette notices', ...[...others].sort()];
+    return parts.length === 1
+        ? parts[0]
+        : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}

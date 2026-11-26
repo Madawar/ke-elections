@@ -15,7 +15,7 @@ import {
 } from 'reka-ui';
 import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import { CARD_FONTS } from '@/lib/export/fonts';
-import { svgToPng } from '@/lib/export/rasterize';
+import { FontLoadError, svgToPng } from '@/lib/export/rasterize';
 import {
     canShareFiles,
     downloadBlob,
@@ -32,6 +32,8 @@ const props = defineProps<{
     shareTitle: string;
     filename: (size: CardSize) => string;
     prepare?: (size: CardSize) => Promise<CardImages>;
+    /** Whatever the card is drawn from (theme, colouring, data). A change redraws it. */
+    inputs?: unknown[];
 }>();
 const open = defineModel<boolean>('open', { default: false });
 
@@ -53,6 +55,8 @@ const canShare = ref(false);
 let imageCache = new Map<CardSize, Promise<CardImages>>();
 let pngCache = new Map<CardSize, Blob>();
 let token = 0;
+// Off-screen maps are drawn one at a time, however fast the person switches sizes.
+let queue: Promise<unknown> = Promise.resolve();
 
 /** The card's SVG, once the dialog (a portal that mounts on open) has rendered it. */
 async function cardSvg(): Promise<SVGSVGElement | null> {
@@ -82,7 +86,13 @@ async function build() {
     if (props.prepare) {
         let pending = imageCache.get(s);
         if (!pending) {
-            pending = props.prepare(s);
+            const prepare = props.prepare;
+            pending = queue.then(() => {
+                // Skip sizes the person has already moved on from.
+                if (t !== token) throw new Superseded();
+                return prepare(s);
+            });
+            queue = pending.catch(() => {});
             imageCache.set(s, pending);
         }
         try {
@@ -91,7 +101,7 @@ async function build() {
             images.value = result;
         } catch (error) {
             imageCache.delete(s);
-            if (t !== token) return;
+            if (t !== token || error instanceof Superseded) return;
             console.error(error);
             mapStatus.value = 'The map could not be drawn on this device';
         }
@@ -120,8 +130,18 @@ async function build() {
         console.error(error);
         status.value = 'error';
         message.value =
-            'The image could not be made in this browser. Try another browser, or take a screenshot of the preview.';
+            error instanceof FontLoadError
+                ? 'The card’s typeface could not be loaded. Reload the page and try again.'
+                : 'The image could not be made in this browser. Try another browser, or take a screenshot of the preview.';
     }
+}
+
+class Superseded extends Error {}
+
+function reset() {
+    token++;
+    imageCache = new Map();
+    pngCache = new Map();
 }
 
 watch(
@@ -131,12 +151,22 @@ watch(
             canShare.value = canShareFiles();
             void build();
         } else {
-            token++;
-            imageCache = new Map();
-            pngCache = new Map();
+            reset();
         }
     },
     { immediate: true },
+);
+
+watch(
+    () => props.inputs ?? [],
+    (now, before) => {
+        const same =
+            now.length === before.length &&
+            now.every((x, i) => x === before[i]);
+        if (same) return;
+        reset();
+        if (open.value) void build();
+    },
 );
 
 async function share() {

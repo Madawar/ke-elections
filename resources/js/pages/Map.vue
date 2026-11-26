@@ -27,6 +27,7 @@ import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
 import { OTHER, PROVINCE_TINTS, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
+import { formatAsOf } from '@/lib/export/format';
 import {
     type SeatsData,
     EMPTY_SEATS,
@@ -168,6 +169,9 @@ const colouring = computed<Colouring>(() => {
     });
 });
 
+const asOfText = computed(() =>
+    formatAsOf(seats.value.data_as_of ?? seats.value.as_of),
+);
 const legend = computed(() => {
     const k = colourKey.value;
     if (k === 'none') return null;
@@ -205,7 +209,7 @@ const legend = computed(() => {
     return {
         title: `${SEAT_LABEL[k]} seats by party`,
         rows: mapped,
-        note: `Elected 2022, with changes since. Source: IEBC gazette notices${(seats.value.data_as_of ?? seats.value.as_of) ? `, as of ${new Date((seats.value.data_as_of ?? seats.value.as_of)!).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`,
+        note: `Elected 2022, with changes since. Source: IEBC gazette notices${asOfText.value ? `, as of ${asOfText.value}` : ''}`,
     };
 });
 const partyChips = computed(() =>
@@ -401,6 +405,9 @@ async function locate() {
                 else
                     locateMessage.value =
                         'Your location is outside Kenya’s wards.';
+            } catch {
+                locateMessage.value =
+                    'The ward map could not be loaded. Check your connection and try again.';
             } finally {
                 locating.value = false;
             }

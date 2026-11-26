@@ -24,6 +24,7 @@ describe('cardSeats', () => {
             party: 'Sample Party A',
             abbrev: 'SPA',
             colour: '#E69F00',
+            sourceUrl: 'https://example.org/gazette',
         });
         expect(rows[1].holder).toBeNull();
     });
@@ -132,5 +133,43 @@ describe('map styles for the card', () => {
         };
         expect(point.data.geometry.coordinates[0]).toBeCloseTo(36.871);
         expect(point.data.geometry.coordinates[1]).toBeCloseTo(-1.258);
+    });
+});
+
+describe('mapLegend with filters', () => {
+    it('labels parties faded by the party filter as not selected', () => {
+        const colouring = seatColouring(SEATS, 'mp', {
+            noData: '#E3E8E5',
+            faded: '#D5DCD8',
+            only: new Set(['SPA']),
+        });
+        const legend = mapLegend(SEATS, index, unit('county', 47), colouring)!;
+        expect(legend.rows).toEqual([
+            { label: 'Not selected', colour: '#D5DCD8', count: 2 },
+        ]);
+    });
+
+    it('folds small parties into an "Others" row with no swatch', () => {
+        const data = {
+            ...SEATS,
+            holders: [
+                ...SEATS.holders,
+                { ...SEATS.holders[3], code: 1447, party: 'SPA' },
+            ],
+        };
+        const colouring = seatColouring(data, 'mca', {
+            noData: '#E3E8E5',
+            faded: '#D5DCD8',
+        });
+        const legend = mapLegend(
+            data,
+            index,
+            unit('constituency', 290),
+            colouring,
+            1,
+        )!;
+        expect(legend.rows).toEqual([
+            { label: 'Others', colour: null, count: 2 },
+        ]);
     });
 });

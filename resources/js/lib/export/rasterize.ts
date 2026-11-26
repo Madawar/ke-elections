@@ -9,6 +9,8 @@ export interface CardFont {
     unicodeRange?: string;
 }
 
+export class FontLoadError extends Error {}
+
 const fontCache = new Map<string, Promise<string>>();
 
 function blobToDataUri(blob: Blob): Promise<string> {
@@ -93,8 +95,16 @@ export async function svgToPng(
     height: number,
     fontFaces: CardFont[],
 ): Promise<Blob> {
+    // Every box on the card is measured for Archivo, so a card in a fallback font could
+    // overflow: without the font, stop and say so.
     const faces = await Promise.all(
-        fontFaces.map(async (f) => ({ ...f, src: await fontToDataUri(f.url) })),
+        fontFaces.map(async (f) => {
+            try {
+                return { ...f, src: await fontToDataUri(f.url) };
+            } catch (error) {
+                throw new FontLoadError(String(error));
+            }
+        }),
     );
     const markup = serializeSvg(svg, width, height, fontFaceCss(faces));
     const img = await loadImage(

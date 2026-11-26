@@ -76,11 +76,23 @@ export async function renderMapImage({
                 () => reject(new Error('The map took too long to draw.')),
                 timeout,
             );
-            map.on('error', (e) => {
+            let loaded = false;
+            const fail = (error: unknown) => {
                 window.clearTimeout(timer);
-                reject(e.error ?? new Error('The map could not be drawn.'));
+                reject(error);
+            };
+            // Before 'load' an error means the style itself failed. After it, MapLibre reports
+            // problems it recovers from (a missing glyph range, say), so keep going to 'idle'.
+            map.on('error', (e) => {
+                if (!loaded)
+                    fail(e.error ?? new Error('The map could not be drawn.'));
+                else console.warn('[export map]', e.error?.message ?? e);
             });
+            map.getCanvas().addEventListener('webglcontextlost', () =>
+                fail(new Error('The map lost its drawing context.')),
+            );
             map.once('load', () => {
+                loaded = true;
                 // Fit again now that the canvas has its final size, then outline the unit.
                 map.fitBounds(bounds, { padding, maxZoom, duration: 0 });
                 if (highlight)

@@ -167,3 +167,18 @@ describe('legendBlock', () => {
             );
     });
 });
+
+describe('seat labels', () => {
+    it('keeps "Member of the National Assembly" whole on every card', () => {
+        for (const size of SIZES) {
+            const [b] = seatBlocks(locatorLayout(size, 1), [
+                {
+                    key: 'mp',
+                    label: 'Member of the National Assembly',
+                    holder: null,
+                },
+            ]);
+            expect(b.lines[0].text).toBe('Member of the National Assembly');
+        }
+    });
+});

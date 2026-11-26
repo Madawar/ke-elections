@@ -54,6 +54,8 @@ const LEVEL = {
     ward: 'ward',
 } as const;
 
+const TITLE_STRETCH = 100 / 92;
+
 const layout = computed(() => locatorLayout(props.size, props.seats.length));
 const tone = (t: TextItem['tone']) =>
     t === 'ink' ? props.theme.ink : props.theme.muted;
@@ -61,9 +63,11 @@ const tone = (t: TextItem['tone']) =>
 const header = computed(() => {
     const { header: box, fonts } = layout.value;
     const kicker = `IEBC ${LEVEL[props.unit.l]} ${props.unit.c}`;
+    // The title is drawn at full width (wdth 100), about 9% wider than the text metrics.
+    const titleW = box.w / TITLE_STRETCH;
     const titleSize = fitFontSize(
         props.unit.n,
-        box.w,
+        titleW,
         fonts.title,
         Math.round(fonts.title * 0.6),
         true,
@@ -89,7 +93,12 @@ const header = computed(() => {
     const titleY = kickerY + fonts.title * 1.08;
     return {
         kicker: { x: box.x, y: kickerY, size: fonts.kicker, text: kicker },
-        title: { x: box.x, y: titleY, size: titleSize, text: props.unit.n },
+        title: {
+            x: box.x,
+            y: titleY,
+            size: titleSize,
+            text: wrapText(props.unit.n, titleW, titleSize, 1, true)[0] ?? '',
+        },
         crumb: {
             x: box.x,
             y: titleY + fonts.crumb * 1.45,
@@ -241,6 +250,7 @@ const label = computed(
                 </text>
                 <g v-for="(item, i) in legend.items" :key="i">
                     <rect
+                        v-if="item.swatch"
                         :x="item.swatch.x"
                         :y="item.swatch.y"
                         :width="item.swatch.w"
