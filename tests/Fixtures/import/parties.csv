@@ -1,0 +1,4 @@
+abbrev,name,status,coalition_2022,renamed_from,renamed_on,orpp_colours_text,source_url,notes
+SPA,Sample Party A,fully registered,Sample Coalition One,,,Red and white,https://example.org/orpp/register,Fictional test party
+SPB,Sample Party B,fully registered,Sample Coalition Two,OSP,2024-03-01,Blue,https://example.org/orpp/register,Renamed from Old Sample Party
+SPC,Sample Party C,deregistered,,,,,https://example.org/orpp/register,

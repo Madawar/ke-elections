@@ -1,0 +1,5 @@
+election_year,seat,unit_level,unit_code,unit_name_in_source,candidate_name,party_abbrev,status,source_url,notes
+2027,governor,county,48,Atlantis,Sample Candidate One,SPA,nominated,https://example.org/n,
+2027,mp,constituency,1,Changamwe,Sample Candidate Two,SPA,running,https://example.org/n,
+2027,mca,ward,1,Port Reitz,Sample Candidate Three,SPA,elected,https://example.org/n,
+2027,mca,ward,1,Port Reitz,Sample Candidate Four,SPB,elected,https://example.org/n,

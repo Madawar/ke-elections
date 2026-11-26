@@ -1,0 +1,3 @@
+seat,unit_level,unit_code,unit_name_in_source,holder_name,party_abbrev,party_name_in_source,basis,started_on,ended_on,confidence,source_url,notes
+governor,constituency,1,Changamwe,Sample Holder One,SPA,,elected,2022-08-25,,high,https://example.org/g,
+mp,national,0,,Sample Holder Two,SPA,,elected,2022-09-08,,high,https://example.org/g,
