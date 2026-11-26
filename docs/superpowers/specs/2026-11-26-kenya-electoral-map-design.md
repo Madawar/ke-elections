@@ -173,6 +173,36 @@ every office holder and fix questionable records themselves.
   - Editors' changes still go through verification (Phase 3).
   - The public map shows only verified records, with their source and "as of" date.
 
+## Party pages, candidate pages and nominations (when 2027 nominations open)
+
+The owner asked for this on 2026-11-26. Build now in ways that make it easy later.
+
+- **Party page** at `/party/<abbrev>`, for example `/party/uda`:
+  - Name, renames and aliases, the 2022 coalition, and its ORPP registration with a source.
+  - Seats held now per seat type, as bars with percentages.
+  - Its **2027 nominations per seat**, listed by county → constituency → ward.
+  - Each nomination shows its status (rumoured, announced, certificate issued, IEBC cleared) and
+    its source.
+  - **Gaps:** units where the party has no nominee for a chosen seat.
+  - A map view highlighting where it holds seats and where it has nominees.
+- **Candidate page** at `/candidate/<id>`:
+  - Name exactly as in the source, party, seat and unit (with parents), nomination status and its
+    history with dates.
+  - Sources: links and uploaded documents.
+  - Whether they're an incumbent, linked to their `office_holders` record if so.
+  - Only approved data is shown publicly, and nothing is invented.
+- **Unit pages and cards** list every party's nominee per seat, beside the current holder:
+  "incoming vs outgoing".
+- **Hooks to keep while building now:**
+  - Legend party rows and party names in panels link to the party page once it exists.
+  - People search covers approved nominees as well as holders, each with a status label, for
+    example "UDA nominee for MP, Mathare (announced)".
+  - Party highlight works for "parties with a nominee" as well as "parties holding the seat".
+  - Share cards come in a "Nominees for <seat> in <unit>" form.
+  - Everything joins on IEBC codes and party keys, never on names.
+- **Signed-in public users** can follow a party or candidate and get updates when a nomination
+  changes status.
+
 ## Phases (owner reviews after each)
 1. **Boundary pipeline and map:**
    - Sail, the starter kit, the boundary pipeline and the map page.

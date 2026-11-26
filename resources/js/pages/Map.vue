@@ -17,24 +17,42 @@ import UnitList from '@/components/map/UnitList.vue';
 import UnitPanel from '@/components/map/UnitPanel.vue';
 import type { Picked } from '@/composables/useMap';
 import {
+    LEVEL_NAME,
+    announcePerson,
+    announceSelection,
+} from '@/lib/map/announce';
+import { mapPadding } from '@/lib/map/camera';
+import {
     type Colouring,
     type SeatKey,
     NO_COLOURING,
 } from '@/lib/map/colouring';
-import { type MapLevel, levelForZoom, zoomOutTarget } from '@/lib/map/levels';
+import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
+import type { FocusSelection } from '@/lib/map/focus';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
-import { OTHER, PROVINCE_TINTS, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
+import { type PersonResult, SEAT_TITLE } from '@/lib/search';
+import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
 import { formatAsOf } from '@/lib/export/format';
 import {
     type SeatsData,
     EMPTY_SEATS,
+    legendScope,
     loadSeats,
     seatColouring,
     seatLegend,
 } from '@/lib/seats';
+import {
+    SEAT_LABEL,
+    buildLegend,
+    buildProvinceLegend,
+    legendOpenAfterSelect,
+    pruneParties,
+    settingsCount,
+    toggleParty as toggledParties,
+} from '@/lib/legend';
 import { type Unit, UnitIndex } from '@/lib/units';
 
 type ServerUnit = {
@@ -44,21 +62,6 @@ type ServerUnit = {
     ancestors: { level: string; code: number; name: string }[];
 } | null;
 const props = defineProps<{ unit: ServerUnit }>();
-
-const LEVEL_NAME = {
-    province: 'former province',
-    county: 'county',
-    constituency: 'constituency',
-    ward: 'ward',
-} as const;
-const DEPTH = { province: 0, county: 1, constituency: 2, ward: 3 } as const;
-const SEAT_LABEL: Record<SeatKey, string> = {
-    governor: 'Governor',
-    senator: 'Senator',
-    woman_rep: 'Woman Rep',
-    mp: 'MP',
-    mca: 'MCA',
-};
 
 // ---- data -------------------------------------------------------------------------------
 const manifest = ref<Record<string, string> | null>(null);
@@ -164,7 +167,7 @@ const colouring = computed<Colouring>(() => {
     const t = THEMES[theme.value];
     return seatColouring(seats.value, k, {
         noData: t.noData,
-        faded: t.hairline,
+        faded: t.faded,
         only: new Set(onlyParties.value),
     });
 });
@@ -175,50 +178,43 @@ const asOfText = computed(() =>
 const legend = computed(() => {
     const k = colourKey.value;
     if (k === 'none') return null;
-    if (k === 'province') {
-        const provinces = (index.value?.all() ?? [])
-            .filter((u) => u.l === 'province')
-            .sort((a, b) => a.c - b.c);
-        return {
-            title: 'Former provinces',
-            rows: provinces.map((p) => ({
-                key: String(p.c),
-                label: p.n,
-                colour: PROVINCE_TINTS[(p.c - 1) % PROVINCE_TINTS.length],
-            })),
-        };
-    }
-    const rows = seatLegend(seats.value, k);
-    const shown = rows.filter((r) => r.colour !== OTHER).slice(0, 7);
-    const other = rows
-        .filter((r) => !shown.includes(r))
-        .reduce((n, r) => n + r.seats, 0);
-    const mapped = shown.map((r) => ({
-        key: r.abbrev,
-        label: r.abbrev === 'IND' ? 'Independent' : r.abbrev,
-        colour: r.colour,
-        count: r.seats,
-    }));
-    if (other)
-        mapped.push({
-            key: 'other',
-            label: 'Other and independent',
-            colour: OTHER,
-            count: other,
-        });
-    return {
-        title: `${SEAT_LABEL[k]} seats by party`,
-        rows: mapped,
-        note: `Elected 2022, with changes since. Source: IEBC gazette notices${asOfText.value ? `, as of ${asOfText.value}` : ''}`,
-    };
+    if (k === 'province')
+        return buildProvinceLegend(
+            (index.value?.all() ?? []).filter((u) => u.l === 'province'),
+        );
+    // While a unit is focused the counts cover only the seats inside it (or the one seat above it).
+    const scope = index.value
+        ? legendScope(index.value, k, focusOf(selection.value))
+        : null;
+    return buildLegend(
+        seats.value,
+        k,
+        scope && { codes: scope.codes, unitName: scope.unit.n },
+        onlyParties.value,
+        asOfText.value,
+    );
+});
+/** A legend row was pressed: switch the parties it stands for on or off, each independently. */
+function toggleParty(key: string) {
+    if (legend.value)
+        onlyParties.value = toggledParties(
+            legend.value.members,
+            onlyParties.value,
+            key,
+        );
+}
+// A different seat keeps the highlighted parties that hold it and drops the rest.
+watch(colourKey, (k) => {
+    onlyParties.value = pruneParties(seats.value, k, onlyParties.value);
 });
 const partyChips = computed(() =>
     colourKey.value === 'none' || colourKey.value === 'province'
         ? []
         : seatLegend(seats.value, colourKey.value),
 );
-const activeSettings = computed(
-    () => (colourKey.value !== 'none' ? 1 : 0) + onlyParties.value.length,
+// What the person set: a colouring, plus each legend row they pressed ("Other" counts once).
+const activeSettings = computed(() =>
+    settingsCount(colourKey.value, legend.value),
 );
 
 // ---- selection and camera ---------------------------------------------------------------
@@ -231,21 +227,73 @@ const isDesktop = useMediaQuery('(min-width: 768px)');
 const snap = ref<'peek' | 'half' | 'full'>('peek');
 const sheetHeight = ref(112);
 const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
+// The legend is open on desktop; a focused unit collapses it to its chip so it never covers the unit.
+const legendOpen = ref(isDesktop.value && !props.unit);
+watch(isDesktop, (d) => (legendOpen.value = d && !selection.value));
+// The open legend is capped to the room between the search bar and its own bottom edge, so its
+// heading is never pushed under the search bar.
+const legendMaxHeight = computed(
+    () =>
+        `calc(100dvh - ${(isDesktop.value ? 24 : sheetHeight.value + 12) + 68}px)`,
+);
+// Only an open legend beside a focused unit takes room from the fit.
+const legendBoxOpen = computed(
+    () =>
+        isDesktop.value &&
+        legendOpen.value &&
+        legend.value !== null &&
+        selection.value !== null,
+);
+// What a person picked in search points at: a seat row in the unit panel, or a party in the overview.
+const highlightSeat = ref<string | undefined>();
+const highlightParty = ref<string | undefined>();
+
+// With a unit selected the map shows only that unit; this keeps the rest faintly in view instead.
+const SURROUNDINGS_KEY = 'kem.showSurroundings';
+function readSurroundings() {
+    try {
+        return localStorage.getItem(SURROUNDINGS_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
+const showSurroundings = ref(readSurroundings());
+watch(showSurroundings, (on) => {
+    try {
+        localStorage.setItem(SURROUNDINGS_KEY, String(on));
+    } catch {
+        // Storage can be blocked; the choice then lasts until the page closes.
+    }
+    mapRef.value?.setShowSurroundings(on);
+});
+const focusOf = (unit: Unit | null) =>
+    unit && unit.l !== 'province' ? { level: unit.l, code: unit.c } : null;
 
 const boundsOf = (level: MapLevel, code: number) =>
     index.value?.get(level, code)?.b;
 
 function selectUnit(
     unit: Unit | null,
-    { push = true, fit = true, animate = true } = {},
+    { push = true, fit = true, animate = true, recentre = true } = {},
 ) {
     overlayInfo.value = null;
+    tip.value = null;
+    highlightSeat.value = undefined;
+    highlightParty.value = undefined;
+    legendOpen.value = legendOpenAfterSelect(legendOpen.value, {
+        desktop: isDesktop.value,
+        wasFocused: selection.value !== null,
+        focusing: unit !== null,
+    });
     selection.value = unit;
-    autoCentre.value = true;
+    applyPadding();
+    autoCentre.value = recentre;
     view.value = 'unit';
     const map = mapRef.value;
+    map?.setFocus(focusOf(unit));
     if (!unit) {
         map?.clearSelection();
+        announce.value = announceSelection(null, []);
         if (fit) map?.fitKenya(animate);
         if (push) replaceUrl('/', null);
         document.title = 'Kenya Electoral Map';
@@ -264,8 +312,29 @@ function selectUnit(
                 name: a.n,
             })),
         });
-    announce.value = `Selected: ${unit.n} ${LEVEL_NAME[unit.l]}, ${ancestors.map((a) => a.n).join(', ')}`;
+    announce.value = announceSelection(unit, ancestors);
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+// The person zoomed out of the focused unit: the focus (and the panel) move up to its parent, and
+// the camera stays where their gesture left it.
+function onZoomOut(next: FocusSelection | null) {
+    const unit = next
+        ? (index.value?.get(next.level, next.code) ?? null)
+        : null;
+    selectUnit(unit, { fit: false, recentre: false });
+}
+
+function onPickPerson({ holder, unit }: PersonResult) {
+    selectUnit(unit ?? null);
+    if (unit) highlightSeat.value = holder.seat;
+    else highlightParty.value = holder.party ?? undefined;
+    // Say who was picked and where it is shown; selecting the unit only announced the unit.
+    announce.value = announcePerson(
+        { name: holder.name, title: SEAT_TITLE[holder.seat] },
+        unit ?? null,
+    );
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
 
@@ -276,6 +345,10 @@ const onPick = (p: Picked) =>
 watch(
     () => mapRef.value?.ready,
     (ready) => {
+        if (ready) {
+            mapRef.value?.setShowSurroundings(showSurroundings.value);
+            mapRef.value?.setFocus(focusOf(selection.value));
+        }
         if (ready && selection.value && selection.value.l !== 'province')
             mapRef.value?.select(selection.value.l, selection.value.c, {
                 fit: true,
@@ -337,16 +410,12 @@ function applyPadding() {
     const map = mapRef.value;
     if (!map) return;
     map.setPadding(
-        isDesktop.value
-            ? { left: 380 + 24, bottom: 24, top: 80, right: 72 }
-            : {
-                  left: 16,
-                  right: 64,
-                  top: 72,
-                  bottom:
-                      Math.min(sheetHeight.value, window.innerHeight * 0.6) +
-                      16,
-              },
+        mapPadding({
+            desktop: isDesktop.value,
+            sheetHeight: sheetHeight.value,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            legendOpen: legendBoxOpen.value,
+        }),
     );
 }
 let recentreTimer = 0;
@@ -358,18 +427,14 @@ function scheduleRecentre() {
         200,
     );
 }
-watch([sheetHeight, isDesktop, () => mapRef.value?.ready], scheduleRecentre);
+watch(
+    [sheetHeight, isDesktop, legendBoxOpen, () => mapRef.value?.ready],
+    scheduleRecentre,
+);
 useEventListener(window, 'resize', scheduleRecentre);
 
-// When the person zooms out past a level, the panel follows to the selection's ancestor at that level.
-const panelUnit = computed(() => {
-    const s = selection.value;
-    const zoom = mapRef.value?.zoom ?? 0;
-    if (!s || autoCentre.value || !index.value) return s;
-    const level = levelForZoom(zoom);
-    if (DEPTH[s.l] <= DEPTH[level]) return s;
-    return index.value.ancestors(s.l, s.c).find((a) => a.l === level) ?? s;
-});
+// Zooming out steps the selection up (see onZoomOut), so the panel always shows the selection.
+const panelUnit = computed(() => selection.value);
 
 const townsIn = computed(() => {
     const u = panelUnit.value;
@@ -485,6 +550,7 @@ const showView = (v: typeof view.value) => {
             ref="mapRef"
             :manifest="manifest"
             :province-of-county="provinceOfCounty"
+            :index="index"
             :bounds-of="boundsOf"
             :theme="theme"
             :colouring="colouring"
@@ -497,6 +563,8 @@ const showView = (v: typeof view.value) => {
                 view = 'list';
             "
             @user-move="autoCentre = false"
+            @outside-click="zoomOut"
+            @zoom-out="onZoomOut"
             @overlay-click="onOverlayClick"
         />
         <p
@@ -510,7 +578,12 @@ const showView = (v: typeof view.value) => {
         <div
             class="absolute top-3 right-3 left-3 z-20 flex gap-2 md:left-[400px] md:max-w-md"
         >
-            <SearchBox :index="index" @pick="(u) => selectUnit(u)" />
+            <SearchBox
+                :index="index"
+                :holders="seats.holders"
+                @pick="(u) => selectUnit(u)"
+                @pick-person="onPickPerson"
+            />
             <button
                 type="button"
                 class="relative flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-hairline bg-surface px-3 text-[15px] text-ink shadow-sm"
@@ -564,10 +637,16 @@ const showView = (v: typeof view.value) => {
             :style="{ bottom: isDesktop ? '24px' : `${sheetHeight + 12}px` }"
         >
             <Legend
+                v-model:open="legendOpen"
                 :title="legend.title"
+                :max-height="legendMaxHeight"
+                :chip-label="legend.chipLabel"
                 :rows="legend.rows"
                 :note="legend.note"
-                :collapsed="!isDesktop"
+                :highlighted="legend.highlighted"
+                :filtered="legend.filtered"
+                @toggle="toggleParty"
+                @clear="onlyParties = []"
             />
         </div>
 
@@ -682,12 +761,15 @@ const showView = (v: typeof view.value) => {
                     :index="index"
                     :seats="seats"
                     :towns="townsIn"
+                    :highlight-seat="highlightSeat"
+                    v-model:show-surroundings="showSurroundings"
                     @go="(u) => selectUnit(u)"
                     @share="shareUnit"
                 />
                 <NationalOverview
                     v-else
                     :seats="seats"
+                    :highlight-party="highlightParty"
                     @colour-by="(s) => (colourKey = s)"
                     @share="exportNational = true"
                 />
@@ -704,6 +786,7 @@ const showView = (v: typeof view.value) => {
             :province-of-county="provinceOfCounty"
             :theme="THEMES[theme]"
             :colouring="colouring"
+            :show-surroundings="showSurroundings"
             @update:open="(v) => !v && (exportUnit = null)"
         />
         <InPowerExport

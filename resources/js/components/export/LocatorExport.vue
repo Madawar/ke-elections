@@ -28,10 +28,12 @@ const props = withDefaults(
         provinceOfCounty: Map<number, number>;
         theme: MapTheme;
         colouring: Colouring;
+        /** Draw the surroundings faintly instead of leaving them out, as on the map. */
+        showSurroundings?: boolean;
         /** Set when the card shows sample records (none today: the holders are real). */
         sample?: boolean;
     }>(),
-    { sample: false },
+    { sample: false, showSurroundings: false },
 );
 const open = defineModel<boolean>('open', { default: false });
 
@@ -72,6 +74,10 @@ function prepare(size: CardSize) {
             provinceOfCounty: props.provinceOfCounty,
             theme: props.theme,
             colouring: props.colouring,
+            focus: {
+                index: props.index,
+                showSurroundings: props.showSurroundings,
+            },
         },
         props.unit,
         countyCode.value,
@@ -88,7 +94,7 @@ function prepare(size: CardSize) {
         :share-title="`${name}, Kenya Electoral Map`"
         :filename="(s) => exportFilename(unit.l, unit.c, s)"
         :prepare="prepare"
-        :inputs="[unit, theme, colouring, seats]"
+        :inputs="[unit, theme, colouring, seats, showSurroundings]"
     >
         <template #default="{ size, images, mapStatus }">
             <LocatorCard

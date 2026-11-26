@@ -1,4 +1,5 @@
 import type {
+    FilterSpecification,
     GeoJSONSource,
     Map as MapLibreMap,
     MapGeoJSONFeature,
@@ -7,6 +8,14 @@ import type {
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import { type Colouring, pinnedLevel } from '@/lib/map/colouring';
+import {
+    type FocusSelection,
+    combineFilter,
+    focusFilters,
+    focusOutside,
+    stepUpFor,
+} from '@/lib/map/focus';
+import { centreOn } from '@/lib/map/camera';
 import {
     KENYA_BOUNDS,
     MAX_BOUNDS,
@@ -19,6 +28,7 @@ import { MAP_LEVELS, SOURCE_OF, buildStyle, fileUrl } from '@/lib/map/style';
 import type { ThemeName } from '@/lib/map/theme';
 import { THEMES } from '@/lib/map/theme';
 import { supportsWebGL2 } from '@/lib/map/webgl';
+import type { UnitIndex } from '@/lib/units';
 
 export type Bounds = [number, number, number, number];
 export interface Picked {
@@ -29,6 +39,8 @@ export interface Picked {
 export interface UseMapOptions {
     manifest: Record<string, string>;
     provinceOfCounty: Map<number, number>;
+    /** The unit directory: focus mode reads which units sit inside the selected one. */
+    index: UnitIndex;
     theme: Ref<ThemeName>;
     colouring: Ref<Colouring>;
     overlays: Ref<MapOverlay[]>;
@@ -41,6 +53,13 @@ export interface UseMapOptions {
         overlay: MapOverlay,
         properties: Record<string, unknown>,
     ) => void;
+    /** A tap landed on the map, outside the focused unit (the page steps up one level). */
+    onOutsideClick?: () => void;
+    /**
+     * The person zoomed out of the focused unit, so the focus moves up (null: all of Kenya). The
+     * camera is already where they put it; the page only updates the selection.
+     */
+    onZoomOut?: (next: FocusSelection | null) => void;
     onUnsupported: () => void;
     /** The user moved the camera by hand (auto-centre pauses until the next selection). */
     onUserMove?: () => void;
@@ -59,8 +78,14 @@ export function useMap(
     const ready = ref(false);
     const zoom = ref(5.5);
     let selected: Picked | null = null;
+    let focus: FocusSelection | null = null;
+    let surroundings = false;
+    /** True while a camera move that the page started (not the person) is under way. */
+    let ownMove = false;
     let hovered: Picked | null = null;
     let wardsLoaded = false;
+    /** The ward source has its geometry (the data was set and the worker has finished with it). */
+    let wardsReady = false;
     let wantWards = false;
     let disposed = false;
     let padding: Padding = { top: 72, bottom: 24, left: 24, right: 24 };
@@ -69,14 +94,34 @@ export function useMap(
         typeof window !== 'undefined' &&
         window.matchMedia?.('(hover: hover)').matches;
 
-    const style = () =>
-        buildStyle({
+    /**
+     * The focus the map draws. A ward focus draws its parent constituency until the ward geometry
+     * has loaded, so the map is never blank while the wards source is still empty.
+     */
+    function drawnFocus(): FocusSelection | null {
+        if (focus?.level !== 'ward' || wardsReady) return focus;
+        const parent = opts.index.get('ward', focus.code)?.p;
+        return parent === null || parent === undefined
+            ? focus
+            : { level: 'constituency', code: parent };
+    }
+
+    const style = () => {
+        const drawn = drawnFocus();
+        return buildStyle({
             manifest: opts.manifest,
             theme: THEMES[opts.theme.value],
             colouring: opts.colouring.value,
             provinceOfCounty: opts.provinceOfCounty,
             wards: wardsLoaded,
+            focus: drawn
+                ? {
+                      outside: surroundings ? focusOutside(drawn) : undefined,
+                      level: drawn.level,
+                  }
+                : undefined,
         });
+    };
 
     /** Fill the (initially empty) ward source; deferred until the style has loaded. */
     function ensureWards() {
@@ -85,7 +130,14 @@ export function useMap(
         const source = m?.getSource('wards') as GeoJSONSource | undefined;
         if (!m || wardsLoaded || !source) return;
         wardsLoaded = true;
-        void source.setData(fileUrl(opts.manifest, 'wards.geojson'));
+        source
+            .setData(fileUrl(opts.manifest, 'wards.geojson'))
+            .then(() => {
+                wardsReady = true;
+                // A ward focus was drawn as its constituency while this loaded.
+                if (focus?.level === 'ward') restyle();
+            })
+            .catch(() => {});
     }
 
     function setState(
@@ -123,6 +175,7 @@ export function useMap(
                     );
             }
         }
+        applyFocus();
     }
 
     /**
@@ -154,14 +207,69 @@ export function useMap(
             if (visibility && !overlayLayers.has(layer.id))
                 m.setLayoutProperty(layer.id, 'visibility', visibility);
         }
+        applyFocus();
     }
 
-    function fit(bounds: Bounds, animate = true) {
-        map.value?.fitBounds(bounds, {
-            padding,
-            maxZoom: 13,
-            duration: animate ? 600 : 0,
+    /** Every layer's filter: its own, plus the focus filter while a unit is focused. */
+    function applyFocus() {
+        const m = map.value;
+        if (!m || !ready.value) return;
+        const theme = THEMES[opts.theme.value];
+        const filters = focusFilters(drawnFocus(), opts.index, {
+            surroundings,
         });
+        const layers = [
+            ...style().layers,
+            ...opts.overlays.value.flatMap((o) =>
+                o.layers(theme, overlaySourceId(o)),
+            ),
+        ];
+        for (const layer of layers) {
+            if (!(layer.id in filters) || !m.getLayer(layer.id)) continue;
+            const base = (layer as { filter?: FilterSpecification }).filter;
+            m.setFilter(layer.id, combineFilter(base, filters[layer.id]));
+        }
+    }
+
+    /** Run a camera move of the page's own; its zoom events are not the person zooming out. */
+    function ownCamera(move: (m: MapLibreMap) => void) {
+        const m = map.value;
+        if (!m) return;
+        ownMove = true;
+        move(m);
+        // A move that changed nothing fires no end event to clear the flag.
+        if (!m.isMoving()) ownMove = false;
+    }
+
+    /**
+     * While a unit is focused, wheel and pinch zoom around the middle of the visible map (the map's
+     * padding moves that middle clear of the sheet or panel), so the unit stays put as it shrinks.
+     */
+    function applyZoomAnchor() {
+        const m = map.value;
+        if (!m) return;
+        // enable() does nothing while a handler is already on, so switch it off first.
+        const options = focus ? { around: 'center' as const } : undefined;
+        m.scrollZoom.disable();
+        m.scrollZoom.enable(options);
+        m.touchZoomRotate.disable();
+        m.touchZoomRotate.enable(options);
+    }
+
+    /**
+     * Fit the bounds inside the padding, and keep that padding on the map (absolutePadding), so
+     * the map's own middle is the middle of the visible area and zooming around the centre keeps
+     * the unit where it is. Plain padding would only shape this one fit.
+     */
+    function fit(bounds: Bounds, animate = true) {
+        ownCamera((m) =>
+            m.fitBounds(bounds, {
+                padding,
+                absolutePadding: true,
+                maxZoom: 14,
+                duration: animate ? 600 : 0,
+            }),
+        );
     }
 
     function select(
@@ -206,6 +314,31 @@ export function useMap(
         return null;
     }
 
+    /** Is the tap on the focused unit itself (it can be too small to pick at this zoom)? */
+    function onFocusedUnit(e: MapMouseEvent): boolean {
+        const m = map.value;
+        if (!m || !focus) return false;
+        return m
+            .queryRenderedFeatures(e.point, {
+                layers: [`${SOURCE_OF[focus.level]}-fill`],
+            })
+            .some((f) => f.id === focus!.code);
+    }
+
+    /** The zoom the camera would fit this unit at, with the current padding. */
+    function fitZoomOf(sel: FocusSelection): number {
+        const bounds = opts.boundsOf(sel.level, sel.code);
+        const camera =
+            bounds && map.value
+                ? map.value.cameraForBounds(bounds, {
+                      padding,
+                      absolutePadding: true,
+                      maxZoom: 14,
+                  })
+                : undefined;
+        return camera?.zoom ?? 0;
+    }
+
     onMounted(async () => {
         if (!container.value) return;
         if (!supportsWebGL2()) {
@@ -243,6 +376,7 @@ export function useMap(
         m.on('error', (e) => console.warn('[map]', e.error?.message ?? e));
         m.on('load', () => {
             ready.value = true;
+            applyZoomAnchor();
             addOverlays();
             if (wantWards || pinnedLevel(opts.colouring.value.mode) === 'ward')
                 ensureWards();
@@ -262,6 +396,32 @@ export function useMap(
         m.on('zoomstart', (e) => {
             if ((e as { originalEvent?: Event }).originalEvent)
                 opts.onUserMove?.();
+        });
+        // The page's own camera moves (fitting a unit) zoom too, and must not step the focus.
+        m.on('moveend', () => (ownMove = false));
+        m.on('zoomend', () => {
+            if (ownMove || !focus) return;
+            const next = stepUpFor(focus, m.getZoom(), fitZoomOf, opts.index);
+            if (next?.level === focus.level && next?.code === focus.code)
+                return;
+            opts.onZoomOut?.(next);
+            // Centre the new unit at the zoom the person is at; never zoom back in. Stepping out to
+            // all of Kenya leaves the camera alone: they are mid zoom-out beside the unit they
+            // were viewing, and a jump to the middle of the country would be disorienting.
+            const bounds = next && opts.boundsOf(next.level, next.code);
+            if (bounds)
+                ownCamera((map) =>
+                    map.easeTo(
+                        centreOn(
+                            bounds,
+                            padding,
+                            map.getZoom(),
+                            window.matchMedia?.(
+                                '(prefers-reduced-motion: reduce)',
+                            ).matches,
+                        ),
+                    ),
+                );
         });
         m.on('click', (e) => {
             for (const overlay of opts.overlays.value) {
@@ -284,6 +444,7 @@ export function useMap(
             }
             const unit = pick(e);
             if (unit) opts.onSelect(unit);
+            else if (focus && !onFocusedUnit(e)) opts.onOutsideClick?.();
         });
         if (canHover) {
             m.on('mousemove', (e) => {
@@ -330,6 +491,18 @@ export function useMap(
         zoom,
         select,
         clearSelection,
+        /** Show only this unit (and what is inside it); null shows everything again. */
+        setFocus(sel: FocusSelection | null) {
+            focus = sel;
+            if (sel?.level === 'ward') ensureWards();
+            applyZoomAnchor();
+            restyle();
+        },
+        /** Keep the rest of the map faintly in view, in grey, instead of hiding it. */
+        setShowSurroundings(on: boolean) {
+            surroundings = on;
+            restyle();
+        },
         fit,
         fitKenya: (animate = true) => fit(KENYA_BOUNDS, animate),
         setPadding(p: Partial<Padding>) {
@@ -339,11 +512,13 @@ export function useMap(
         zoomIn: () => map.value?.zoomIn(),
         zoomOutStep: () => map.value?.zoomOut(),
         flyTo: (lng: number, lat: number, z = 11) =>
-            map.value?.flyTo({
-                center: [lng, lat],
-                zoom: z,
-                padding,
-                duration: 800,
-            }),
+            ownCamera((m) =>
+                m.flyTo({
+                    center: [lng, lat],
+                    zoom: z,
+                    padding,
+                    duration: 800,
+                }),
+            ),
     };
 }

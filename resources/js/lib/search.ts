@@ -1,5 +1,6 @@
 // Name search over the unit directory. Matching is on normalised name tokens; results carry
 // their ancestors so the UI can show "Huruma, Mathare, Nairobi City".
+import type { Holder } from './seats';
 import type { Level, Unit, UnitIndex } from './units';
 
 export interface SearchResult {
@@ -69,4 +70,132 @@ export function searchUnits(
         unit,
         ancestors: index.ancestors(unit.l, unit.c),
     }));
+}
+
+export interface PersonResult {
+    holder: Holder;
+    /** The unit the seat belongs to. Absent for nominated members. */
+    unit?: Unit;
+    /** The unit's ancestors, nearest first. A nominated MCA carries just their county. */
+    ancestors: Unit[];
+}
+
+const SEAT_ORDER: Holder['seat'][] = [
+    'governor',
+    'senator',
+    'woman_rep',
+    'mp',
+    'mca',
+    'nominated_senator',
+    'nominated_mp',
+    'nominated_mca',
+];
+
+// Normalised names, worked out once per holders array instead of on every keystroke.
+const normalisedNames = new WeakMap<Holder[], string[]>();
+function namesOf(holders: Holder[]): string[] {
+    let names = normalisedNames.get(holders);
+    if (!names || names.length !== holders.length) {
+        names = holders.map((h) => normalise(h.name));
+        normalisedNames.set(holders, names);
+    }
+    return names;
+}
+
+/** Current office holders whose name matches the query, as in searchUnits: every token prefix-matches. */
+export function searchPeople(
+    holders: Holder[],
+    index: UnitIndex,
+    query: string,
+    limit = 6,
+): PersonResult[] {
+    const q = normalise(query);
+    if (q === '' || limit <= 0) return [];
+    const queryTokens = q.split(' ');
+    const names = namesOf(holders);
+
+    const hits: {
+        holder: Holder;
+        /** Absent for national members; a nominated MCA's is their county. */
+        unit?: Unit;
+        rank: number;
+        name: string;
+    }[] = [];
+    holders.forEach((holder, i) => {
+        const name = names[i];
+        const rank = matchRank(name, q, queryTokens);
+        if (rank === null) return;
+        if (holder.level === 'national') {
+            hits.push({ holder, rank, name });
+            return;
+        }
+        const unit =
+            holder.seat === 'nominated_mca'
+                ? index.get('county', holder.code)
+                : index.get(holder.level, holder.code);
+        if (unit) hits.push({ holder, unit, rank, name });
+    });
+
+    hits.sort(
+        (a, b) =>
+            a.rank - b.rank ||
+            SEAT_ORDER.indexOf(a.holder.seat) -
+                SEAT_ORDER.indexOf(b.holder.seat) ||
+            a.name.localeCompare(b.name),
+    );
+    // Ancestors are worked out only for the few rows that are shown.
+    return hits.slice(0, limit).map(({ holder, unit }) => {
+        if (!unit) return { holder, ancestors: [] };
+        if (holder.seat === 'nominated_mca')
+            return { holder, ancestors: [unit] };
+        return {
+            holder,
+            unit,
+            ancestors: index.ancestors(unit.l, unit.c),
+        };
+    });
+}
+
+export const SEAT_TITLE: Record<Holder['seat'], string> = {
+    governor: 'Governor',
+    senator: 'Senator',
+    woman_rep: 'Woman Representative',
+    mp: 'MP',
+    mca: 'MCA',
+    nominated_senator: 'Nominated Senator',
+    nominated_mp: 'Nominated MP',
+    nominated_mca: 'Nominated MCA',
+};
+
+/**
+ * The second line of a person row, such as "MP, Mathare, Nairobi City (ODM)". The party shows as its
+ * abbreviation; `partyName` is only asked to spell out independents.
+ */
+export function describePerson(
+    r: PersonResult,
+    partyName?: (abbrev: string) => string | undefined,
+): string {
+    const { holder, unit, ancestors } = r;
+    const party = holder.party
+        ? ` (${holder.party === 'IND' ? (partyName?.('IND') ?? 'Independent') : holder.party})`
+        : '';
+    const title = SEAT_TITLE[holder.seat];
+    const county = ancestors.find((a) => a.l === 'county');
+
+    switch (holder.seat) {
+        case 'governor':
+        case 'senator':
+        case 'woman_rep':
+            return `${title}, ${unit?.n} County${party}`;
+        case 'mp':
+            return `${title}, ${unit?.n}, ${county?.n}${party}`;
+        case 'mca': {
+            const constituency = ancestors.find((a) => a.l === 'constituency');
+            return `${title}, ${unit?.n} ward, ${constituency?.n}, ${county?.n}${party}`;
+        }
+        case 'nominated_mca':
+            return `${title}, ${county?.n}${party}`;
+        default:
+            return `${title}${party}`;
+    }
 }

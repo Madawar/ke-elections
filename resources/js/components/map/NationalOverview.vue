@@ -2,9 +2,18 @@
 import { formatAsOf } from '@/lib/export/format';
 import { computed } from 'vue';
 import Hemicycle from './Hemicycle.vue';
-import { type SeatsData, chamberGroups, seatLegend } from '@/lib/seats';
+import {
+    type SeatsData,
+    chamberGroups,
+    chamberHighlight,
+    seatLegend,
+} from '@/lib/seats';
 
-const props = defineProps<{ seats: SeatsData }>();
+const props = defineProps<{
+    seats: SeatsData;
+    /** Abbreviation of a party whose seats to emphasise in both chambers. */
+    highlightParty?: string;
+}>();
 const emit = defineEmits<{
     colourBy: [seat: 'governor' | 'mp' | 'senator' | 'woman_rep'];
     share: [];
@@ -19,6 +28,31 @@ const caption = computed(
 );
 const na = computed(() => chamberGroups(props.seats, 'national_assembly'));
 const senate = computed(() => chamberGroups(props.seats, 'senate'));
+// The group to emphasise in each chamber: the party's own, or "Other" when it has no colour of
+// its own; nothing in a chamber where it holds no seats.
+const naHighlight = computed(() =>
+    chamberHighlight(
+        na.value,
+        props.seats.chambers.national_assembly,
+        props.highlightParty,
+    ),
+);
+const senateHighlight = computed(() =>
+    chamberHighlight(
+        senate.value,
+        props.seats.chambers.senate,
+        props.highlightParty,
+    ),
+);
+const inOther = computed(
+    () => naHighlight.value === 'other' || senateHighlight.value === 'other',
+);
+const highlightName = computed(() => {
+    const abbrev = props.highlightParty;
+    if (!abbrev) return '';
+    if (abbrev === 'IND') return 'Independent';
+    return props.seats.parties.find((p) => p.abbrev === abbrev)?.name ?? abbrev;
+});
 const governors = computed(() => seatLegend(props.seats, 'governor'));
 const hasData = computed(() => props.seats.holders.length > 0);
 </script>
@@ -28,6 +62,24 @@ const hasData = computed(() => props.seats.holders.length > 0);
         <p class="text-[14px] text-muted-ink">
             Tap a county to see its seats, then keep tapping to reach
             constituencies and wards.
+        </p>
+        <p
+            v-if="highlightParty"
+            class="border-l-4 border-ink pl-3 text-[14px]"
+            role="status"
+        >
+            <template v-if="!naHighlight && !senateHighlight"
+                >{{ highlightName }} holds no seats in the National Assembly or
+                the Senate.</template
+            >
+            <template v-else-if="inOther"
+                >{{ highlightName }} is counted in the highlighted Other group
+                below.</template
+            >
+            <template v-else
+                >Seats held by {{ highlightName }} are highlighted
+                below.</template
+            >
         </p>
         <template v-if="hasData">
             <button
@@ -42,6 +94,7 @@ const hasData = computed(() => props.seats.holders.length > 0);
                     title="National Assembly"
                     :groups="na"
                     :total="349"
+                    :highlight="naHighlight"
                     :caption="caption"
                 />
                 <button
@@ -57,6 +110,7 @@ const hasData = computed(() => props.seats.holders.length > 0);
                     title="Senate"
                     :groups="senate"
                     :total="67"
+                    :highlight="senateHighlight"
                     :caption="caption"
                 />
                 <button
