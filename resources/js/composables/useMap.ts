@@ -380,10 +380,10 @@ export function useMap(
             if (next?.level === focus.level && next?.code === focus.code)
                 return;
             opts.onZoomOut?.(next);
-            // Centre the new unit (or Kenya) at the zoom the person is at; never zoom back in.
-            const bounds = next
-                ? opts.boundsOf(next.level, next.code)
-                : KENYA_BOUNDS;
+            // Centre the new unit at the zoom the person is at; never zoom back in. Stepping out to
+            // all of Kenya leaves the camera alone: they are mid zoom-out beside the unit they
+            // were viewing, and a jump to the middle of the country would be disorienting.
+            const bounds = next && opts.boundsOf(next.level, next.code);
             if (bounds)
                 ownCamera((map) =>
                     map.easeTo(

@@ -410,13 +410,12 @@ describe('useMap focus', () => {
             expect(out.zoomOut).toHaveBeenCalledTimes(2);
         });
 
-        it('centres Kenya when the focus steps out to all of it', () => {
+        it('leaves the camera alone when the focus steps out to all of Kenya', () => {
             out.api!.setFocus({ level: 'county', code: 47 });
             userZoom(4);
             expect(out.zoomOut).toHaveBeenCalledWith(null);
-            const [options] = map().easeTo.mock.calls[0];
-            expect(options.zoom).toBe(4);
-            expect(options.center[0]).toBeCloseTo((33.9 + 41.91) / 2);
+            expect(map().easeTo).not.toHaveBeenCalled();
+            expect(map().fitBounds).not.toHaveBeenCalled();
         });
 
         it('does not ease when nothing steps', () => {
