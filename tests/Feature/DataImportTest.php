@@ -8,6 +8,7 @@ use App\Models\Party;
 use App\Models\PartyAlias;
 use App\Models\Unit;
 use Database\Seeders\UnitsSeeder;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 
@@ -30,6 +31,40 @@ function runImport(string $kind, string $file, array $options = []): array
     $code = Artisan::call('data:import', ['kind' => $kind, 'file' => importFixture($file)] + $options);
 
     return [$code, Artisan::output()];
+}
+
+const HOLDERS_HEADER = 'seat,unit_level,unit_code,unit_name_in_source,holder_name,party_abbrev,party_name_in_source,basis,started_on,ended_on,confidence,source_url,notes';
+
+/**
+ * Import CSV text written to a temp file (header line first).
+ *
+ * @param  list<string>  $lines
+ * @return array{0:int,1:string} exit code and output
+ */
+function runImportCsv(string $kind, array $lines): array
+{
+    $path = tempnam(sys_get_temp_dir(), $kind).'.csv';
+    file_put_contents($path, implode("\n", $lines)."\n");
+    $options = $kind === 'parties' ? ['--colours' => importFixture('party_colours.csv')] : [];
+
+    try {
+        $code = Artisan::call('data:import', ['kind' => $kind, 'file' => $path] + $options);
+    } finally {
+        @unlink($path);
+    }
+
+    return [$code, Artisan::output()];
+}
+
+/** @return list<string> holders rows for $n fictional nominated holders of $seat */
+function nominatedRows(string $seat, int $n, string $prefix = 'Sample Nominee', string $endedOn = ''): array
+{
+    $level = $seat === 'nominated_mca' ? 'county,1,Mombasa' : 'national,0,';
+
+    return array_map(
+        fn (int $i) => "{$seat},{$level},{$prefix} {$i},SPA,Sample Party A,nominated,2022-09-08,{$endedOn},high,https://example.org/gazette/2022/10000,Sample data",
+        range(1, $n),
+    );
 }
 
 beforeEach(function () {
@@ -79,6 +114,28 @@ describe('parties import', function () {
         expect(ImportBatch::where('kind', 'parties')->count())->toBe(1)
             ->and(Audit::where('auditable_type', 'party')->count())->toBe(3)
             ->and(Audit::where('auditable_type', 'party_alias')->count())->toBe(1);
+    });
+
+    test('rejects an alias that already belongs to a different party in the database', function () {
+        runImport('parties', 'parties.csv');
+
+        [$code, $out] = runImportCsv('parties', [
+            'abbrev,name,status,coalition_2022,renamed_from,renamed_on,orpp_colours_text,source_url,notes',
+            'SPA,Sample Party A,fully registered,Sample Coalition One,OSP,2025-01-01,Red and white,https://example.org/orpp/register,',
+        ]);
+
+        expect($code)->toBe(1)
+            ->and($out)->toContain('Line 2:')
+            ->and($out)->toContain('OSP')
+            ->and($out)->toContain('SPB')
+            ->and(PartyAlias::where('alias', 'OSP')->sole()->party->abbrev)->toBe('SPB');
+    });
+
+    test('re-importing an alias for the party that already has it is fine', function () {
+        runImport('parties', 'parties.csv');
+        [$code, $out] = runImport('parties', 'parties.csv');
+
+        expect($code)->toBe(0, $out)->and($out)->toContain('3 unchanged');
     });
 
     test('leaves colours null when there is no colours file', function () {
@@ -269,6 +326,66 @@ describe('holders import', function () {
             ->and($audit->new['ended_on'])->toBe('2024-12-31');
     });
 
+    test('rejects independents on nominated (party-list) seats', function (string $seat) {
+        $rows = nominatedRows($seat, 1);
+        $rows[0] = str_replace('SPA,Sample Party A', 'IND,Independent', $rows[0]);
+
+        [$code, $out] = runImportCsv('holders', [HOLDERS_HEADER, $rows[0]]);
+
+        expect($code)->toBe(1)
+            ->and($out)->toContain('Line 2:')
+            ->and($out)->toContain('party_abbrev')
+            ->and($out)->toContain($seat)
+            ->and(OfficeHolder::count())->toBe(0);
+    })->with(['nominated_mp', 'nominated_senator', 'nominated_mca']);
+
+    test('caps current nominated holders per chamber', function (string $seat, int $cap) {
+        [$code, $out] = runImportCsv('holders', [HOLDERS_HEADER, ...nominatedRows($seat, $cap)]);
+        expect($code)->toBe(0, $out)->and(OfficeHolder::where('seat', $seat)->count())->toBe($cap);
+
+        // Former holders do not count against the cap.
+        [$code, $out] = runImportCsv('holders', [HOLDERS_HEADER, ...nominatedRows($seat, 3, 'Sample Former', '2023-01-01')]);
+        expect($code)->toBe(0, $out);
+
+        // One more current holder, counting the ones already in the database.
+        [$code, $out] = runImportCsv('holders', [HOLDERS_HEADER, ...nominatedRows($seat, 1, 'Sample Extra')]);
+        expect($code)->toBe(1)
+            ->and($out)->toContain('Line 2:')
+            ->and($out)->toContain((string) ($cap + 1))
+            ->and($out)->toContain("at most {$cap}")
+            ->and(OfficeHolder::where('seat', $seat)->count())->toBe($cap + 3);
+    })->with([['nominated_mp', 12], ['nominated_senator', 20]]);
+
+    test('rejects too many current nominated holders within one file', function () {
+        [$code, $out] = runImportCsv('holders', [HOLDERS_HEADER, ...nominatedRows('nominated_mp', 13)]);
+
+        expect($code)->toBe(1)
+            ->and($out)->toContain('13')
+            ->and($out)->toContain('at most 12')
+            ->and(OfficeHolder::count())->toBe(0);
+    });
+
+    test('a re-imported file is not double-counted against the cap', function () {
+        $rows = [HOLDERS_HEADER, ...nominatedRows('nominated_senator', 20)];
+        runImportCsv('holders', $rows);
+        [$code, $out] = runImportCsv('holders', $rows);
+
+        expect($code)->toBe(0, $out)->and($out)->toContain('20 unchanged');
+    });
+
+    test('nominated MCAs have no cap', function () {
+        [$code, $out] = runImportCsv('holders', [HOLDERS_HEADER, ...nominatedRows('nominated_mca', 25)]);
+
+        expect($code)->toBe(0, $out)->and(OfficeHolder::count())->toBe(25);
+    });
+
+    test('a party that has holders cannot be deleted', function () {
+        runImport('holders', 'holders_valid.csv');
+
+        expect(fn () => Party::where('abbrev', 'SPA')->first()->delete())->toThrow(QueryException::class);
+        expect(OfficeHolder::whereNull('party_id')->count())->toBe(1); // only the independent
+    });
+
     test('rejects an unknown kind and missing headers', function () {
         expect(Artisan::call('data:import', ['kind' => 'people', 'file' => importFixture('holders_valid.csv')]))->toBe(1);
 
@@ -306,5 +423,27 @@ describe('nominations import', function () {
             ->and($out)->toContain('status')
             ->and($out)->toContain('Line 5:')
             ->and(Nomination::count())->toBe(0);
+    });
+
+    test('rejects independents on nominated (party-list) seats', function () {
+        [$code, $out] = runImportCsv('nominations', [
+            'election_year,seat,unit_level,unit_code,unit_name_in_source,candidate_name,party_abbrev,status,source_url,notes',
+            '2027,nominated_mp,national,0,,Sample Candidate One,SPA,nominated,https://example.org/nominations/1,',
+            '2027,nominated_senator,national,0,,Sample Candidate Two,IND,nominated,https://example.org/nominations/2,',
+            '2027,nominated_mca,county,1,Mombasa,Sample Candidate Three,ind,nominated,https://example.org/nominations/3,',
+        ]);
+
+        expect($code)->toBe(1)
+            ->and($out)->not->toContain('Line 2:')
+            ->and($out)->toContain('Line 3:')
+            ->and($out)->toContain('Line 4:')
+            ->and($out)->toContain('party_abbrev')
+            ->and(Nomination::count())->toBe(0);
+    });
+
+    test('a party that has nominations cannot be deleted', function () {
+        runImport('nominations', 'nominations_valid.csv');
+
+        expect(fn () => Party::where('abbrev', 'SPB')->first()->delete())->toThrow(QueryException::class);
     });
 });

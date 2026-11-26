@@ -45,7 +45,10 @@ class NominationsImporter extends Importer
                 $report->error($line, 'candidate_name: is required');
             }
 
-            [, $partyId] = $this->checkParty($line, $row['party_abbrev'], $report);
+            [$partyOk, $partyId] = $this->checkParty($line, $row['party_abbrev'], $report);
+            if ($partyOk && $partyId === null && $seat?->isNominated()) {
+                $report->error($line, "party_abbrev: seat {$seat->value} is a party-list seat; it cannot go to an independent (IND)");
+            }
 
             $status = NominationStatus::tryFrom(strtolower($row['status']));
             if ($status === null) {

@@ -18,7 +18,7 @@ class MapController extends Controller
         return Inertia::render('Map', ['unit' => null])->withViewData('meta', [
             'title' => self::SITE,
             'description' => 'Every county, constituency and ward in Kenya, with the seats they elect.',
-            'url' => $request->url(),
+            'url' => $this->canonicalUrl($request),
         ]);
     }
 
@@ -42,7 +42,15 @@ class MapController extends Controller
         ])->withViewData('meta', [
             'title' => sprintf('%s %s — %s', $unit['name'], ucfirst($level), self::SITE),
             'description' => $place.' Seats, office holders and 2027 nominations.',
-            'url' => $request->url(),
+            'url' => $this->canonicalUrl($request),
         ]);
+    }
+
+    /** og:url / canonical from config('app.url'), never the request's Host header. */
+    private function canonicalUrl(Request $request): string
+    {
+        $path = trim($request->path(), '/');
+
+        return rtrim((string) config('app.url'), '/').'/'.$path;
     }
 }

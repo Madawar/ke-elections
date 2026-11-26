@@ -92,6 +92,8 @@ class PartiesImporter extends Importer
                     $report->error($line, "renamed_from: '{$alias}' cannot be an alias here");
                 } elseif (isset($inFile[$aliasUpper]) || isset($dbParties[$aliasUpper])) {
                     $report->error($line, "renamed_from: '{$alias}' is itself a party abbrev; it cannot also be an alias");
+                } elseif (isset($dbAliases[$aliasUpper]) && strtoupper((string) $dbAliases[$aliasUpper]) !== $upper) {
+                    $report->error($line, "renamed_from: '{$alias}' is already the former name of {$dbAliases[$aliasUpper]}; it cannot move to {$abbrev}");
                 } elseif (isset($seenAliases[$aliasUpper])) {
                     $report->error($line, "renamed_from: '{$alias}' is already the former name of line {$seenAliases[$aliasUpper]}");
                 } else {

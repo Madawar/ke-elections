@@ -70,9 +70,11 @@ class SeatsController
         $chamber = fn (array $seats) => $this->counts(array_map(fn (Seat $s) => $bySeat[$s->value], $seats));
 
         $asOf = ImportBatch::query()->whereIn('kind', ['holders', 'parties'])->max('imported_at');
+        $dataAsOf = max(OfficeHolder::query()->max('started_on'), OfficeHolder::query()->max('ended_on'));
 
         return response()->json([
             'as_of' => $asOf ? substr((string) $asOf, 0, 10) : null,
+            'data_as_of' => $dataAsOf ? substr((string) $dataAsOf, 0, 10) : null,
             'parties' => $partyList,
             'holders' => $holders,
             'totals' => $totals,

@@ -21,7 +21,7 @@ return new class extends Migration
             $table->enum('unit_level', ['national', 'county', 'constituency', 'ward']);
             $table->unsignedSmallInteger('unit_code');
             $table->string('holder_name');
-            $table->foreignId('party_id')->nullable()->constrained()->nullOnDelete(); // null = independent
+            $table->foreignId('party_id')->nullable()->constrained()->restrictOnDelete(); // null = independent; a party with records can't be deleted
             $table->string('basis', 32);
             $table->date('started_on');
             $table->date('ended_on')->nullable();

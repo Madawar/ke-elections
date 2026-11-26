@@ -52,7 +52,8 @@ abbrev,name,status,coalition_2022,renamed_from,renamed_on,orpp_colours_text,sour
 - `status`: as the ORPP register gives it, for example `fully registered`.
 - `renamed_from` + `renamed_on`: the party's former abbreviation. It is stored in
   `party_aliases`, so older sources that use the old name still resolve, for example
-  WDM-K → Wiper. A former abbreviation cannot also be a current party.
+  WDM-K → Wiper. A former abbreviation cannot also be a current party, and an alias that is
+  already in the database for one party cannot be moved to another (that is an error).
 - `orpp_colours_text`: the colours registered with ORPP, kept as text for reference only.
 - `display_colour` (optional): `#RRGGBB`.
 
@@ -71,7 +72,7 @@ seat,unit_level,unit_code,unit_name_in_source,holder_name,party_abbrev,party_nam
 | nominated_mp, nominated_senator | national | 0 |
 
 - `party_abbrev`: a party abbreviation or alias. Use `IND` for an independent, which is
-  stored as `party_id = null`.
+  stored as `party_id = null`. Nominated seats are party-list seats, so they cannot be `IND`.
 - `basis`: `elected` or `by_election` for elected seats, `nominated` for nominated seats.
   Governors can also have `succession`, which records a deputy governor who took over the
   seat (Constitution Art. 182).
@@ -97,16 +98,25 @@ and unit rules are the same as for holders.
 - The unit code must exist in `units` for that level. `national` + `0` is allowed only for
   nominated MPs and Senators.
 - The seat must match the level, as in the table above.
-- The party must exist in `parties` or `party_aliases`, or be `IND`.
+- The party must exist in `parties` or `party_aliases`, or be `IND`. Nominated seats
+  (`nominated_mp`, `nominated_senator`, `nominated_mca`) cannot be `IND`, for holders and
+  nominations alike.
 - `source_url` is required and must be an http(s) URL.
 - Dates must be real `YYYY-MM-DD` dates, and `ended_on` can't be before `started_on`.
 - Holders: an elected seat and unit can have at most one current holder (`ended_on` empty).
   This counts the holders already in the database as well as the file. To record a
   by-election, put the outgoing holder's row in the same file with `ended_on` filled in.
+- Holders: at most 12 current `nominated_mp` (Art. 97(1)(c)) and 20 current
+  `nominated_senator` (16 women, 2 youth, 2 PWD; Art. 98(1)(b)-(d)), again counting the
+  database as well as the file. `nominated_mca` has no cap yet (it depends on each county
+  assembly).
 - Nominations: an elected seat and unit can have at most one `elected` candidate per year.
 - No duplicate rows on the natural key (below).
 
 ## Re-imports, batches and audits
+
+A party that has office holders or nominations cannot be deleted (the foreign keys are
+`ON DELETE RESTRICT`), so a deleted party never turns its holders into independents.
 
 Each record is upserted on its natural key:
 
@@ -141,6 +151,7 @@ max-age=300` with an ETag). It sends no cookies. It returns:
 ```json
 {
   "as_of": "2026-11-26",
+  "data_as_of": "2025-12-06",
   "parties": [{"abbrev": "...", "name": "...", "coalition_2022": "...", "colour": "#rrggbb"}],
   "holders": [{"seat": "mp", "level": "constituency", "code": 1, "name": "...", "party": "...",
                "basis": "elected", "started_on": "2022-09-08", "source_url": "...", "confidence": "high"}],
@@ -149,8 +160,10 @@ max-age=300` with an ETag). It sends no cookies. It returns:
 }
 ```
 
-- `as_of`: the date of the latest parties or holders import, or `null` if there hasn't been
-  one.
+- `as_of`: the date of the latest parties or holders import (when the data was loaded), or
+  `null` if there hasn't been one.
+- `data_as_of`: the date the data describes: the latest `started_on` or `ended_on` among all
+  office holders, or `null` when there are none.
 - `holders`: current terms only.
 - Independents are counted under `IND`, which is added to `parties` when an independent
   holds a seat.

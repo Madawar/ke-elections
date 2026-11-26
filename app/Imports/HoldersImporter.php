@@ -15,6 +15,14 @@ class HoldersImporter extends Importer
 
     public const CONFIDENCE = ['high', 'medium', 'low'];
 
+    /**
+     * Most current nominated holders a chamber can have: 12 nominated MPs (Constitution
+     * Art. 97(1)(c)); 20 nominated Senators, 16 women + 2 youth + 2 PWD (Art. 98(1)(b)-(d)).
+     * nominated_mca depends on each county assembly's gender and special-interest top-up,
+     * which we don't know yet, so it has no cap.
+     */
+    public const NOMINATED_CAPS = ['nominated_mp' => 12, 'nominated_senator' => 20];
+
     public function kind(): string
     {
         return 'holders';
@@ -43,7 +51,10 @@ class HoldersImporter extends Importer
                 $report->error($line, 'holder_name: is required');
             }
 
-            [, $partyId] = $this->checkParty($line, $row['party_abbrev'], $report);
+            [$partyOk, $partyId] = $this->checkParty($line, $row['party_abbrev'], $report);
+            if ($partyOk && $partyId === null && $seat?->isNominated()) {
+                $report->error($line, "party_abbrev: seat {$seat->value} is a party-list seat; it cannot be held by an independent (IND)");
+            }
 
             $basis = strtolower($row['basis']);
             if (! in_array($basis, self::BASES, true)) {
@@ -103,8 +114,48 @@ class HoldersImporter extends Importer
         }
 
         $this->checkOneCurrentHolder($prepared, $report);
+        $this->checkNominatedCaps($prepared, $report);
 
         return $prepared;
+    }
+
+    /**
+     * At most NOMINATED_CAPS current holders per capped nominated seat, counting the
+     * records already in the database (a row in this file replaces its database record).
+     *
+     * @param  list<array<string,mixed>>  $prepared
+     */
+    private function checkNominatedCaps(array $prepared, ImportReport $report): void
+    {
+        foreach (self::NOMINATED_CAPS as $seat => $cap) {
+            /** @var array<string, int|null> $current natural key => file line (null = already imported) */
+            $current = [];
+
+            OfficeHolder::query()->where('seat', $seat)->whereNull('ended_on')->each(function (OfficeHolder $h) use (&$current) {
+                $current[self::key($h->seat, $h->unit_level, $h->unit_code, $h->holder_name, $h->started_on->format('Y-m-d'))] = null;
+            });
+
+            foreach ($prepared as $p) {
+                if ($p['attributes']['seat'] !== $seat) {
+                    continue;
+                }
+                if ($p['attributes']['ended_on'] === null) {
+                    $current[$p['key']] = $p['line'];
+                } else {
+                    unset($current[$p['key']]); // this file ends a term that is current in the database
+                }
+            }
+
+            $lines = array_values(array_filter($current, fn ($line) => $line !== null));
+            if (count($current) <= $cap || $lines === []) {
+                continue;
+            }
+
+            $inDb = count($current) - count($lines);
+            $report->error($lines[0], "{$seat} would have ".count($current)." current holders, at most {$cap} allowed (lines "
+                .implode(', ', $lines).($inDb > 0 ? " plus {$inDb} already imported" : '')
+                .'). Set ended_on on the earlier term(s).');
+        }
     }
 
     /**
