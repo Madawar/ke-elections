@@ -250,15 +250,19 @@ function mixRows(
     };
 }
 
-/** Bar order for a row segment: a folded party sits inside Other parties, in the legend's order. */
+/**
+ * Bar order for a row segment: the bar's own order, a party folded for being small just before
+ * the grey "Other parties", which always comes last.
+ */
 function orderOf(
     key: string,
     segments: MixSegment[],
     order: (key: string) => number,
 ): number {
+    if (key === 'other') return Number.MAX_SAFE_INTEGER;
     const own = order(key);
     if (own < segments.length) return own;
     const other = segments.find((s) => s.key === 'other');
     const inside = other?.includes.findIndex((p) => p.key === key) ?? -1;
-    return order('other') + (inside < 0 ? 0.99 : inside / 100);
+    return segments.length + (inside < 0 ? 0.99 : (inside + 1) / 100);
 }

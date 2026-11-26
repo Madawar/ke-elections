@@ -12,7 +12,10 @@ import { footerBlock } from './layout';
 import { VIEW_SIZES, type ViewSize } from './sizes';
 import { fitFontSize, textWidth, wrapText } from './text';
 import {
+    type HolderBlockLayout,
     type MixBarLayout,
+    type MixPartInput,
+    holderBlock,
     type MixFonts,
     type MixLegendLayout,
     type MixRowItem,
@@ -75,6 +78,8 @@ export interface ViewLayout {
     /** Rows left out for room ("and N more constituencies"). */
     rowsMore: number;
     moreLine: TextItem | null;
+    /** A single seat: who holds it, in place of the bar, callouts and chart. */
+    holder: HolderBlockLayout | null;
     footerBox: Box;
     footerFonts: FooterFonts;
 }
@@ -747,6 +752,43 @@ export function viewLayout(
     const nCallouts = Math.max(1, calloutsFor(view).length);
     const nRows = Math.max(1, view.rows.length);
     const withRows = view.mix.rows.length > 0;
+    // Above the chart, the bar has exactly the chart's rows, so the two never disagree.
+    const chartParts: MixPartInput[] = view.rows.map((r) => ({
+        key: r.key,
+        colour: r.colour,
+        count: r.count,
+        share: r.share,
+        members: r.members,
+    }));
+    const callout = spec.callout;
+    const holderFonts = {
+        label: callout.label,
+        name: Math.round(callout.number * 0.5),
+        sub: callout.sub,
+    };
+    /** One seat: the map and who holds it, instead of the bar, callouts and chart. */
+    const single = (
+        t: ReturnType<typeof titleBlock>,
+        map: Box,
+        block: HolderBlockLayout,
+        footerBox: Box,
+    ): ViewLayout => ({
+        ...base(t, footerBox),
+        map,
+        calloutBox: none,
+        callouts: [],
+        chartBox: none,
+        chartTitle: null,
+        axis: box(0, 0, 0, 0),
+        rows: [],
+        mixBar: null,
+        mixLegend: null,
+        mixRows: [],
+        rowsBox: null,
+        rowsMore: 0,
+        moreLine: null,
+        holder: block,
+    });
     const none = box(pad, h - 1, 0, 0);
     const base = (t: ReturnType<typeof titleBlock>, footerBox: Box) => ({
         w,
@@ -787,6 +829,7 @@ export function viewLayout(
             rowsBox: null,
             rowsMore: 0,
             moreLine: null,
+            holder: null,
         };
     };
     /** Bar, legend and rows from `y` down to `bottom`, across `x`..`x + width`. */
@@ -829,6 +872,7 @@ export function viewLayout(
             rowsBox: r.box,
             rowsMore: r.more,
             moreLine: r.moreLine,
+            holder: null,
         };
     };
 
@@ -850,9 +894,20 @@ export function viewLayout(
         const colW = w - pad - colX;
         const t = titleBlock(colX, top, colW, spec, text.headline, scope);
         const barY = Math.round(t.bottom + gap * 0.7);
+        if (view.single)
+            return single(
+                t,
+                map,
+                holderBlock(colX, barY, colW, view, holderFonts)!,
+                footerBox,
+            );
         if (withRows)
             return withMixRows(t, map, colX, colW, barY, bodyBottom, footerBox);
-        const bar = mixBar(box(colX, barY, colW, spec.mix.bar), view);
+        const bar = mixBar(
+            box(colX, barY, colW, spec.mix.bar),
+            view,
+            chartParts,
+        );
         const lowerY = Math.round(barY + spec.mix.bar + gap * 0.8);
         const chartBox = box(
             colX,
@@ -895,31 +950,61 @@ export function viewLayout(
         fh,
     );
 
+    if (view.single) {
+        // The map, and beside it (a tall shape on a wide card) or under it, who holds the seat.
+        const t = titleBlock(pad, top, innerW, spec, text.headline, scope);
+        const bodyTop = Math.round(t.bottom + gap);
+        const bodyBottom = Math.round(footerBox.y - gap);
+        const side = size !== 'story' && text.mapAspect < 1.15;
+        if (side) {
+            const colX = pad + innerW - spec.colW;
+            const probe = holderBlock(colX, 0, spec.colW, view, holderFonts)!;
+            const blockY = Math.round(
+                bodyTop + Math.max(0, (bodyBottom - bodyTop - probe.box.h) / 2),
+            );
+            return single(
+                t,
+                box(
+                    pad,
+                    bodyTop,
+                    innerW - spec.colW - gap,
+                    bodyBottom - bodyTop,
+                ),
+                holderBlock(colX, blockY, spec.colW, view, holderFonts)!,
+                footerBox,
+            );
+        }
+        const probe = holderBlock(pad, 0, innerW, view, holderFonts)!;
+        const blockY = Math.round(bodyBottom - probe.box.h);
+        return single(
+            t,
+            box(pad, bodyTop, innerW, blockY - gap - bodyTop),
+            holderBlock(pad, blockY, innerW, view, holderFonts)!,
+            footerBox,
+        );
+    }
+
     if (withRows) {
         const bottom = Math.round(footerBox.y - gap);
-        // Few rows (a constituency's wards): the map goes full width above the mix and the
-        // rows, as large as the room they leave.
         const full = titleBlock(pad, top, innerW, spec, text.headline, scope);
         const bar = mixBar(box(pad, 0, innerW, spec.mix.bar), view);
         const legendH = mixLegend(0, 0, innerW, view, bar, spec.mix.legend).box
             .h;
-        const rowsNeed = view.mix.rows.length * spec.mix.rowMax;
-        const below =
-            spec.mix.bar + gap * 0.55 + legendH + gap * 0.9 + rowsNeed;
         const mapTop = Math.round(full.bottom + gap * 0.8);
-        const mapH = Math.round(bottom - below - gap - mapTop);
-        if (mapH >= h * 0.2) {
-            const map = box(pad, mapTop, innerW, mapH);
-            return withMixRows(
-                full,
-                map,
+        const fullMap = (rowH: number) => {
+            const below =
+                spec.mix.bar +
+                gap * 0.55 +
+                legendH +
+                gap * 0.9 +
+                view.mix.rows.length * rowH;
+            return box(
                 pad,
+                mapTop,
                 innerW,
-                Math.round(mapTop + mapH + gap),
-                bottom,
-                footerBox,
+                Math.round(bottom - below - gap - mapTop),
             );
-        }
+        };
         // Many rows: the map sits beside the headline; the mix, its legend and the rows fill
         // the width. Beside the map the headline is narrower: it may shrink further, so it is
         // never cut.
@@ -938,14 +1023,36 @@ export function viewLayout(
                 Math.max(mapW / text.mapAspect, t.bottom - top),
             ),
         );
-        const map = box(pad + innerW - mapW, top, mapW, insetH);
-        const y = Math.round(Math.max(t.bottom, map.y + map.h) + gap * 0.8);
-        return withMixRows(t, map, pad, innerW, y, bottom, footerBox);
+        const inset = box(pad + innerW - mapW, top, mapW, insetH);
+        // Whichever draws the map larger: full width above the rows (rows at their roomiest,
+        // else a little tighter) or the inset beside the headline. Rows then take what is left.
+        for (const rowH of [
+            spec.mix.rowMax,
+            Math.round((spec.mix.rowMax + spec.mix.rowMin) / 2),
+        ]) {
+            const map = fullMap(rowH);
+            if (
+                map.h >= h * 0.12 &&
+                fittedArea(map, text.mapAspect) >
+                    fittedArea(inset, text.mapAspect)
+            )
+                return withMixRows(
+                    full,
+                    map,
+                    pad,
+                    innerW,
+                    Math.round(map.y + map.h + gap),
+                    bottom,
+                    footerBox,
+                );
+        }
+        const y = Math.round(Math.max(t.bottom, inset.y + inset.h) + gap * 0.8);
+        return withMixRows(t, inset, pad, innerW, y, bottom, footerBox);
     }
 
     const t = titleBlock(pad, top, innerW, spec, text.headline, scope);
     const barY = Math.round(t.bottom + gap * 0.7);
-    const bar = mixBar(box(pad, barY, innerW, spec.mix.bar), view);
+    const bar = mixBar(box(pad, barY, innerW, spec.mix.bar), view, chartParts);
     const bodyTop = Math.round(barY + spec.mix.bar + gap);
     const body = box(
         pad,

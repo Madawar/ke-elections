@@ -9,6 +9,7 @@
 import { THEMES } from '@/lib/map/theme';
 import type { Box, TextItem } from './layout';
 import type { MixRow } from './seatMix';
+import { formatAsOf } from './format';
 import { fitFontSize, textWidth, wrapText } from './text';
 import type { ViewState } from './viewState';
 
@@ -54,6 +55,22 @@ export interface MixFonts {
 }
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
+
+/** WCAG contrast ratio of two #rrggbb colours. */
+function contrast(a: string, b: string): number {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Near-black or white for text on a coloured part, whichever reads better (the dataviz rule):
+ * near-black on mid tones such as ODM orange, where white is only about 3:1.
+ */
+export function inkOn(colour: string): string {
+    const dark = THEMES.light.ink;
+    const light = THEMES.light.surface;
+    return contrast(colour, dark) >= contrast(colour, light) ? dark : light;
+}
 
 /** Relative luminance of a #rrggbb colour. */
 function luminance(hex: string): number {
@@ -105,7 +122,25 @@ function spread<T extends { count: number }>(
     });
 }
 
-export function mixBar(area: Box, view: ViewState): MixBarLayout {
+/** A part of the bar: a legend row of the chart, or a seat mix segment. */
+export interface MixPartInput {
+    key: string;
+    colour: string;
+    count: number;
+    share: string;
+    members: string[];
+}
+
+/**
+ * The 100% bar. On cards with the bar chart its parts are the chart's own rows (small parties
+ * as thin parts the chart names), so the two never disagree; on cards with rows they are the
+ * seat mix segments, with small parties folded into "Other parties".
+ */
+export function mixBar(
+    area: Box,
+    view: ViewState,
+    parts: MixPartInput[] = view.mix.segments,
+): MixBarLayout {
     const { segment } = mixColours(view);
     const gap = Math.max(3, Math.round(area.h * 0.08));
     const size = Math.round(area.h * 0.46);
@@ -114,13 +149,10 @@ export function mixBar(area: Box, view: ViewState): MixBarLayout {
         box: area,
         gap,
         radius: Math.round(area.h * 0.14),
-        segments: spread(view.mix.segments, area.x, area.w, gap).map((s) => {
+        segments: spread(parts, area.x, area.w, gap).map((s) => {
             const colour = segment(s);
             const fits = textWidth(s.share, size, true) + size <= s.w;
-            const ink =
-                luminance(colour) > 0.35
-                    ? THEMES.light.ink
-                    : THEMES.light.surface;
+            const ink = inkOn(colour);
             return {
                 key: s.key,
                 x: s.x,
@@ -162,18 +194,24 @@ export function mixLegend(
     const printed = new Set(
         bar.segments.filter((s) => s.label).map((s) => s.key),
     );
-    const entries: { colour: string | null; text: string }[] = [];
+    const entries: {
+        colour: string | null;
+        text: string;
+        newLine?: boolean;
+    }[] = [];
     for (const s of view.mix.segments) {
         entries.push({
             colour: segment(s),
             text: `${s.label} ${fmt(s.count)}${printed.has(s.key) ? '' : ` (${s.share})`}`,
         });
         if (s.includes.length) {
-            entries.push({ colour: null, text: 'includes' });
+            // The folded parties stay together on a line of their own under Other parties,
+            // by count only (their shares are under the 3% the bar folds at).
+            entries.push({ colour: null, text: 'of which', newLine: true });
             for (const p of s.includes)
                 entries.push({
                     colour: segment({ colour: p.colour, members: [p.key] }),
-                    text: `${p.label} ${fmt(p.count)} (${p.share})`,
+                    text: `${p.label} ${fmt(p.count)}`,
                 });
         }
     }
@@ -187,7 +225,7 @@ export function mixLegend(
     for (const e of entries) {
         const mark = e.colour ? sw + swGap : 0;
         const width = mark + textWidth(e.text, size);
-        if (cx > 0 && cx + width > w) {
+        if (cx > 0 && (e.newLine || cx + width > w)) {
             row++;
             cx = 0;
         }
@@ -404,5 +442,106 @@ export function mixRows(
                   tone: 'muted',
               }
             : null,
+    };
+}
+
+export interface HolderBlockLayout {
+    box: Box;
+    /** The ballot-lid bar beside the block, in the party's colour. */
+    lid: Box & { colour: string };
+    chip: Box & { colour: string };
+    texts: TextItem[];
+}
+
+/**
+ * One seat: who holds it. The seat, the holder's name exactly as the data spells it, the party
+ * with its colour, since when, and the source; or "No approved data yet" with nothing invented.
+ * Laid out from `y` across `w`; `box.h` is the height it takes.
+ */
+export function holderBlock(
+    x: number,
+    y: number,
+    w: number,
+    view: ViewState,
+    f: { label: number; name: number; sub: number },
+): HolderBlockLayout | null {
+    const single = view.single;
+    if (!single) return null;
+    const theme = THEMES[view.theme];
+    const h = single.holder;
+    const lidW = Math.max(8, Math.round(f.label * 0.34));
+    const tx = x + lidW + Math.round(f.label * 0.8);
+    const tw = x + w - tx;
+    const texts: TextItem[] = [];
+    let at = y;
+    const line = (
+        text: string,
+        size: number,
+        tone: TextItem['tone'],
+        weight = 400,
+        lead = 1.25,
+        maxLines = 2,
+        indent = 0,
+    ) => {
+        for (const t of wrapText(
+            text,
+            tw - indent,
+            size,
+            maxLines,
+            weight >= 600,
+        )) {
+            at += Math.round(size * lead);
+            texts.push({ x: tx + indent, y: at, text: t, size, weight, tone });
+        }
+    };
+    line(single.title, f.label, 'muted', 400, 1.0);
+    let chip: Box & { colour: string };
+    if (h) {
+        at += Math.round(f.name * 0.15);
+        line(h.name, f.name, 'ink', 700, 1.12, 3);
+        at += Math.round(f.label * 0.35);
+        const sw = Math.round(f.label * 0.75);
+        const chipTop =
+            at + Math.round(f.label * 1.25) - sw + Math.round(f.label * 0.04);
+        line(
+            h.party,
+            f.label,
+            'ink',
+            600,
+            1.25,
+            2,
+            sw + Math.round(f.label * 0.45),
+        );
+        chip = { x: tx, y: chipTop, w: sw, h: sw, colour: h.colour };
+        if (h.since) {
+            const since = formatAsOf(h.since);
+            if (since)
+                line(`In office since ${since}`, f.sub, 'muted', 400, 1.6);
+        }
+        line(`Source: ${h.source}`, f.sub, 'muted', 400, 1.4);
+    } else {
+        at += Math.round(f.name * 0.15);
+        line(
+            'No approved data yet',
+            Math.round(f.name * 0.8),
+            'muted',
+            600,
+            1.2,
+        );
+        chip = { x: tx, y: at, w: 0, h: 0, colour: theme.noData };
+        line(`Source: ${view.source}`, f.sub, 'muted', 400, 1.6);
+    }
+    const bottom = at + Math.round(f.sub * 0.35);
+    return {
+        box: { x, y, w, h: bottom - y },
+        lid: {
+            x,
+            y,
+            w: lidW,
+            h: bottom - y,
+            colour: h ? h.colour : theme.noData,
+        },
+        chip,
+        texts,
     };
 }

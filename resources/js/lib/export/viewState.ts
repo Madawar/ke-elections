@@ -14,9 +14,11 @@ import {
     type SeatsData,
     legendScope,
     legendTitle,
+    partyColours,
     seatLegend,
     withIndependentColour,
 } from '@/lib/seats';
+import { SEAT_TITLE } from '@/lib/search';
 import type { Level, UnitIndex } from '@/lib/units';
 import { sourceLine, sourceParts } from './format';
 import { type SeatMix, seatMix } from './seatMix';
@@ -57,6 +59,11 @@ export interface PartyView {
     units: { count: number; word: string } | null;
     /** The seat mix bar and the rows inside the focused unit. */
     mix: SeatMix;
+    /**
+     * Set when the counts cover one seat (a Governor in a county, an MP in a constituency): the
+     * card then shows who holds it instead of a bar, a callout and a chart.
+     */
+    single: SingleSeat | null;
     /** The highlighted party abbreviations, in the order they were picked. */
     only: string[];
     showSurroundings: boolean;
@@ -89,6 +96,21 @@ export interface PartyView {
     sample: boolean;
     /** The deep link to this view: unit path plus `?seat=…&parties=…`. */
     path: string;
+}
+
+export interface SingleSeat {
+    /** "Governor, Nairobi City" */
+    title: string;
+    holder: {
+        /** Exactly as the data spells it. */
+        name: string;
+        /** "United Democratic Alliance (UDA)", or "Independent". */
+        party: string;
+        colour: string;
+        /** "YYYY-MM-DD" */
+        since: string | null;
+        source: string;
+    } | null;
 }
 
 export type ViewState = PartyView;
@@ -220,6 +242,7 @@ export function snapshotView({
     ];
 
     const focusUnit = focus ? index.get(focus.level, focus.code) : undefined;
+    const single = singleSeat(seats, seat, scope);
     const holdersInView = seats.holders.filter(
         (h) =>
             h.seat === seat && h.party && (!scope || scope.codes.has(h.code)),
@@ -236,6 +259,7 @@ export function snapshotView({
             ? { level: scope.unit.l, code: scope.unit.c, name: scope.unit.n }
             : null,
         units: unitsInView(index, seat, scope?.codes),
+        single,
         mix: seatMix(
             seats,
             seat,
@@ -256,6 +280,37 @@ export function snapshotView({
         sources: sourceParts(holdersInView.map((h) => h.source_url)),
         sample,
         path: viewPath(seat, focus && focusUnit ? focus : null, only),
+    };
+}
+
+/** The one seat the counts cover, with its holder (or none approved yet). */
+function singleSeat(
+    seats: SeatsData,
+    seat: SeatKey,
+    scope: ReturnType<typeof legendScope>,
+): SingleSeat | null {
+    if (!scope || scope.codes.size !== 1) return null;
+    const [code] = [...scope.codes];
+    const h = seats.holders.find(
+        (x) =>
+            x.seat === seat && x.level === SEAT_LEVEL[seat] && x.code === code,
+    );
+    const colours = partyColours(seats);
+    const name = (abbrev: string) =>
+        abbrev === INDEPENDENT
+            ? 'Independent'
+            : `${seats.parties.find((p) => p.abbrev === abbrev)?.name ?? abbrev} (${abbrev})`;
+    return {
+        title: `${SEAT_TITLE[seat]}, ${scope.unit.n}`,
+        holder: h?.party
+            ? {
+                  name: h.name,
+                  party: name(h.party),
+                  colour: colours.get(h.party) ?? OTHER,
+                  since: h.started_on || null,
+                  source: sourceLine([h.source_url]),
+              }
+            : null,
     };
 }
 

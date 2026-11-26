@@ -33,6 +33,7 @@ const nairobiMca = view('mca', { level: 'county', code: 47 });
 const nairobiMp = view('mp', { level: 'county', code: 47 });
 const mathareMca = view('mca', { level: 'constituency', code: 290 });
 const kenyaMca = view('mca', null, ['ODM']);
+const nairobiGovernor = view('governor', { level: 'county', code: 47 });
 const URL = 'https://example.org/county/47?seat=mca';
 const layoutOf = (size: ViewSize, v = nairobiMca) =>
     viewLayout(size, v, {
@@ -69,6 +70,7 @@ const texts = (l: ViewLayout): TextItem[] => [
     ...(l.mixLegend?.items.map((i) => i.text) ?? []),
     ...l.mixRows.flatMap((r) => r.texts),
     ...(l.moreLine ? [l.moreLine] : []),
+    ...(l.holder?.texts ?? []),
 ];
 
 describe('seat mix layout', () => {
@@ -124,20 +126,30 @@ describe('seat mix layout', () => {
     });
 
     it('keeps every block on the card and apart, and no two lines of text overlap', () => {
-        for (const v of [nairobiMca, nairobiMp, mathareMca, kenyaMca])
+        for (const v of [
+            nairobiMca,
+            nairobiMp,
+            mathareMca,
+            kenyaMca,
+            nairobiGovernor,
+        ])
             for (const size of SIZES) {
                 const l = layoutOf(size, v);
                 const blocks: [string, Box][] = [
                     ['headline', l.headline],
                     ['map', l.map],
-                    ['mix bar', l.mixBar!.box],
+                    ...(l.mixBar
+                        ? ([['mix bar', l.mixBar.box]] as [string, Box][])
+                        : []),
                     ['footer', l.footerBox],
-                    ...(l.mixRows.length
-                        ? ([['rows', l.rowsBox!]] as [string, Box][])
-                        : ([
-                              ['callouts', l.calloutBox],
-                              ['chart', l.chartBox],
-                          ] as [string, Box][])),
+                    ...(l.holder
+                        ? ([['holder', l.holder.box]] as [string, Box][])
+                        : l.mixRows.length
+                          ? ([['rows', l.rowsBox!]] as [string, Box][])
+                          : ([
+                                ['callouts', l.calloutBox],
+                                ['chart', l.chartBox],
+                            ] as [string, Box][])),
                     ...(l.mixLegend
                         ? ([['mix legend', l.mixLegend.box]] as [string, Box][])
                         : []),

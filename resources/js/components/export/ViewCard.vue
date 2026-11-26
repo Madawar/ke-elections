@@ -219,6 +219,38 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 :fill="theme.muted"
             />
 
+            <!-- A single seat: who holds it -->
+            <g v-if="layout.holder" data-holder>
+                <rect
+                    :x="layout.holder.lid.x"
+                    :y="layout.holder.lid.y"
+                    :width="layout.holder.lid.w"
+                    :height="layout.holder.lid.h"
+                    rx="1"
+                    :fill="layout.holder.lid.colour"
+                />
+                <rect
+                    v-if="layout.holder.chip.w"
+                    :x="layout.holder.chip.x"
+                    :y="layout.holder.chip.y"
+                    :width="layout.holder.chip.w"
+                    :height="layout.holder.chip.h"
+                    rx="2"
+                    :fill="layout.holder.chip.colour"
+                />
+                <text
+                    v-for="(t, i) in layout.holder.texts"
+                    :key="i"
+                    :x="t.x"
+                    :y="t.y"
+                    :font-size="t.size"
+                    :font-weight="t.weight ?? 400"
+                    :fill="tone(t.tone)"
+                >
+                    {{ t.text }}
+                </text>
+            </g>
+
             <!-- Seat mix: one 100% bar, its legend, and the rows inside the unit in code order -->
             <g v-if="layout.mixBar" data-mix-bar>
                 <g

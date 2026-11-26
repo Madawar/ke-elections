@@ -308,8 +308,8 @@ describe('ViewCard seat mix', () => {
             nairobiMca.mix.segments.map((s) => s.key),
         );
         expect(parts[0].text()).toBe('47%');
-        expect(w.text()).toContain('includes');
-        expect(w.text()).toContain('KANU 2 (2%)');
+        expect(w.text()).toContain('of which');
+        expect(w.text()).toContain('KANU 2');
     });
 
     it('lists every constituency on a story and the first ones plus "and N more" on a square', () => {
