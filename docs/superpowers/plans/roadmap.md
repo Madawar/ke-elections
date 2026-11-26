@@ -15,12 +15,18 @@ a feature finishes.
   - Cased borders and border hierarchy in colour views.
   - A bar-chart legend with percentages, scoped to the selection.
   - Multi-select party highlight.
+- **Social export of party views**
+  (`docs/superpowers/plans/2026-11-26-social-export.md`, Tasks 1, 1b and 1c):
+  - "Share this view" cards in square, portrait, story and X sizes, with captions, the share
+    sheet and compact deep links (`?seat=&parties=`, `parties=other`).
+  - Independents as their own group everywhere. "Other parties" means uncoloured parties only,
+    and every coloured party gets a legend row.
+  - Seat-mix bars, per-constituency mix rows, and a "who holds what" list. Single-seat cards show
+    the holder.
 
 ## Queue, in order (owner priorities as of 2026-11-26)
-1. **Social export: still infographics.** Plan: `2026-11-26-social-export.md`, Task 1. Branch
-   `feature/social-export`.
-   - Covers the party views first. The owner said "focus on infographics."
-   - The numeric (census and voters) views are added once the pocketbook data lands.
+1. ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
+   added once the pocketbook data lands.
 2. **Voter guide, "How elections work".** English first, then a reviewed Kiswahili version.
    - Built on the infographic card system, so each section can export as a carousel or story.
    - Draft content, for the **owner to review before the build**, is in
@@ -126,6 +132,21 @@ a feature finishes.
 - The Senate notice says "Saturday, 25th June", but 25 Jun 2027 is a Friday.
 
 ## Parked minor findings (fix when touching the code)
+- **Social export:**
+  - A scoped deep link with `parties=other` expands against the national uncoloured set, so a
+    county link can highlight a small party from outside that county. Expand it within the link's
+    unit scope instead.
+  - In the light theme, the faded grey is close to Other grey when Other parties is highlighted.
+  - The national MCA square card drops its callouts (12 rows).
+  - Story maps are smaller because of the TikTok and Reels safe zone.
+  - The holder block's "Source" repeats the footer.
+  - The Mathare MP square leaves empty space around a small map.
+  - Unit row counts ("N wards") count only held seats. They need to become vacancy-aware with the
+    by-election model.
+  - The hemicycle legend sorts "Other parties" above Independent.
+  - In dark tritan vision, the gap between Independent and UDA is ΔE 4.9.
+  - The selected-unit outline is faint over the Independent colour.
+  - `ShareViewDialog`'s restore through `applySharedView` isn't tested end to end.
 - **Search:** picking the same person twice doesn't re-scroll.
 - **Nominated picks:** a pick with a null party shows no message.
 - **Accessibility:** the "Show surroundings" switch's hint should use `aria-describedby`.
