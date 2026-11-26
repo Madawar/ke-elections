@@ -66,6 +66,39 @@
           ]
         ]
       }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "uid": "R1"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              8,
+              0
+            ],
+            [
+              22,
+              0
+            ],
+            [
+              22,
+              10
+            ],
+            [
+              8,
+              10
+            ],
+            [
+              8,
+              0
+            ]
+          ]
+        ]
+      }
     }
   ]
 }

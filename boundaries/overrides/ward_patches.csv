@@ -1,14 +1,14 @@
-iebc_code,arc_uid,arc_name,arc_county,gazette_name
-50,aom47Uzq1RZ,Kasemeni Ward,Kwale,Kasemeni
-210,Z9zNkBFLY9r,SHAMBIR FATUMA,MANDERA,Shimbir Fatuma
-287,ZVoIw8oAOWZ,Abothuguchi west Ward,MERU,Abothuguchi West
-571,B1GDVDYIGwK,Gatongora Ward,Kiambu,Gatongora
-572,Lc6GluslY9h,Kahawa/sukari Ward,Kiambu,Kahawa Sukari
-573,w3MNsmpJJHX,Kahawa Wendani Ward,Kiambu,Kahawa Wendani
-575,KoIp1GKz0UI,Mwiki Ward,Kiambu,Mwiki
-576,dnLaU3RrCnp,Mwihoko Ward,Kiambu,Mwihoko
-640,AY46zJ3BT9H,Lokori/kochodin Ward,TURKANA,Lokori/Kochodin
-676,zkVfk8cWPc2,Kapomboi Ward,TRANS NZOIA,Kapomboi
-734,u6ONpoWIV0d,Embobut/Embulot Ward,ELGEYO-MARAKWET,Embobut / Embulot
-735,qsljIZxApCc,Lelan Ward,ELGEYO-MARAKWET,Lelan
-1448,tsmsPb6qMFa,Ngei Ward,Nairobi,Ngei
+iebc_code,arc_uid,arc_name,arc_county,gazette_name,mode,reason
+50,aom47Uzq1RZ,Kasemeni Ward,Kwale,Kasemeni,fill,"IEBC 2013 data has no polygon for this code (a hole in Kinango). Red Cross ward verified by name, county and location (Task 3)."
+210,Z9zNkBFLY9r,SHAMBIR FATUMA,MANDERA,Shimbir Fatuma,fill,"IEBC 2013 data has no polygon for this code (a hole of about 1,386 km² in Mandera South). Red Cross ward verified by name, county and location (Task 3)."
+287,ZVoIw8oAOWZ,Abothuguchi west Ward,MERU,Abothuguchi West,fill,"IEBC 2013 data has no polygon for this code (its area is split between neighbours in Central Imenti). Red Cross ward verified by name, county and location (Task 3)."
+571,B1GDVDYIGwK,Gatongora Ward,Kiambu,Gatongora,fill,"IEBC 2013 data has no polygon for this code; Ruiru wards 571-576 were merged into one polygon coded 574 Kiuu. Red Cross ward verified by name, county and location (Task 3)."
+572,Lc6GluslY9h,Kahawa/sukari Ward,Kiambu,Kahawa Sukari,fill,"IEBC 2013 data has no polygon for this code; Ruiru wards 571-576 were merged into one polygon coded 574 Kiuu. Red Cross ward verified by name, county and location (Task 3)."
+573,w3MNsmpJJHX,Kahawa Wendani Ward,Kiambu,Kahawa Wendani,fill,"IEBC 2013 data has no polygon for this code; Ruiru wards 571-576 were merged into one polygon coded 574 Kiuu. Red Cross ward verified by name, county and location (Task 3)."
+575,KoIp1GKz0UI,Mwiki Ward,Kiambu,Mwiki,fill,"IEBC 2013 data has no polygon for this code; Ruiru wards 571-576 were merged into one polygon coded 574 Kiuu. Red Cross ward verified by name, county and location (Task 3)."
+576,dnLaU3RrCnp,Mwihoko Ward,Kiambu,Mwihoko,fill,"IEBC 2013 data has no polygon for this code; Ruiru wards 571-576 were merged into one polygon coded 574 Kiuu. Red Cross ward verified by name, county and location (Task 3)."
+640,AY46zJ3BT9H,Lokori/kochodin Ward,TURKANA,Lokori/Kochodin,fill,"IEBC 2013 data has no polygon for this code (a hole of about 3,223 km² in Turkana East). Red Cross ward verified by name, county and location (Task 3)."
+676,zkVfk8cWPc2,Kapomboi Ward,TRANS NZOIA,Kapomboi,fill,"IEBC 2013 data has no polygon for this code (a hole in Kwanza). Red Cross ward verified by name, county and location (Task 3)."
+734,u6ONpoWIV0d,Embobut/Embulot Ward,ELGEYO-MARAKWET,Embobut / Embulot,fill,"IEBC 2013 data has no polygon for this code; its area is mostly inside 732 Sambirir. Red Cross ward verified by name, county and location (Task 3)."
+735,qsljIZxApCc,Lelan Ward,ELGEYO-MARAKWET,Lelan,fill,"IEBC 2013 data has no polygon for this code (a hole in Marakwet West; not 659 Lelan in West Pokot). Red Cross ward verified by name, county and location (Task 3)."
+1448,tsmsPb6qMFa,Ngei Ward,Nairobi,Ngei,fill,"IEBC 2013 data has no polygon for this code; its area is mostly inside 1447 Huruma. Red Cross ward verified by name, county and location (Task 3)."

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { siteUrl } from '@/lib/export/format';
+import { unitPath } from '@/lib/map/urls';
 import type { SeatsData } from '@/lib/seats';
 import { partyColours } from '@/lib/seats';
 import { SEAT_COLOURS } from '@/lib/map/theme';
@@ -11,7 +13,7 @@ const props = defineProps<{
     seats: SeatsData;
     towns: string[];
 }>();
-const emit = defineEmits<{ go: [unit: Unit] }>();
+const emit = defineEmits<{ go: [unit: Unit]; share: [] }>();
 
 const LEVEL = {
     province: 'Former province',
@@ -63,6 +65,21 @@ const rows = computed(() =>
             ) ?? null,
     })),
 );
+const copied = ref('');
+let copiedTimer = 0;
+async function copyLink() {
+    if (props.unit.l === 'province') return;
+    const url = siteUrl(unitPath(props.unit.l, props.unit.c));
+    try {
+        await navigator.clipboard.writeText(url);
+        copied.value = 'Link copied';
+    } catch {
+        copied.value = url;
+    }
+    window.clearTimeout(copiedTimer);
+    copiedTimer = window.setTimeout(() => (copied.value = ''), 4000);
+}
+
 const sourceHost = (url: string) => {
     try {
         return new URL(url).hostname.replace(/^www\./, '');
@@ -164,6 +181,31 @@ const sourceHost = (url: string) => {
                 </li>
             </ul>
         </section>
+
+        <div v-if="unit.l !== 'province'">
+            <div class="flex gap-2">
+                <button
+                    type="button"
+                    class="flex h-11 flex-1 items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
+                    @click="emit('share')"
+                >
+                    Share image
+                </button>
+                <button
+                    type="button"
+                    class="flex h-11 flex-1 items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
+                    @click="copyLink"
+                >
+                    Copy link
+                </button>
+            </div>
+            <p
+                class="mt-1 min-h-5 truncate text-[13px] text-muted-ink"
+                aria-live="polite"
+            >
+                {{ copied }}
+            </p>
+        </div>
 
         <section v-if="towns.length">
             <h3 class="mb-1 text-[15px] font-semibold">Towns</h3>

@@ -1,7 +1,7 @@
 // Writes the web-ready files and a manifest of short content hashes.
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const PRECISION = 1e5;
@@ -41,25 +41,43 @@ function roundGeometry(geometry) {
 
 const roundCollection = (fc) => ({ ...fc, features: fc.features.map((f) => ({ ...f, geometry: roundGeometry(f.geometry) })) });
 
+const hash = (bytes) => createHash('sha256').update(bytes).digest('hex').slice(0, 8);
+
 /**
- * Write `files` (`{ 'name.geojson': FeatureCollection, 'name.json': data }`) into `dir` and
- * `manifest.json` as `{ "<file>": "<first 8 hex chars of sha256>" }`.
+ * Serialise `files` (`{ 'name.geojson': FeatureCollection, 'name.json': data }`) in memory.
  * GeoJSON coordinates are rounded to 5 decimal places (about 1 m).
- * Returns the manifest and each file's size in bytes.
+ * Returns `{ buffers, manifest, sizes }`, keyed by file name.
  */
-export function writeOutputs(dir, files) {
-    mkdirSync(dir, { recursive: true });
+export function renderOutputs(files) {
+    const buffers = {};
     const manifest = {};
     const sizes = {};
-
     for (const name of Object.keys(files).sort()) {
         const data = name.endsWith('.geojson') ? roundCollection(files[name]) : files[name];
-        const bytes = Buffer.from(JSON.stringify(data));
-        writeFileSync(join(dir, name), bytes);
-        manifest[name] = createHash('sha256').update(bytes).digest('hex').slice(0, 8);
-        sizes[name] = bytes.length;
+        buffers[name] = Buffer.from(JSON.stringify(data));
+        manifest[name] = hash(buffers[name]);
+        sizes[name] = buffers[name].length;
     }
+    return { buffers, manifest, sizes };
+}
 
-    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+/**
+ * Write `files` into `dir` and `manifest.json` as `{ "<file>": "<first 8 hex chars of sha256>" }`.
+ * Entries already in the manifest for files this call does not write (towns.geojson, which
+ * `npm run boundaries:towns` makes) are kept while the file exists, re-hashed from disk.
+ * Returns the manifest and each written file's size in bytes.
+ */
+export function writeOutputs(dir, files) {
+    const { buffers, manifest: written, sizes } = renderOutputs(files);
+    mkdirSync(dir, { recursive: true });
+    for (const [name, bytes] of Object.entries(buffers)) writeFileSync(join(dir, name), bytes);
+
+    const manifestPath = join(dir, 'manifest.json');
+    const previous = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+    const kept = Object.keys(previous).filter((name) => !(name in written) && existsSync(join(dir, name)));
+    const all = { ...written, ...Object.fromEntries(kept.map((name) => [name, hash(readFileSync(join(dir, name)))])) };
+    const manifest = Object.fromEntries(Object.entries(all).sort(([a], [b]) => a.localeCompare(b)));
+
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
     return { manifest, sizes };
 }

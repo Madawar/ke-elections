@@ -6,6 +6,7 @@ import { type SeatsData, chamberGroups, seatLegend } from '@/lib/seats';
 const props = defineProps<{ seats: SeatsData }>();
 const emit = defineEmits<{
     colourBy: [seat: 'governor' | 'mp' | 'senator' | 'woman_rep'];
+    share: [];
 }>();
 
 const asOf = computed(() => {
@@ -35,6 +36,13 @@ const hasData = computed(() => props.seats.holders.length > 0);
             constituencies and wards.
         </p>
         <template v-if="hasData">
+            <button
+                type="button"
+                class="flex h-11 w-full items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
+                @click="emit('share')"
+            >
+                Share an image of Parliament
+            </button>
             <section>
                 <Hemicycle
                     title="National Assembly"

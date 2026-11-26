@@ -3,6 +3,8 @@ import { Head, router } from '@inertiajs/vue3';
 import { useEventListener, useMediaQuery, useStorage } from '@vueuse/core';
 import { useAppearance } from '@/composables/useAppearance';
 import { computed, onMounted, ref, shallowRef, watch } from 'vue';
+import InPowerExport from '@/components/export/InPowerExport.vue';
+import LocatorExport from '@/components/export/LocatorExport.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
 import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
@@ -436,6 +438,15 @@ const headTitle = computed(() =>
         ? `${props.unit.name} ${props.unit.level.charAt(0).toUpperCase()}${props.unit.level.slice(1)}`
         : '',
 );
+// ---- share image ------------------------------------------------------------------------
+// The unit is fixed when the dialog opens, so the card doesn't change under the person.
+const exportUnit = shallowRef<(Unit & { l: MapLevel }) | null>(null);
+const exportNational = ref(false);
+function shareUnit() {
+    const u = panelUnit.value;
+    if (u && u.l !== 'province') exportUnit.value = u as Unit & { l: MapLevel };
+}
+
 const showView = (v: typeof view.value) => {
     view.value = view.value === v ? 'unit' : v;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
@@ -627,14 +638,34 @@ const showView = (v: typeof view.value) => {
                     :seats="seats"
                     :towns="townsIn"
                     @go="(u) => selectUnit(u)"
+                    @share="shareUnit"
                 />
                 <NationalOverview
                     v-else
                     :seats="seats"
                     @colour-by="(s) => (colourKey = s)"
+                    @share="exportNational = true"
                 />
             </template>
         </BottomSheet>
+
+        <LocatorExport
+            v-if="exportUnit && index && manifest"
+            :open="true"
+            :unit="exportUnit"
+            :index="index"
+            :seats="seats"
+            :manifest="manifest"
+            :province-of-county="provinceOfCounty"
+            :theme="THEMES[theme]"
+            :colouring="colouring"
+            @update:open="(v) => !v && (exportUnit = null)"
+        />
+        <InPowerExport
+            v-model:open="exportNational"
+            :seats="seats"
+            :theme="THEMES[theme]"
+        />
 
         <div class="sr-only" aria-live="polite">{{ announce }}</div>
     </div>

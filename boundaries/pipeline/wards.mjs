@@ -1,5 +1,6 @@
 // Assembles the 1,450-ward layer: IEBC polygons as the base, a handful of
-// reviewed American Red Cross polygons patched in where IEBC has none,
+// reviewed American Red Cross polygons patched in where IEBC has none or
+// has filed a ward's polygon under the wrong code (mode=replace),
 // then cleaned so wards neither overlap nor leave gaps. Names and parent
 // codes always come from the gazette, joined on the IEBC ward code.
 
@@ -18,7 +19,14 @@ const GAP_FILL_AREA = '400km2';
 
 const norm = (text) => String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-/** Parse ward_patches.csv into `{ iebcCode, arcUid }[]`. */
+export const PATCH_MODES = ['fill', 'replace'];
+
+/**
+ * Parse ward_patches.csv into `{ iebcCode, arcUid, mode, reason }[]`.
+ * `mode=fill`: the code has no IEBC polygon and takes the Red Cross one.
+ * `mode=replace`: the code has an IEBC polygon, misfiled, which the Red Cross one replaces.
+ * A CSV without a `mode` column is all fills; with one, every row needs a `reason`.
+ */
 export function parsePatches(csvText) {
     const codes = new Set();
     const uids = new Set();
@@ -26,14 +34,18 @@ export function parsePatches(csvText) {
     return parseCsv(csvText).map((row, i) => {
         const iebcCode = Number(row.iebc_code);
         const arcUid = (row.arc_uid ?? '').trim();
+        const mode = (row.mode ?? 'fill').trim();
+        const reason = (row.reason ?? '').trim();
         if (!Number.isInteger(iebcCode) || iebcCode < 1 || arcUid === '') {
             throw new Error(`Invalid ward patch on data row ${i + 1}: ${JSON.stringify(row)}`);
         }
+        if (!PATCH_MODES.includes(mode)) throw new Error(`Invalid mode "${mode}" for ward patch ${iebcCode} (data row ${i + 1}): expected fill or replace`);
+        if ('mode' in row && reason === '') throw new Error(`Ward patch ${iebcCode} (data row ${i + 1}) has no reason`);
         if (codes.has(iebcCode)) throw new Error(`Duplicate iebc_code ${iebcCode} in ward patches (data row ${i + 1})`);
         if (uids.has(arcUid)) throw new Error(`Duplicate arc_uid ${arcUid} in ward patches (data row ${i + 1})`);
         codes.add(iebcCode);
         uids.add(arcUid);
-        return { iebcCode, arcUid };
+        return { iebcCode, arcUid, mode, reason };
     });
 }
 
@@ -61,10 +73,11 @@ export async function runMapshaper(commands, input) {
     }
 }
 
-function collectIebc(iebc, log) {
+function collectIebc(iebc, replaced, log) {
     const kept = [];
     const sources = new Map();
     const pieces = new Map();
+    const removed = new Map();
 
     for (const feature of iebc.features) {
         const props = feature.properties ?? {};
@@ -75,6 +88,11 @@ function collectIebc(iebc, log) {
             log.push({ step: 'dropped', detail: { code: props.COUNTY_ASS ?? null, name, reason: 'no valid ward code' } });
         } else if (!hasGeometry(feature.geometry)) {
             log.push({ step: 'dropped', detail: { code, name, reason: 'empty geometry' } });
+        } else if (replaced.has(code)) {
+            // The polygon filed under this code is someone else's; its attributes describe it, not the ward.
+            const entry = removed.get(code) ?? { sourceName: name, pieces: 0 };
+            entry.pieces++;
+            removed.set(code, entry);
         } else {
             kept.push({ type: 'Feature', properties: { code }, geometry: feature.geometry });
             pieces.set(code, (pieces.get(code) ?? 0) + 1);
@@ -88,15 +106,18 @@ function collectIebc(iebc, log) {
         if (count > 1) log.push({ step: 'merged', detail: { code, pieces: count } });
     }
 
-    return { kept, sources };
+    return { kept, sources, removed };
 }
 
-function collectPatches(arc, patches, iebcCodes, log) {
+function collectPatches(arc, patches, iebcCodes, removed, log) {
     const features = [];
 
-    for (const { iebcCode, arcUid } of patches) {
-        if (iebcCodes.has(iebcCode)) {
+    for (const { iebcCode, arcUid, mode = 'fill', reason = '' } of patches) {
+        if (mode === 'fill' && iebcCodes.has(iebcCode)) {
             throw new Error(`Ward patch ${iebcCode} (arc uid ${arcUid}): code already present in IEBC data`);
+        }
+        if (mode === 'replace' && !removed.has(iebcCode)) {
+            throw new Error(`Ward patch ${iebcCode} (arc uid ${arcUid}): mode=replace but the code is not in the IEBC data`);
         }
         const matches = arc.features.filter((f) => f.properties?.uid === arcUid && hasGeometry(f.geometry));
         if (matches.length === 0) {
@@ -105,7 +126,11 @@ function collectPatches(arc, patches, iebcCodes, log) {
         for (const match of matches) {
             features.push({ type: 'Feature', properties: { code: iebcCode }, geometry: match.geometry });
         }
-        log.push({ step: 'patched', detail: { code: iebcCode, arcUid } });
+        if (mode === 'replace') {
+            log.push({ step: 'replaced', detail: { code: iebcCode, arcUid, reason, ...removed.get(iebcCode) } });
+        } else {
+            log.push({ step: 'patched', detail: { code: iebcCode, arcUid } });
+        }
     }
 
     return features;
@@ -154,12 +179,15 @@ function joinGazette(assembled, gazette, sources, log) {
 export async function assembleWards({ iebc, arc, patches, gazette, expected = 1450 }) {
     const log = [];
 
-    const { kept, sources } = collectIebc(iebc, log);
-    const patchFeatures = collectPatches(arc, patches, new Set(sources.keys()), log);
+    const replaced = new Set(patches.filter((p) => p.mode === 'replace').map((p) => p.iebcCode));
+    const { kept, sources, removed } = collectIebc(iebc, replaced, log);
+    const patchFeatures = collectPatches(arc, patches, new Set(sources.keys()), removed, log);
 
-    // Dissolve merges pieces sharing a code. Patch polygons are erased from the
-    // IEBC layer first so they win where the two sources overlap; -clean then
-    // snaps edges and fills the slivers left between neighbours.
+    // Dissolve merges pieces sharing a code. A replaced code's IEBC polygon was left
+    // out above. Patch polygons (fills and replacements alike) are erased from the
+    // IEBC layer first so they win where the two sources overlap; -clean then snaps
+    // edges and fills the slivers left between neighbours, including what is left of
+    // a replaced polygon that its Red Cross successor does not cover.
     const input = { 'iebc.json': collection(kept) };
     let commands = '-i iebc.json -dissolve code';
     if (patchFeatures.length > 0) {

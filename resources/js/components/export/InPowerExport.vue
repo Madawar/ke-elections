@@ -1,0 +1,46 @@
+<script setup lang="ts">
+// The share dialog for the national "In power now" card.
+import { computed } from 'vue';
+import ExportDialog from './ExportDialog.vue';
+import InPowerCard from './InPowerCard.vue';
+import { siteUrl } from '@/lib/export/format';
+import { inPowerFilename } from '@/lib/export/sizes';
+import type { MapTheme } from '@/lib/map/theme';
+import type { SeatsData } from '@/lib/seats';
+
+const props = withDefaults(
+    defineProps<{
+        seats: SeatsData;
+        theme: MapTheme;
+        /** Set when the card shows sample records (none today: the holders are real). */
+        sample?: boolean;
+    }>(),
+    { sample: false },
+);
+const open = defineModel<boolean>('open', { default: false });
+const asOf = computed(
+    () => props.seats.data_as_of ?? props.seats.as_of ?? null,
+);
+const url = computed(() => siteUrl('/'));
+</script>
+
+<template>
+    <ExportDialog
+        v-model:open="open"
+        title="Share image"
+        description="A card of the National Assembly and Senate by party."
+        share-title="In power now, Kenya Electoral Map"
+        :filename="inPowerFilename"
+    >
+        <template #default="{ size }">
+            <InPowerCard
+                :size="size"
+                :seats="seats"
+                :sample="sample"
+                :as-of="asOf"
+                :url="url"
+                :theme="theme"
+            />
+        </template>
+    </ExportDialog>
+</template>

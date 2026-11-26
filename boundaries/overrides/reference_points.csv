@@ -1,0 +1,3 @@
+place,lon,lat,expected_code,source
+Mandera town centre,41.85732,3.93842,212,"OpenStreetMap node/44929726 (place=town, name=Mandera; HOT OSM export on HDX, snapshot 2026-11-02). Ward 212 Township (Mandera East, GN 13771) is Mandera town; the Task 4b brief confirms the town centre belongs in 212."
+Kitengela town centre,36.95899,-1.47454,922,"OpenStreetMap node/2956137647 (place=town, name=Kitengela; HOT OSM export on HDX, snapshot 2026-11-02). Ward 922 Kitengela (Kajiado East, GN 13771) is named after and centred on the town; the Task 4b brief confirms it."
