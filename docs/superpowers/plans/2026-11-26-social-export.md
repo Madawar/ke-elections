@@ -31,7 +31,26 @@ still images for Instagram, stories and X, and a short animated MP4 for TikTok a
 - The owner messages quoted above.
 
 **Branch:** `feature/social-export`, started from `develop` with git flow after
-`feature/people-search-focus` is finished. Finish with `git flow feature finish`. No PR.
+`feature/people-search-focus` **and the pocketbook data feature** are finished. The owner wants
+exports to cover census and voter data too. Finish with `git flow feature finish`. No PR.
+
+## Numeric views (census and registered voters)
+The owner asked on 2026-11-26 for exports to cover "census data etc." These views come from the
+pocketbook data feature, which runs first:
+- **Population** (KNBS census 2019, county level).
+- **Registered voters** (IEBC 2022 register, every level).
+
+For these views:
+- **`ViewState`** carries the metric, its source and year, and the class bins.
+- **`ViewCard`** layout:
+  - The sequential map.
+  - A top-10 units bar chart for the current scope, with each value and its % of the scope total.
+  - The class legend.
+  - Headline examples: "Registered voters across Kenya: 22.1 million (IEBC 2022)" and
+    "Population, Nairobi City: <n> (KNBS census 2019)".
+- **The video:** bars grow and the map shades by value class, lowest to highest, instead of
+  party by party.
+- **Tests:** `headlineFor` and `ViewCard` get one case per numeric metric.
 
 ## Global Constraints
 - **Neutrality:**
