@@ -27,7 +27,12 @@ const h = (
 const data: SeatsData = {
     ...EMPTY_SEATS,
     parties: [
-        { abbrev: 'AAA', name: 'Alpha', coalition_2022: null, colour: null },
+        {
+            abbrev: 'AAA',
+            name: 'Alpha',
+            coalition_2022: null,
+            colour: '#E69F00',
+        },
         {
             abbrev: 'BBB',
             name: 'Beta',
@@ -46,11 +51,32 @@ const data: SeatsData = {
 };
 
 describe('seats', () => {
-    it('gives admin colours priority, palette by seats, independents grey', () => {
+    it('uses set colours, and the neutral fallback for parties without one', () => {
         const c = partyColours(data);
         expect(c.get('BBB')).toBe('#123456');
         expect(c.get('AAA')).toBe('#E69F00');
+        expect(c.get('ZZZ')).toBeUndefined();
         expect(c.get('IND')).toBe(OTHER);
+        const noColour = {
+            ...data,
+            parties: [{ ...data.parties[0], colour: null }],
+        };
+        expect(partyColours(noColour).get('AAA')).toBe(OTHER);
+    });
+
+    it('keeps colours stable when seat counts change', () => {
+        const more = {
+            ...data,
+            holders: [
+                ...data.holders,
+                ...Array.from({ length: 9 }, (_, i) => ({
+                    ...data.holders[3],
+                    code: 10 + i,
+                    party: 'IND',
+                })),
+            ],
+        };
+        expect(partyColours(more).get('BBB')).toBe('#123456');
     });
 
     it('colours a seat level by party and fades filtered-out parties', () => {

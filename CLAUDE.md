@@ -14,6 +14,26 @@ Tailwind 4, shadcn-vue/Reka UI, MapLibre GL JS 6, vite-plugin-pwa. Boundary pipe
 (`boundaries/pipeline/*.mjs`, mapshaper). Tests: Pest (PHP, against MySQL `testing`) and
 Vitest (`tests/js/**`).
 
+## Setup
+First run on a machine with Docker (from the repo root):
+```bash
+docker run --rm -v "$PWD":/app -w /app composer:2 composer install --ignore-platform-reqs
+cp -n .env.example .env
+./vendor/bin/sail up -d
+./vendor/bin/sail artisan key:generate
+./vendor/bin/sail artisan migrate:fresh --seed   # units, parties and every 2022 office holder, via data:import
+./vendor/bin/sail npm ci
+./vendor/bin/sail npm run build
+```
+Then open http://localhost:8080. After pulling, rerun what changed: `sail composer install` (composer.lock),
+`sail npm ci` (package-lock.json), `sail npm run build` (any frontend change; `public/build` is
+not committed) and `sail artisan migrate:fresh --seed` (migrations or `data/sources/`).
+`public/boundaries/` is committed, so the map needs no boundary rebuild.
+
+Cloud sessions: the SessionStart hook runs `scripts/cloud/session-start.sh` (deps, `.env`, MySQL,
+migrations, build). Seed with `php artisan db:seed --force`, then `php artisan serve` for a local
+server. See `docs/cloud-setup.md`.
+
 ## Commands
 Local (Docker):
 - `./vendor/bin/sail up -d` — app at http://localhost:8080
@@ -22,6 +42,9 @@ Local (Docker):
 
 Cloud session (no Docker; `scripts/cloud/session-start.sh` has already installed deps,
 started MySQL and built assets): `php artisan test`, `npm run test:js`.
+
+Data: `php artisan data:import {parties|holders|nominations} <file.csv> [--dry-run]`; formats and
+rules in `docs/data-import.md`, sources in `data/sources/README.md`.
 
 ## Rules that are not negotiable
 - Join everything on IEBC codes (county 1–47, constituency 1–290, ward 1–1450), never on names.
