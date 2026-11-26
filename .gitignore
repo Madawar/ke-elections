@@ -35,3 +35,7 @@ yarn-error.log
 # Claude Code: local-only settings and agent worktrees stay out of git
 .claude/settings.local.json
 .claude/worktrees/
+
+# cloud composer workaround (scripts/cloud/composer-install.sh)
+/composer.cloud.json
+/composer.cloud.lock

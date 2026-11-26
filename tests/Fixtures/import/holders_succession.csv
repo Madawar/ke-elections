@@ -1,0 +1,4 @@
+seat,unit_level,unit_code,unit_name_in_source,holder_name,party_abbrev,party_name_in_source,basis,started_on,ended_on,confidence,source_url,notes
+governor,county,12,Meru,Sample Holder Thirteen,IND,Independent,elected,2022-08-09,2025-03-14,high,https://example.org/g,Sample data
+governor,county,12,Meru,Sample Holder Fourteen,IND,Independent,succession,2025-03-17,,high,https://example.org/g,Deputy governor succeeded
+mp,constituency,1,Changamwe,Sample Holder Fifteen,SPA,,succession,2022-09-08,,high,https://example.org/g,Not allowed for an MP

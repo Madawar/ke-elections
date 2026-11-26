@@ -1,0 +1,39 @@
+/* "Ballot box" (light) and "Tally night" (dark) tokens. Mirrors resources/js/lib/map/theme.ts. */
+@import '@fontsource-variable/archivo/wdth.css';
+
+@theme {
+    --font-display: 'Archivo Variable', ui-sans-serif, system-ui, sans-serif;
+    --color-seat-governor: #3e8fd0;
+    --color-seat-senator: #f2c230;
+    --color-seat-woman-rep: #7a4fa0;
+    --color-seat-mp: #2e8b57;
+    --color-seat-mca: #c8a97e;
+    --color-ground: var(--km-ground);
+    --color-surface: var(--km-surface);
+    --color-ink: var(--km-ink);
+    --color-muted-ink: var(--km-muted);
+    --color-hairline: var(--km-hairline);
+}
+
+:root {
+    --km-ground: #eef1ef;
+    --km-surface: #ffffff;
+    --km-ink: #13233a;
+    --km-muted: #4c5b6b;
+    --km-hairline: #d5dcd8;
+}
+
+.dark {
+    --km-ground: #0f2430;
+    --km-surface: #16303f;
+    --km-ink: #e8eef0;
+    --km-muted: #9db0ba;
+    --km-hairline: #284555;
+}
+
+.km-app {
+    font-family: var(--font-display);
+    font-variation-settings: 'wdth' 92;
+    color: var(--km-ink);
+    background: var(--km-ground);
+}

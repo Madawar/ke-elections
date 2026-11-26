@@ -1,0 +1,2 @@
+seat,unit_level,unit_code,unit_name_in_source,holder_name,party_abbrev,party_name_in_source,basis,started_on,ended_on,confidence,source_url,notes
+governor,county,1,Mombasa,Sample Holder Twelve,SPB,,by_election,2025-01-10,,high,https://example.org/g,
