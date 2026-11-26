@@ -106,4 +106,9 @@ describe('parsePatches', () => {
         expect(rows).toHaveLength(13);
         expect(rows[11]).toEqual({ iebcCode: 735, arcUid: 'qsljIZxApCc' });
     });
+
+    it('rejects a duplicate iebc_code or a duplicate arc_uid', () => {
+        expect(() => parsePatches('iebc_code,arc_uid\n5,A\n5,B\n')).toThrow(/duplicate.*iebc_code 5/i);
+        expect(() => parsePatches('iebc_code,arc_uid\n5,A\n6,A\n')).toThrow(/duplicate.*arc_uid A/i);
+    });
 });

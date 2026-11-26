@@ -9,22 +9,36 @@ import { validateCodes } from './validate.mjs';
 
 const hasGeometry = (geometry) => Array.isArray(geometry?.coordinates) && geometry.coordinates.length > 0;
 
+// -clean fills gaps smaller than this. Left at mapshaper's default (an 80 m-wide
+// sliver), 434 gaps totalling about 1,324 km2 stayed inside the country on the real
+// data: unmapped land that belongs to no ward, so the map showed holes and a tap
+// there selected nothing. The largest is about 309 km2, so 400 km2 fills every one,
+// each into the neighbouring ward it shares most boundary with.
+const GAP_FILL_AREA = '400km2';
+
 const norm = (text) => String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 /** Parse ward_patches.csv into `{ iebcCode, arcUid }[]`. */
 export function parsePatches(csvText) {
+    const codes = new Set();
+    const uids = new Set();
+
     return parseCsv(csvText).map((row, i) => {
         const iebcCode = Number(row.iebc_code);
         const arcUid = (row.arc_uid ?? '').trim();
         if (!Number.isInteger(iebcCode) || iebcCode < 1 || arcUid === '') {
             throw new Error(`Invalid ward patch on data row ${i + 1}: ${JSON.stringify(row)}`);
         }
+        if (codes.has(iebcCode)) throw new Error(`Duplicate iebc_code ${iebcCode} in ward patches (data row ${i + 1})`);
+        if (uids.has(arcUid)) throw new Error(`Duplicate arc_uid ${arcUid} in ward patches (data row ${i + 1})`);
+        codes.add(iebcCode);
+        uids.add(arcUid);
         return { iebcCode, arcUid };
     });
 }
 
 /** Run mapshaper in memory, returning its output files and every status message it printed. */
-async function runMapshaper(commands, input) {
+export async function runMapshaper(commands, input) {
     const { internal } = mapshaper;
     const restore = internal.getLoggingSetter();
     const messages = [];
@@ -157,10 +171,10 @@ export async function assembleWards({ iebc, arc, patches, gazette, expected = 14
     } else {
         commands += ' -rename-layers wards';
     }
-    commands += ' -clean -o out.json target=wards format=geojson';
+    commands += ` -clean gap-fill-area=${GAP_FILL_AREA} -o out.json target=wards format=geojson`;
 
     const { output, messages } = await runMapshaper(commands, input);
-    log.push({ step: 'cleaned', detail: { messages } });
+    log.push({ step: 'cleaned', detail: { gapFillArea: GAP_FILL_AREA, messages } });
 
     const assembled = JSON.parse(output['out.json'].toString());
     const wards = joinGazette(assembled, gazette, sources, log);
