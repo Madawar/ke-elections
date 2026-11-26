@@ -138,7 +138,8 @@ export const POLLING_STATIONS: MapOverlay = {
             id: 'stations-dot',
             type: 'circle',
             source,
-            minzoom: 9,
+            // Starts where the dots are visible, so faded-out dots never catch a tap.
+            minzoom: 9.6,
             paint: {
                 'circle-radius': [
                     'interpolate',
@@ -166,18 +167,18 @@ export const POLLING_STATIONS: MapOverlay = {
                     'interpolate',
                     ['linear'],
                     ['zoom'],
-                    9,
-                    0,
                     9.6,
+                    0,
+                    10.2,
                     0.85,
                 ],
                 'circle-stroke-opacity': [
                     'interpolate',
                     ['linear'],
                     ['zoom'],
-                    9,
-                    0,
                     9.6,
+                    0,
+                    10.2,
                     1,
                 ],
             },

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { warmPages } from '@/lib/pwa/warmPages';
+import { PUBLIC_PAGE_HEADER, warmPages } from '@/lib/pwa/warmPages';
 
 function fakeCache(present: string[]) {
     const stored = new Set(present);
@@ -8,38 +8,67 @@ function fakeCache(present: string[]) {
         match: vi.fn(async (url: string) =>
             stored.has(url) ? new Response('') : undefined,
         ),
-        add: vi.fn(async (url: string) => {
+        put: vi.fn(async (url: string) => {
             stored.add(url);
         }),
     };
 }
+const publicPage = () =>
+    new Response('<html>', { headers: { [PUBLIC_PAGE_HEADER]: '1' } });
 
 describe('warmPages', () => {
     it('saves the current page and the home page when they are not cached yet', async () => {
         const cache = fakeCache([]);
-        await warmPages(cache, '/ward/1448');
+        await warmPages(cache, '/ward/1448', async () => publicPage());
         expect([...cache.stored].sort()).toEqual(['/', '/ward/1448']);
+    });
+
+    it('fetches without cookies, so a signed-in session never reaches the cache', async () => {
+        const cache = fakeCache([]);
+        const fetcher = vi.fn(async () => publicPage());
+        await warmPages(cache, '/', fetcher);
+        expect(
+            (fetcher.mock.calls[0] as unknown as [Request])[0].credentials,
+        ).toBe('omit');
+    });
+
+    it('does not save a page the server did not mark public', async () => {
+        const cache = fakeCache([]);
+        await warmPages(
+            cache,
+            '/county/47',
+            async () => new Response('<html>'),
+        );
+        expect(cache.put).not.toHaveBeenCalled();
     });
 
     it('does not fetch pages that are already cached', async () => {
         const cache = fakeCache(['/']);
-        await warmPages(cache, '/');
-        expect(cache.add).not.toHaveBeenCalled();
+        const fetcher = vi.fn(async () => publicPage());
+        await warmPages(cache, '/', fetcher);
+        expect(fetcher).not.toHaveBeenCalled();
     });
 
     it('never saves admin, account or login pages', async () => {
         const cache = fakeCache([]);
-        await warmPages(cache, '/settings/profile');
-        await warmPages(cache, '/ward/abc');
+        await warmPages(cache, '/settings/profile', async () => publicPage());
+        await warmPages(cache, '/ward/abc', async () => publicPage());
         expect([...cache.stored]).toEqual(['/']);
     });
 
     it('keeps going when one page cannot be fetched', async () => {
         const cache = fakeCache([]);
-        cache.add.mockImplementationOnce(async () => {
-            throw new TypeError('Request failed');
-        });
-        await expect(warmPages(cache, '/county/47')).resolves.toBeUndefined();
+        let first = true;
+        const fetcher = async () => {
+            if (first) {
+                first = false;
+                throw new TypeError('Request failed');
+            }
+            return publicPage();
+        };
+        await expect(
+            warmPages(cache, '/county/47', fetcher),
+        ).resolves.toBeUndefined();
         expect(cache.stored.has('/county/47')).toBe(true);
     });
 });

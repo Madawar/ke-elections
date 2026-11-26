@@ -29,7 +29,10 @@ function ensureWorker(maplibre: typeof import('maplibre-gl')) {
             await import('maplibre-gl/dist/maplibre-gl-worker.mjs?url')
         ).default;
         if (!maplibre.getWorkerUrl()) maplibre.setWorkerUrl(url);
-    })();
+    })().catch((error: unknown) => {
+        workerReady = null; // let the next export try again
+        throw error;
+    });
     return workerReady;
 }
 
@@ -58,17 +61,24 @@ export async function renderMapImage({
     });
     document.body.appendChild(container);
 
-    const map = new maplibre.Map({
-        container,
-        style,
-        bounds,
-        fitBoundsOptions: { padding, maxZoom },
-        interactive: false,
-        attributionControl: false,
-        pixelRatio: 1,
-        fadeDuration: 0,
-        canvasContextAttributes: { preserveDrawingBuffer: true },
-    });
+    let map: import('maplibre-gl').Map;
+    try {
+        map = new maplibre.Map({
+            container,
+            style,
+            bounds,
+            fitBoundsOptions: { padding, maxZoom },
+            interactive: false,
+            attributionControl: false,
+            pixelRatio: 1,
+            fadeDuration: 0,
+            canvasContextAttributes: { preserveDrawingBuffer: true },
+        });
+    } catch (error) {
+        // No WebGL2 (or no context left): don't leave the off-screen container behind.
+        container.remove();
+        throw error;
+    }
 
     try {
         return await new Promise<string>((resolve, reject) => {

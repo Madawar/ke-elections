@@ -40,6 +40,7 @@ const OFFICIAL = /(^|\.)(iebc\.or\.ke|gazettes\.africa|kenyalaw\.org)$/;
  */
 export function sourceLine(urls: string[]): string {
     const others = new Set<string>();
+    let official = false;
     for (const url of urls) {
         let host: string;
         try {
@@ -47,9 +48,14 @@ export function sourceLine(urls: string[]): string {
         } catch {
             continue;
         }
-        if (!OFFICIAL.test(host)) others.add(host);
+        if (OFFICIAL.test(host)) official = true;
+        else others.add(host);
     }
-    const parts = ['IEBC gazette notices', ...[...others].sort()];
+    // With no records at all, the card still rests on the gazetted IEBC codes and names.
+    const parts = [
+        ...(official || others.size === 0 ? ['IEBC gazette notices'] : []),
+        ...[...others].sort(),
+    ];
     return parts.length === 1
         ? parts[0]
         : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;

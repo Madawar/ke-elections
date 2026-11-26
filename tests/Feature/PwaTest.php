@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\User;
+
 test('the page links the web app manifest, theme colour and touch icon', function () {
     $html = $this->get('/')->assertOk()->getContent();
 
@@ -15,4 +17,12 @@ test('an explicit dark appearance gets the dark theme colour only', function () 
     expect($html)
         ->toContain('<meta name="theme-color" content="#0F2430">')
         ->not->toContain('content="#EEF1EF"');
+});
+
+test('map pages are marked safe to keep offline only for signed-out visitors', function () {
+    $this->get('/ward/1448')->assertOk()->assertHeader('X-Public-Page', '1');
+    $this->get('/')->assertHeader('X-Public-Page', '1');
+
+    $user = User::factory()->create();
+    $this->actingAs($user)->get('/ward/1448')->assertOk()->assertHeaderMissing('X-Public-Page');
 });

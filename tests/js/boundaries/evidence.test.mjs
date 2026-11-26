@@ -221,6 +221,8 @@ describe('replaceSignals', () => {
         expect(replaceSignals(none, [point])).toEqual(['reference point']);
         expect(replaceSignals(none, [{ ...point, oursCode: 1 }])).toEqual([]);
         expect(replaceSignals(none, [{ ...point, inRedCross: false }])).toEqual([]);
+        // Outside every IEBC ward is a coast or border difference, not a misfiled code.
+        expect(replaceSignals(none, [{ ...point, oursCode: null }])).toEqual([]);
         expect(replaceSignals(row, [point])).toEqual(['stations', 'reference point']);
     });
 });

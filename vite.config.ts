@@ -108,6 +108,22 @@ export default defineConfig({
                 skipWaiting: true,
                 runtimeCaching: [
                     {
+                        // Hashed bundle files a saved page refers to, kept as they are used:
+                        // after a deploy the old worker can save a new page before the new
+                        // precache installs, and that page must still find its scripts.
+                        urlPattern: ({ url }) =>
+                            url.pathname.startsWith('/build/assets/'),
+                        handler: 'CacheFirst',
+                        options: {
+                            cacheName: 'assets',
+                            expiration: {
+                                maxEntries: 200,
+                                maxAgeSeconds: 60 * 60 * 24 * 60,
+                            },
+                            cacheableResponse: { statuses: [200] },
+                        },
+                    },
+                    {
                         urlPattern: ({ url }) =>
                             url.pathname === '/boundaries/stations.geojson',
                         handler: 'CacheFirst',
@@ -131,6 +147,17 @@ export default defineConfig({
                             expiration: { maxEntries: 50 },
                             cacheableResponse: { statuses: [200] },
                             plugins: [
+                                {
+                                    // Only a signed-out copy is ever stored: pages embed the
+                                    // signed-in user, and the server marks guest responses
+                                    // (App\\Http\\Middleware\\MarkPublicPage).
+                                    cacheWillUpdate: async ({ response }) =>
+                                        response.headers.get(
+                                            'X-Public-Page',
+                                        ) === '1'
+                                            ? response
+                                            : null,
+                                },
                                 {
                                     // Offline and never visited: open the saved home page
                                     // rather than the browser's error page.

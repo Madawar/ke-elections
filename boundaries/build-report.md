@@ -33,7 +33,7 @@ IEBC has no polygon for these codes. Each takes the polygon of the reviewed Red 
 | 735 | Lelan | qsljIZxApCc |
 | 1448 | Ngei | tsmsPb6qMFa |
 
-## Replaced wards (38)
+## Replaced wards (36)
 
 IEBC has a polygon for these codes, but filed under the wrong code or drawn in the wrong place. Each takes its Red Cross polygon (`mode=replace` in `boundaries/overrides/ward_patches.csv`), cut out of its neighbours like a patch. The removed IEBC polygon is re-filed under the patch that covers most of it, and only what no Red Cross ward covers (lake, sea or a border strip) is kept, so coasts, lake shores and borders keep their IEBC line. A Red Cross polygon that reaches past that line still adds its bulge (Faza and Moyale towns are outside every IEBC polygon).
 
@@ -50,12 +50,10 @@ Station shares are of the stations matched to the ward. "IEBC" is the build with
 | 4 | Changamwe | qyQg0b3mxEL | CHANGAMWE | stations | 5 | 20% | 80% | 80% | 4 |
 | 56 | Watamu | FmnSathgx18 | WATAMU | reference point | 7 | 29% | 57% | 57% | 56 |
 | 81 | Magarini | uI1MltAs8p3 | MAGARINI | stations | 14 | 14% | 93% | 93% | 81 |
-| 101 | Faza | xDKzFE2qfHL | FAZA | reference point | 3 | 0% | 67% | 86% | 101 |
 | 212 | Township | dYhEFLJSRYl | BULLA MPYA | reference point | 0 |  |  |  | 215 |
 | 213 | Neboi | UU5663WBF7t | KHALALIO | reference point | 0 |  |  |  | 214 |
 | 214 | Khalalio | gVbkohpiw1f | NEBOI | reference point | 0 |  |  |  | 213 |
 | 215 | Libehia | g1daXHb0Lz0 | TOWNSHIP | with its group (212) | 0 |  |  |  | 212 |
-| 225 | Moyale Township | kHOR6vEvDdY | MOYALE TOWNSHIP | reference point | 2 | 100% | 100% | 100% | 225 |
 | 285 | Mwanganthia | FJJRq7O0QcB | MWANGANTHIA | stations | 14 | 0% | 79% | 79% | 287 |
 | 286 | Abothuguchi Central | Ay0bToL5BTE | ABOTHUGUCHI CENTRAL | with its group (285) | 17 | 100% | 100% | 100% | 285 |
 | 482 | Karatina Town | oCDeWaZZImt | KARATINA TOWN | reference point | 7 | 71% | 86% | 86% | 482 |
@@ -94,7 +92,7 @@ None. (The 2013 names with no 2026 ward in their constituency, Mandera East's "B
 
 A matched station counts for its ward only if its GPS falls inside the ward's own county; many 2013 coordinates belong to another county (Mandera East's Township, for one, lists 98 stations, scattered across the country or at 0, 0).
 
-### Still uncertain (82)
+### Still uncertain (83)
 
 Wards whose signals disagree with this build and that were not replaced: at least 3 stations with fewer than 50% of them inside the built polygon, a reference point outside its ward, or a ward that meets the rule but was left alone. Most are dense urban wards (Nairobi, Mombasa, Nakuru, Kisumu), where both layers agree poorly with the rough 2013 GPS.
 
@@ -105,6 +103,7 @@ Wards whose signals disagree with this build and that were not replaced: at leas
 | 23 | Bofu | 3 | 33% | 67% | 33% | 24 | 33% of 3 stations inside the built polygon |
 | 29 | Shimanzi/Ganjoni | 4 | 25% |  | 25% | 30 | 25% of 4 stations inside the built polygon |
 | 78 | Malindi Town | 3 | 33% | 100% | 33% | 79 | 33% of 3 stations inside the built polygon |
+| 101 | Faza | 3 | 0% | 67% | 0% | 104 | 0% of 3 stations inside the built polygon |
 | 158 | Sangailu | 3 | 33% | 100% | 33% | 152 | 33% of 3 stations inside the built polygon |
 | 165 | Batalu | 3 | 0% | 100% | 0% | 164 | 0% of 3 stations inside the built polygon |
 | 176 | Arbajahan | 4 | 25% | 50% | 25% | 183 | 25% of 4 stations inside the built polygon |
@@ -183,15 +182,17 @@ Wards whose signals disagree with this build and that were not replaced: at leas
 | 1444 | Nairobi South | 6 | 33% | 50% | 33% | 1433 | 33% of 6 stations inside the built polygon |
 | 1447 | Huruma | 3 | 0% | 33% | 0% | 1387 | 0% of 3 stations inside the built polygon |
 
-Reference-point candidates not used (10, from `boundaries/build/reference-candidates.csv`, written by `boundaries/scripts/reference_points.mjs`):
+Reference-point candidates not used (12, from `boundaries/build/reference-candidates.csv`, written by `boundaries/scripts/reference_points.mjs`):
 
 | Place | Expected ward | OSM | Why not |
 |---|---|---|---|
 | Ukunda town | 32 Ukunda | node/44914382 | 48 m from a line in the Red Cross layer: too close to call |
 | Malindi town | 78 Malindi Town | node/44929687 | 42 m from a line in the IEBC layer: too close to call |
+| Faza town | 101 Faza | node/45004382 | outside every IEBC ward: a coast or border line difference, not a ward filed under the wrong code |
 | Danaba town | 166 Danaba | node/3696859225 | 20 m from a line in the IEBC layer: too close to call |
 | Wargadud town | 175 Wargadud | node/3702721572 | only the Red Cross layer has it in its ward, but 3 stations favour IEBC (1 inside IEBC, 0.667 inside Red Cross) |
 | Wargadud town | 206 Wargadud | node/10657170579 | 56 m from a line in the IEBC layer: too close to call |
+| Moyale town | 225 Moyale Township | node/44927166 | outside every IEBC ward: a coast or border line difference, not a ward filed under the wrong code |
 | Kapenguria town | 642 Kapenguria | node/44997889 | in neither layer's Kapenguria: IEBC 643, Red Cross Mnagei Ward |
 | Nanyuki town | 820 Nanyuki | node/44925466 | 34 m from a line in the IEBC layer: too close to call |
 | Londiani town | 936 Londiani | node/44931441 | in neither layer's Londiani: IEBC 937, Red Cross Kedowa/kimugul Ward |
@@ -293,17 +294,17 @@ The data quality report counted 19 parent and 24 name differences on the per-war
 
 Run with `-clean gap-fill-area=400km2`. Mapshaper said:
 
-- [dissolve] Dissolved 1,404 features into 1,399 features
-- [dissolve] Dissolved 63 features into 51 features
-- [clean] Removed 12,149 of 12,149 slivers using 400+ sqkm variable threshold
+- [dissolve] Dissolved 1,406 features into 1,401 features
+- [dissolve] Dissolved 59 features into 49 features
+- [clean] Removed 12,147 of 12,147 slivers using 400+ sqkm variable threshold
 - [clean] Retained 1,450 of 1,450 features
 
 Gap threshold: with mapshaper's default, 434 gaps totalling about 1,324 km² stayed inside the country. They are land that no ward covers, so the map would show holes and a tap there would select nothing. The largest is about 309 km², so a threshold of 400 km² fills every one into the neighbouring ward that shares most boundary with it. Overlaps need no tuning: the default already leaves none.
 
 | Stage | Sum of ward areas (km²) | Area of union (km²) | Overlap (km²) | Holes inside the country | Hole area (km²) |
 |---|---|---|---|---|---|
-| After assembly (full detail) | 594,061 | 594,061 | 0 | 6 | 0.07 |
-| After simplification | 594,032.77 | 594,032.77 | 0 | 1 | 0 |
+| After assembly (full detail) | 594,044.77 | 594,044.77 | 0 | 6 | 0.07 |
+| After simplification | 594,017.57 | 594,017.57 | 0 | 1 | 0 |
 
 ## Simplification: largest area changes per ward
 
@@ -311,21 +312,21 @@ Each ward's area after simplification against its full-detail area (after cleani
 
 | Code | Ward | Full detail (km²) | Simplified (km²) | Change |
 |---|---|---|---|---|
-| 101 | Faza | 95.68 | 89.67 | -6.3% |
+| 212 | Township | 25.5 | 24.3 | -4.7% |
+| 101 | Faza | 30.18 | 28.77 | -4.7% |
 | 29 | Shimanzi/Ganjoni | 5.02 | 5.24 | +4.5% |
-| 212 | Township | 25.5 | 24.5 | -3.9% |
+| 104 | Shella | 105.41 | 101.17 | -4.0% |
 | 424 | Wote | 97.23 | 93.78 | -3.6% |
-| 104 | Shella | 55.11 | 53.28 | -3.3% |
 | 797 | Kapropita | 96.83 | 93.95 | -3.0% |
 | 596 | Karai | 26.82 | 27.61 | +2.9% |
+| 738 | Moiben/Kuserwo | 130.12 | 133.92 | +2.9% |
 | 761 | Nandi Hills | 77.02 | 79.23 | +2.9% |
+| 607 | Kijabe | 78.81 | 80.88 | +2.6% |
 | 1275 | Ragana-Oruba | 30.27 | 29.48 | -2.6% |
-| 738 | Moiben/Kuserwo | 130.12 | 133.5 | +2.6% |
 | 944 | Kapsoit | 62.42 | 64.04 | +2.6% |
 | 10 | Junda | 7.88 | 8.08 | +2.6% |
 | 598 | Sigona | 24.33 | 24.93 | +2.5% |
 | 750 | Metkei | 64.76 | 66.34 | +2.4% |
-| 1007 | Shirugu-Mugai | 59.88 | 61.31 | +2.4% |
 
 ## Checks on the real data
 
@@ -344,15 +345,15 @@ The five Ruiru patches (571, 572, 573, 575, 576) and 574 Kiuu, which IEBC had sw
 
 Pairwise overlap among these six wards (15 pairs): none.
 
-Reference points: 94 in `boundaries/overrides/reference_points.csv`, 94 of them inside their expected ward at full detail; the build also fails if any falls outside it after simplification.
+Reference points: 92 in `boundaries/overrides/reference_points.csv`, 92 of them inside their expected ward at full detail; the build also fails if any falls outside it after simplification.
 
 ## Output files
 
 | File | Raw (KB) | Gzipped (KB) | Gzip budget (KB) |
 |---|---|---|---|
-| constituencies.geojson | 542.1 | 137.1 | 180 |
-| counties.geojson | 202.3 | 58.1 | 120 |
-| labels.geojson | 264.5 | 32.7 |  |
-| provinces.geojson | 105.4 | 32.3 |  |
+| constituencies.geojson | 536.8 | 135.6 | 180 |
+| counties.geojson | 199.8 | 57.3 | 120 |
+| labels.geojson | 264.5 | 32.8 |  |
+| provinces.geojson | 103.6 | 31.7 |  |
 | units.json | 145.1 | 41.8 | 60 |
-| wards.geojson | 1292.4 | 288.5 | 300 |
+| wards.geojson | 1284.7 | 286.5 | 300 |

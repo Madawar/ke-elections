@@ -99,7 +99,7 @@ code,name,constituency_code,county_code,stations,inside_ours,inside_red_cross,ar
 98,Bangale,20,4,2,1,1,SCxU4funihr,,1,,,
 99,Sala,20,4,4,1,1,tc9MpZMV6yJ,,1,,,
 100,Madogo,20,4,5,1,1,yTb02ghmk0V,,1,,,
-101,Faza,21,5,3,0,0.667,xDKzFE2qfHL,104,0.857,"Faza town: ours -, Red Cross yes",reference point,replace
+101,Faza,21,5,3,0,0.667,xDKzFE2qfHL,104,0,,,
 102,Kiunga,21,5,2,1,0,fmWYhwoFxe8,,1,,,
 103,Basuba,21,5,0,,,YbfMLNQRxtf,,,,,
 104,Shella,22,5,1,0,1,hlwSQTsP5nU,105,0,,,
@@ -223,7 +223,7 @@ code,name,constituency_code,county_code,stations,inside_ours,inside_red_cross,ar
 222,Sololo,45,10,3,1,1,IdYKTiaR0Cy,,1,,,
 223,Heillu/Manyatta,45,10,4,1,1,RYHYagSQfDF,,1,,,
 224,Golbo,45,10,8,0.625,1,jltiitEPkip,221,0.625,,,
-225,Moyale Township,45,10,2,1,1,kHOR6vEvDdY,,1,"Moyale town: ours -, Red Cross yes",reference point,replace
+225,Moyale Township,45,10,2,1,1,kHOR6vEvDdY,,1,,,
 226,Uran,45,10,8,0.875,0.875,KKOlWI3X5nP,222,0.875,,,
 227,Obbu,45,10,3,0.333,0.333,fBMKIsnV2ZV,222,0.333,,,
 228,Dukana,46,10,2,1,1,kSbjSiQEQ91,,1,"Dukana town: ours 228, Red Cross yes",,

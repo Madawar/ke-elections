@@ -309,8 +309,10 @@ export function replaceSignals(row, referenceChecks) {
     ) {
         signals.push('stations');
     }
+    // A point outside every IEBC ward (oursCode null) shows a difference in the coast or border
+    // line, not a polygon filed under the wrong code, so it doesn't count.
     const points = referenceChecks.filter((p) => p.expectedCode === row.code);
-    if (points.some((p) => p.oursCode !== row.code && p.inRedCross)) signals.push('reference point');
+    if (points.some((p) => p.oursCode !== null && p.oursCode !== row.code && p.inRedCross)) signals.push('reference point');
     return signals;
 }
 

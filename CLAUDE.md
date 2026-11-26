@@ -30,6 +30,10 @@ Then open http://localhost:8080. After pulling, rerun what changed: `sail compos
 not committed) and `sail artisan migrate:fresh --seed` (migrations or `data/sources/`).
 `public/boundaries/` is committed, so the map needs no boundary rebuild.
 
+Rebuilding boundaries: `npm run boundaries:fetch`, then `npm run boundaries:rebuild` (build, towns,
+stations, in that order), then `npm run build`. The service worker precaches `public/boundaries/`
+at build time, so a boundary change only reaches installed apps after a fresh `npm run build`.
+
 Cloud sessions: the SessionStart hook runs `scripts/cloud/session-start.sh` (deps, `.env`, MySQL,
 migrations, build). Seed with `php artisan db:seed --force`, then `php artisan serve` for a local
 server. See `docs/cloud-setup.md`.

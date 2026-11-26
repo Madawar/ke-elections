@@ -1,9 +1,11 @@
 place,lon,lat,expected_code,osm,reason
 Ukunda town,39.56616,-4.28141,32,node/44914382,48 m from a line in the Red Cross layer: too close to call
 Malindi town,40.11659,-3.2166,78,node/44929687,42 m from a line in the IEBC layer: too close to call
+Faza town,41.11168,-2.05595,101,node/45004382,"outside every IEBC ward: a coast or border line difference, not a ward filed under the wrong code"
 Danaba town,39.78577,3.33951,166,node/3696859225,20 m from a line in the IEBC layer: too close to call
 Wargadud town,40.36219,2.31026,175,node/3702721572,"only the Red Cross layer has it in its ward, but 3 stations favour IEBC (1 inside IEBC, 0.667 inside Red Cross)"
 Wargadud town,40.86739,3.1838,206,node/10657170579,56 m from a line in the IEBC layer: too close to call
+Moyale town,39.05127,3.52419,225,node/44927166,"outside every IEBC ward: a coast or border line difference, not a ward filed under the wrong code"
 Kapenguria town,35.09099,1.25225,642,node/44997889,"in neither layer's Kapenguria: IEBC 643, Red Cross Mnagei Ward"
 Nanyuki town,37.07463,0.01403,820,node/44925466,34 m from a line in the IEBC layer: too close to call
 Londiani town,35.59142,-0.16732,936,node/44931441,"in neither layer's Londiani: IEBC 937, Red Cross Kedowa/kimugul Ward"

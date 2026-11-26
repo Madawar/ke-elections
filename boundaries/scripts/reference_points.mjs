@@ -8,6 +8,7 @@
 // in (by the Red Cross layer), is expected to lie in that ward. Names only choose the candidates;
 // the CSV records the code. Villages are skipped (many share a name with a ward they are not in),
 // except Neboi and Khalalio in Mandera East. A candidate is rejected when:
+// - the point is outside every IEBC ward (a coast or border line difference, not a misfiled code); or
 // - neither the IEBC build nor the Red Cross layer has the point in its namesake ward (the
 //   namesake assumption is what fails, as at Kapenguria town, in Mnagei ward in both); or
 // - only the Red Cross layer has it there, but the ward's own polling stations (at least 3) are
@@ -111,6 +112,8 @@ for (const f of places) {
     const metres = clearance(pt);
     if (metres < CLEARANCE_M) {
         rejected.push({ ...row, osm: p.id, reason: `${metres.toFixed(0)} m from a line in ${edgeMetres(at(iebc, pt), pt) < CLEARANCE_M ? 'the IEBC' : 'the Red Cross'} layer: too close to call` });
+    } else if (!at(iebc, pt)) {
+        rejected.push({ ...row, osm: p.id, reason: 'outside every IEBC ward: a coast or border line difference, not a ward filed under the wrong code' });
     } else if (!inIebc && !inRedCross) {
         rejected.push({ ...row, osm: p.id, reason: `in neither layer's ${gazette.wards.get(code).name}: IEBC ${at(iebc, pt)?.properties.COUNTY_ASS ?? 'none'}, Red Cross ${rc.properties.ward}` });
     } else if (!inIebc && Number(e.stations) >= 3 && Number(e.inside_ours) > Number(e.inside_red_cross)) {
