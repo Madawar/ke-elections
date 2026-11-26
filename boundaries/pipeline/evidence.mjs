@@ -34,6 +34,20 @@ export const CONSTITUENCY_ALIASES = [
     { county: 'Homa Bay', from: 'Suba', to: 'Suba South' },
 ];
 
+// Red Cross ward names that differ from the gazette's for the same ward, reviewed by hand. Each
+// applies inside its county only, and replaces the plain name match for that Red Cross name.
+// - Mandera: the Red Cross layer (like IEBC's 2013 data and polling stations) uses the 2013 ward
+//   list, where Mandera East has "Bulla Mpya" and Lafey has "Libehia". The 2026 gazette has
+//   Libehia (215) in Mandera East and Sala (216) in Lafey: each constituency has one 2013 name
+//   left over for one 2026 name. OpenStreetMap's Sala village (node/3166591374) lies inside the
+//   Lafey "LIBEHIA" polygon in both layers.
+// - Meru: "Mwangathia" is the Red Cross spelling of 285 Mwanganthia (Central Imenti).
+export const RED_CROSS_ALIASES = [
+    { county: 'Mandera', redCross: 'Bulla Mpya', gazette: 'Libehia' },
+    { county: 'Mandera', redCross: 'Libehia', gazette: 'Sala' },
+    { county: 'Meru', redCross: 'Mwangathia', gazette: 'Mwanganthia' },
+];
+
 const inKenya = ([x, y]) => x >= KENYA_BBOX[0] && x <= KENYA_BBOX[2] && y >= KENYA_BBOX[1] && y <= KENYA_BBOX[3];
 const share = (hits, total) => (total > 0 ? Math.round((hits / total) * 1000) / 1000 : null);
 
@@ -119,18 +133,21 @@ export function matchStations(stations, gazette) {
 }
 
 /**
- * Match each gazette ward to a Red Cross polygon by exact normalised name inside its county.
+ * Match each gazette ward to a Red Cross polygon by exact normalised name inside its county
+ * (after RED_CROSS_ALIASES).
  * Where a county has more than one ward or polygon with the name, each polygon goes to the
  * ward with the most of its stations inside it (greedily, each used once); with no stations
  * to tell them apart they stay unmatched. Returns `Map<code, Feature>`.
  */
 export function matchRedCross(arc, gazette, stationsByCode) {
     const countyOf = countyIndex(gazette);
+    const aliases = new Map(RED_CROSS_ALIASES.map((a) => [`${normName(a.county)}|${normName(a.redCross)}`, normName(a.gazette)]));
     const polygons = new Map();
     for (const feature of arc.features) {
         const countyCode = countyOf(feature.properties?.county);
         if (countyCode === null || !feature.geometry) continue;
-        const key = `${countyCode}|${normName(feature.properties.ward)}`;
+        const name = normName(feature.properties.ward);
+        const key = `${countyCode}|${aliases.get(`${normName(gazette.counties.get(countyCode).name)}|${name}`) ?? name}`;
         if (!polygons.has(key)) polygons.set(key, []);
         polygons.get(key).push(feature);
     }

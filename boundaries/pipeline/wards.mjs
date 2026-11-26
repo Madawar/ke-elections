@@ -4,6 +4,7 @@
 // then cleaned so wards neither overlap nor leave gaps. Names and parent
 // codes always come from the gazette, joined on the IEBC ward code.
 
+import * as turf from '@turf/turf';
 import mapshaper from 'mapshaper';
 import { parseCsv } from './gazette.mjs';
 import { validateCodes } from './validate.mjs';
@@ -90,8 +91,9 @@ function collectIebc(iebc, replaced, log) {
             log.push({ step: 'dropped', detail: { code, name, reason: 'empty geometry' } });
         } else if (replaced.has(code)) {
             // The polygon filed under this code is someone else's; its attributes describe it, not the ward.
-            const entry = removed.get(code) ?? { sourceName: name, pieces: 0 };
+            const entry = removed.get(code) ?? { sourceName: name, pieces: 0, features: [] };
             entry.pieces++;
+            entry.features.push({ type: 'Feature', properties: { code }, geometry: feature.geometry });
             removed.set(code, entry);
         } else {
             kept.push({ type: 'Feature', properties: { code }, geometry: feature.geometry });
@@ -127,7 +129,8 @@ function collectPatches(arc, patches, iebcCodes, removed, log) {
             features.push({ type: 'Feature', properties: { code: iebcCode }, geometry: match.geometry });
         }
         if (mode === 'replace') {
-            log.push({ step: 'replaced', detail: { code: iebcCode, arcUid, reason, ...removed.get(iebcCode) } });
+            const { sourceName, pieces } = removed.get(iebcCode);
+            log.push({ step: 'replaced', detail: { code: iebcCode, arcUid, reason, sourceName, pieces } });
         } else {
             log.push({ step: 'patched', detail: { code: iebcCode, arcUid } });
         }
@@ -137,6 +140,46 @@ function collectPatches(arc, patches, iebcCodes, removed, log) {
 }
 
 const collection = (features) => ({ type: 'FeatureCollection', features });
+
+function overlapArea(a, b) {
+    const [aw, as, ae, an] = turf.bbox(a);
+    const [bw, bs, be, bn] = turf.bbox(b);
+    if (ae < bw || be < aw || an < bs || bn < as) return 0;
+    try {
+        const shared = turf.intersect(turf.featureCollection([a, b]));
+        return shared ? turf.area(shared) : 0;
+    } catch {
+        return 0; // an invalid ring: count it as no overlap rather than fail the build
+    }
+}
+
+/**
+ * A replaced code's IEBC polygon is someone's land, water or border strip all the same. Each piece
+ * is re-filed under the patch (fill or replace) whose Red Cross polygon covers most of it, or kept
+ * under its own code if none does. The caller then erases every Red Cross polygon from it, so only
+ * what no Red Cross ward claims (lake or sea inside the IEBC outline, a strip along the border)
+ * stays, with the ward that took its place. Without this, a replacement along a coast, lake or
+ * border cuts a notch into the outline and can open an inland gap to the outside, where -clean
+ * no longer fills it.
+ */
+function refileReplaced(removed, patchFeatures, log) {
+    const refiled = [];
+    for (const [code, { features }] of removed) {
+        const targets = new Set();
+        for (const piece of features) {
+            let best = { code, area: 0 };
+            for (const patch of patchFeatures) {
+                const area = overlapArea(piece, patch);
+                if (area > best.area) best = { code: patch.properties.code, area };
+            }
+            targets.add(best.code);
+            refiled.push({ ...piece, properties: { code: best.code } });
+        }
+        const entry = log.find((e) => e.step === 'replaced' && e.detail.code === code);
+        if (entry) entry.detail.refiledTo = [...targets].sort((a, b) => a - b);
+    }
+    return refiled;
+}
 
 function joinGazette(assembled, gazette, sources, log) {
     const features = assembled.features
@@ -176,6 +219,10 @@ function joinGazette(assembled, gazette, sources, log) {
     return collection(features);
 }
 
+/**
+ * `arc` is the Red Cross layer: patches take their polygons from it by uid, and a replaced code's
+ * old IEBC polygon is cut by all of it (see refileReplaced), so pass the whole layer.
+ */
 export async function assembleWards({ iebc, arc, patches, gazette, expected = 1450 }) {
     const log = [];
 
@@ -190,6 +237,18 @@ export async function assembleWards({ iebc, arc, patches, gazette, expected = 14
     // a replaced polygon that its Red Cross successor does not cover.
     const input = { 'iebc.json': collection(kept) };
     let commands = '-i iebc.json -dissolve code';
+    const refiled = refileReplaced(removed, patchFeatures, log);
+    if (refiled.length > 0) {
+        // Cut every Red Cross polygon from the re-filed old polygons in a separate run: in the
+        // main run the whole Red Cross layer's arcs would change how -clean snaps and fills
+        // everywhere else. What is left joins the patches.
+        const { output } = await runMapshaper(
+            '-i old.json rc.json combine-files -target old -erase source=rc -o out.json target=old format=geojson',
+            { 'old.json': collection(refiled), 'rc.json': collection(arc.features.filter((f) => hasGeometry(f.geometry))) },
+        );
+        const left = JSON.parse(output['out.json'].toString()).features.filter((f) => hasGeometry(f.geometry));
+        patchFeatures.push(...left);
+    }
     if (patchFeatures.length > 0) {
         input['patch.json'] = collection(patchFeatures);
         commands =

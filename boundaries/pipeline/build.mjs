@@ -96,7 +96,7 @@ function fail(problems) {
  * Score the IEBC build (fills only) against the stations, the Red Cross layer and the reference
  * points, check every replace row against the rule, and score the final build again.
  */
-function gatherEvidence({ baseline, final, stations, arcAll, gazette, points, patches, problems }) {
+function gatherEvidence({ baseline, final, log, stations, arcAll, gazette, points, patches, problems }) {
     const rows = scoreWards({ wards: baseline, stations, arc: arcAll, gazette });
     const refs = checkReferencePoints(points, { wards: baseline, arc: arcAll, rows });
     const builtRows = final === baseline ? rows : scoreWards({ wards: final, stations, arc: arcAll, gazette });
@@ -105,22 +105,27 @@ function gatherEvidence({ baseline, final, stations, arcAll, gazette, points, pa
     const built = new Map(builtRows.map((r) => [r.code, r]));
     const patchFor = new Map(patches.map((p) => [p.iebcCode, p]));
     const signals = new Map(rows.map((r) => [r.code, replaceSignals(r, refs)]));
-    const countyOf = (code) => gazette.wards.get(code).countyCode;
+    // Where each replaced code's old IEBC polygon went (assembleWards re-files it under the patch
+    // covering most of it): this is what ties a cluster such as Mandera East together.
+    const refiledTo = new Map(log.filter((e) => e.step === 'replaced').map((e) => [e.detail.code, e.detail.refiledTo ?? []]));
+    const linked = (a, b) => a !== b && ((refiledTo.get(a) ?? []).includes(b) || (refiledTo.get(b) ?? []).includes(a));
 
     const replaces = patches.filter((p) => p.mode === 'replace');
     const supported = new Set(replaces.filter((p) => signals.get(p.iebcCode).length > 0).map((p) => p.iebcCode));
     const replacements = replaces.map((p) => {
         const r = row.get(p.iebcCode);
         const own = signals.get(p.iebcCode);
-        // A cluster member with no signal of its own is allowed only next to a supported replacement in its county.
-        const group = own.length === 0 && replaces.some((q) => supported.has(q.iebcCode) && countyOf(q.iebcCode) === countyOf(p.iebcCode));
-        if (own.length === 0 && !group) problems.push(`Replace row ${p.iebcCode} has neither stations nor a reference point supporting it, and no supported replacement in its county`);
+        // A cluster member with no signal of its own is allowed only when its old polygon went to a
+        // supported replacement, or a supported replacement's old polygon went to it.
+        const group = own.length === 0 ? [...supported].filter((q) => linked(p.iebcCode, q)) : [];
+        if (own.length === 0 && group.length === 0) problems.push(`Replace row ${p.iebcCode} has neither stations nor a reference point supporting it, and is not in a cluster with a supported replacement`);
         if (r.arcUid !== null && r.arcUid !== p.arcUid) problems.push(`Replace row ${p.iebcCode} uses Red Cross ${p.arcUid}, but the evidence matched ${r.arcUid}`);
         return {
             ...r,
             arcUid: p.arcUid,
             reason: p.reason,
-            signals: own.length > 0 ? own : ['with its group'],
+            signals: own.length > 0 ? own : [`with its group (${group.join(', ')})`],
+            refiledTo: refiledTo.get(p.iebcCode) ?? [],
             insideBuilt: built.get(p.iebcCode).insideOurs,
             refs: builtRefs.filter((x) => x.expectedCode === p.iebcCode),
         };
@@ -177,21 +182,19 @@ async function main() {
     const iebc = JSON.parse(text('boundaries/raw/mikelmaron/data/wards.geojson'));
     const arcAll = await readShapefile('boundaries/raw/hdx_arc_wards/kenya_wards/Kenya_Wards/kenya_wards.shp');
     const stations = await readShapefile('boundaries/raw/mikelmaron/output/pollingstations.shp');
-    const wanted = new Set(patches.map((p) => p.arcUid));
-    const arc = { type: 'FeatureCollection', features: arcAll.features.filter((f) => wanted.has(f.properties?.uid)) };
     const fills = patches.filter((p) => p.mode === 'fill');
 
     console.log('Assembling wards (IEBC with fills only, for the evidence)...');
-    const baseline = await assembleWards({ iebc, arc, patches: fills, gazette, expected: EXPECTED.wards });
+    const baseline = await assembleWards({ iebc, arc: arcAll, patches: fills, gazette, expected: EXPECTED.wards });
     let assembled = baseline.wards;
     let log = baseline.log;
     if (fills.length < patches.length) {
         console.log('Assembling wards with the replacements...');
-        ({ wards: assembled, log } = await assembleWards({ iebc, arc, patches, gazette, expected: EXPECTED.wards }));
+        ({ wards: assembled, log } = await assembleWards({ iebc, arc: arcAll, patches, gazette, expected: EXPECTED.wards }));
     }
 
     console.log('Scoring wards against polling stations, the Red Cross layer and reference points...');
-    const evidence = gatherEvidence({ baseline: baseline.wards, final: assembled, stations, arcAll, gazette, points, patches, problems });
+    const evidence = gatherEvidence({ baseline: baseline.wards, final: assembled, log, stations, arcAll, gazette, points, patches, problems });
     mkdirSync(path('boundaries/build'), { recursive: true });
     writeFileSync(path('boundaries/build/ward-evidence.csv'), evidence.csv);
     const stationMatch = matchStations(stations, gazette);

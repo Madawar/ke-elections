@@ -39,7 +39,7 @@ IEBC has no polygon for these codes. Each takes the polygon of the reviewed Red 
 |---|---|---|
 | 0 | PTOYO/NAKWIJIT | no valid ward code |
 
-## Merged duplicate codes (6)
+## Merged duplicate codes (5)
 
 Each code appeared on more than one IEBC polygon. The pieces were dissolved into one feature.
 
@@ -50,11 +50,10 @@ Each code appeared on more than one IEBC polygon. The pieces were dissolved into
 | 289 | Kibirichia | 2 |
 | 398 | Kalama | 2 |
 | 678 | Keiyo | 2 |
-| 1230 | West Karachuonyo | 2 |
 
 ## Corrections from the gazette
 
-19 wards had a parent (constituency or county) that differs from the gazette, in 25 fields (7 of them a source county code of 0, meaning unset), and 36 had a name that differs. All were replaced with the gazette values.
+19 wards had a parent (constituency or county) that differs from the gazette, in 25 fields (7 of them a source county code of 0, meaning unset), and 32 had a name that differs. All were replaced with the gazette values.
 
 The data quality report counted 19 parent and 24 name differences on the per-ward source files. This build reads the combined `data/wards.geojson`, whose names differ in 12 more places. Most are the same ward in different spelling or case, but a few carry another ward's name (for example 97, 245 and 1283, whose polygons do match the gazette ward), and wards 212 to 216 in Mandera are listed in a different order from both the gazette and the Red Cross layer, so those five polygons need a manual check against a map.
 
@@ -98,10 +97,6 @@ The data quality report counted 19 parent and 24 name differences on the per-war
 | 178 | ADEMASAJIDE | Adamasajide |
 | 205 | RHAMU DIMTU | Rhamu-Dimtu |
 | 206 | WARGUDUD | Wargadud |
-| 212 | BULLA MPYA | Township |
-| 213 | KHALALIO | Neboi |
-| 214 | NEBOI | Khalalio |
-| 215 | TOWNSHIP | Libehia |
 | 216 | LIBEHIA | Sala |
 | 219 | WARANKARA | Waranqara |
 | 223 | HEILU/MANYATTA | Heillu/Manyatta |
@@ -133,17 +128,17 @@ The data quality report counted 19 parent and 24 name differences on the per-war
 
 Run with `-clean gap-fill-area=400km2`. Mapshaper said:
 
-- [dissolve] Dissolved 1,443 features into 1,437 features
-- [dissolve] Dissolved 13 features into 13 features
-- [clean] Removed 10,241 of 10,241 slivers using 400+ sqkm variable threshold
+- [dissolve] Dissolved 1,404 features into 1,399 features
+- [dissolve] Dissolved 63 features into 51 features
+- [clean] Removed 12,149 of 12,149 slivers using 400+ sqkm variable threshold
 - [clean] Retained 1,450 of 1,450 features
 
 Gap threshold: with mapshaper's default, 434 gaps totalling about 1,324 km² stayed inside the country. They are land that no ward covers, so the map would show holes and a tap there would select nothing. The largest is about 309 km², so a threshold of 400 km² fills every one into the neighbouring ward that shares most boundary with it. Overlaps need no tuning: the default already leaves none.
 
 | Stage | Sum of ward areas (km²) | Area of union (km²) | Overlap (km²) | Holes inside the country | Hole area (km²) |
 |---|---|---|---|---|---|
-| After assembly (full detail) | 594,077.86 | 594,077.86 | 0 | 1 | 0.02 |
-| After simplification | 594,050.65 | 594,050.65 | 0 | 0 | 0 |
+| After assembly (full detail) | 594,061 | 594,061 | 0 | 6 | 0.07 |
+| After simplification | 594,032.77 | 594,032.77 | 0 | 1 | 0 |
 
 ## Simplification: largest area changes per ward
 
@@ -151,21 +146,21 @@ Each ward's area after simplification against its full-detail area (after cleani
 
 | Code | Ward | Full detail (km²) | Simplified (km²) | Change |
 |---|---|---|---|---|
-| 101 | Faza | 30.18 | 28.77 | -4.7% |
+| 101 | Faza | 95.68 | 89.67 | -6.3% |
 | 29 | Shimanzi/Ganjoni | 5.02 | 5.24 | +4.5% |
-| 104 | Shella | 105.41 | 101.65 | -3.6% |
+| 212 | Township | 25.5 | 24.5 | -3.9% |
 | 424 | Wote | 97.23 | 93.78 | -3.6% |
-| 988 | Mogogosiek | 60.92 | 58.88 | -3.4% |
-| 598 | Sigona | 24.33 | 25.04 | +2.9% |
+| 104 | Shella | 55.11 | 53.28 | -3.3% |
+| 797 | Kapropita | 96.83 | 93.95 | -3.0% |
 | 596 | Karai | 26.82 | 27.61 | +2.9% |
 | 761 | Nandi Hills | 77.02 | 79.23 | +2.9% |
-| 972 | Nyangores | 112.38 | 109.17 | -2.9% |
-| 301 | Mariani | 99.63 | 96.84 | -2.8% |
-| 215 | Libehia | 30.39 | 29.54 | -2.8% |
-| 1148 | Namboboto Nambuku | 63.49 | 61.74 | -2.8% |
-| 738 | Moiben/Kuserwo | 130.12 | 133.53 | +2.6% |
 | 1275 | Ragana-Oruba | 30.27 | 29.48 | -2.6% |
+| 738 | Moiben/Kuserwo | 130.12 | 133.5 | +2.6% |
 | 944 | Kapsoit | 62.42 | 64.04 | +2.6% |
+| 10 | Junda | 7.88 | 8.08 | +2.6% |
+| 598 | Sigona | 24.33 | 24.93 | +2.5% |
+| 750 | Metkei | 64.76 | 66.34 | +2.4% |
+| 1007 | Shirugu-Mugai | 59.88 | 61.31 | +2.4% |
 
 ## Checks on the real data
 
@@ -178,7 +173,7 @@ The five Ruiru patches (571, 572, 573, 575, 576) and 574 Kiuu, which IEBC had sw
 | 571 | Gatongora | 113.39 |
 | 572 | Kahawa Sukari | 4.44 |
 | 573 | Kahawa Wendani | 1.14 |
-| 574 | Kiuu | 13.84 |
+| 574 | Kiuu | 11.56 |
 | 575 | Mwiki | 1.49 |
 | 576 | Mwihoko | 25.87 |
 
@@ -188,9 +183,9 @@ Pairwise overlap among these six wards (15 pairs): none.
 
 | File | Raw (KB) | Gzipped (KB) | Gzip budget (KB) |
 |---|---|---|---|
-| constituencies.geojson | 523.1 | 132.0 | 180 |
-| counties.geojson | 193.7 | 55.6 | 120 |
-| labels.geojson | 264.6 | 32.8 |  |
-| provinces.geojson | 100.5 | 30.8 |  |
+| constituencies.geojson | 542.1 | 137.1 | 180 |
+| counties.geojson | 202.3 | 58.1 | 120 |
+| labels.geojson | 264.5 | 32.7 |  |
+| provinces.geojson | 105.4 | 32.3 |  |
 | units.json | 145.1 | 41.8 | 60 |
-| wards.geojson | 1255.6 | 279.1 | 300 |
+| wards.geojson | 1292.4 | 288.5 | 300 |

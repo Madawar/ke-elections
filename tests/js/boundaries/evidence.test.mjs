@@ -128,6 +128,35 @@ describe('matchRedCross', () => {
         expect(matches.has(2)).toBe(false); // the only "Market" polygon is in another county
     });
 
+    it('renames Red Cross wards only through the explicit alias table, within the county', () => {
+        // Mandera's Red Cross layer uses 2013 names: its "LIBEHIA" (Lafey) is the gazette's 216 Sala,
+        // and its "BULLA MPYA" (Mandera East) is the gazette's 215 Libehia.
+        const mandera = {
+            wards: new Map([
+                [215, { code: 215, name: 'Libehia', constituencyCode: 43, countyCode: 9 }],
+                [216, { code: 216, name: 'Sala', constituencyCode: 44, countyCode: 9 }],
+                [217, { code: 217, name: 'Libehia', constituencyCode: 99, countyCode: 10 }],
+            ]),
+            constituencies: new Map(),
+            counties: new Map([
+                [9, { code: 9, name: 'Mandera' }],
+                [10, { code: 10, name: 'Elsewhere' }],
+            ]),
+        };
+        const rc = {
+            type: 'FeatureCollection',
+            features: [
+                { type: 'Feature', properties: { uid: 'L', ward: 'LIBEHIA', county: 'MANDERA' }, geometry: box(36.0, 36.1) },
+                { type: 'Feature', properties: { uid: 'B', ward: 'BULLA MPYA', county: 'MANDERA' }, geometry: box(36.1, 36.2) },
+                { type: 'Feature', properties: { uid: 'E', ward: 'Libehia', county: 'Elsewhere' }, geometry: box(36.2, 36.3) },
+            ],
+        };
+        const matches = matchRedCross(rc, mandera, new Map());
+        expect(matches.get(215).properties.uid).toBe('B');
+        expect(matches.get(216).properties.uid).toBe('L');
+        expect(matches.get(217).properties.uid).toBe('E');
+    });
+
     it('leaves a shared name unmatched when stations cannot tell the polygons apart', () => {
         const matches = matchRedCross(arc, gazette, new Map());
         expect(matches.has(1)).toBe(false);

@@ -113,10 +113,29 @@ describe('assembleWards with mode=replace', () => {
         const result = await run();
         expect(result.wards.features.map((f) => f.properties.code)).toEqual([1, 2, 3]);
         const r1 = arc.features.find((f) => f.properties.uid === 'R1');
-        expect(turf.area(byCode(result, 1))).toBeCloseTo(turf.area(r1), 0);
-        // The old IEBC polygon's west part (x < 8) is gone from code 1.
-        expect(turf.booleanPointInPolygon(turf.point([4, 5]), byCode(result, 1))).toBe(false);
         expect(turf.booleanPointInPolygon(turf.point([15, 5]), byCode(result, 1))).toBe(true);
+        // The old IEBC polygon's west (x 0..4) is another Red Cross ward's land: it is not kept.
+        expect(turf.booleanPointInPolygon(turf.point([2, 5]), byCode(result, 1))).toBe(false);
+        expect(turf.area(byCode(result, 1))).toBeGreaterThan(turf.area(r1) - 1);
+    });
+
+    it('keeps the part of the old polygon that no Red Cross ward covers (water, a border strip)', async () => {
+        // x 4..8 of IEBC code 1 is outside every Red Cross polygon, like a lake shore.
+        const result = await run();
+        expect(turf.booleanPointInPolygon(turf.point([6, 5]), byCode(result, 1))).toBe(true);
+        const r1 = arc.features.find((f) => f.properties.uid === 'R1');
+        const strip = turf.area(turf.polygon([[[4, 0], [8, 0], [8, 10], [4, 10], [4, 0]]]));
+        expect(turf.area(byCode(result, 1))).toBeCloseTo(turf.area(r1) + strip, -6);
+    });
+
+    it('re-files a shifted polygon\'s uncovered part under the patch that covers most of it', async () => {
+        // Code 2's IEBC polygon (x 20..40) is mostly where X3 (code 3) is; replacing both as a group,
+        // what no Red Cross ward covers of it goes to 3, not to 2's new home.
+        const shifted = { iebcCode: 2, arcUid: 'R1', mode: 'replace', reason: 'shift' };
+        const { wards, log } = await assemble({ patches: [...patches, shifted], expected: 3 });
+        expect(turf.booleanPointInPolygon(turf.point([38, 5]), byCode({ wards }, 3))).toBe(true);
+        expect(turf.booleanPointInPolygon(turf.point([38, 5]), byCode({ wards }, 2))).toBe(false);
+        expect(log.find((e) => e.step === 'replaced').detail.refiledTo).toEqual([3]);
     });
 
     it('erases the new polygon from its neighbours and leaves no overlap', async () => {
@@ -136,7 +155,7 @@ describe('assembleWards with mode=replace', () => {
     it('logs the replacement with the source name of the polygon it removed, not as a name correction', async () => {
         const { log } = await run();
         expect(log.filter((e) => e.step === 'replaced').map((e) => e.detail)).toEqual([
-            { code: 1, arcUid: 'R1', reason: 'misfiled', sourceName: 'WARD ONE', pieces: 2 },
+            { code: 1, arcUid: 'R1', reason: 'misfiled', sourceName: 'WARD ONE', pieces: 2, refiledTo: [1] },
         ]);
         expect(log.filter((e) => e.step === 'merged')).toEqual([]);
         expect(log.filter((e) => e.step === 'attribute-corrected').map((e) => e.detail.code)).toEqual([2]);
