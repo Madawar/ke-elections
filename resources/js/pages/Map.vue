@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { useMediaQuery, usePreferredDark, useStorage } from '@vueuse/core';
+import { Head, router } from '@inertiajs/vue3';
+import { useEventListener, useMediaQuery, useStorage } from '@vueuse/core';
+import { useAppearance } from '@/composables/useAppearance';
 import { computed, onMounted, ref, shallowRef, watch } from 'vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
@@ -23,7 +24,7 @@ import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
 import { OTHER, PROVINCE_TINTS, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
-import { parseUnitPath, unitPath } from '@/lib/map/urls';
+import { unitPath } from '@/lib/map/urls';
 import {
     type SeatsData,
     EMPTY_SEATS,
@@ -114,20 +115,14 @@ onMounted(async () => {
 });
 
 // ---- preferences ------------------------------------------------------------------------
-const themePref = useStorage<'system' | 'light' | 'dark'>('km.theme', 'system');
-const prefersDark = usePreferredDark();
-const theme = computed(() =>
-    themePref.value === 'system'
-        ? prefersDark.value
-            ? 'dark'
-            : 'light'
-        : themePref.value,
-);
-watch(
-    theme,
-    (t) => document.documentElement.classList.toggle('dark', t === 'dark'),
-    { immediate: true },
-);
+// One theme setting for the whole app (the starter kit's appearance cookie + storage), so the
+// server renders the right theme and the map follows it.
+const { appearance, resolvedAppearance, updateAppearance } = useAppearance();
+const theme = computed(() => resolvedAppearance.value);
+const themePref = computed({
+    get: () => appearance.value,
+    set: (v) => updateAppearance(v),
+});
 
 const colourKey = useStorage<ColourKey>('km.colour', 'none');
 const onlyParties = useStorage<string[]>('km.only', []);
@@ -208,7 +203,7 @@ const legend = computed(() => {
     return {
         title: `${SEAT_LABEL[k]} seats by party`,
         rows: mapped,
-        note: 'Elected 2022, with changes since',
+        note: `Elected 2022, with changes since. Source: IEBC gazette notices${seats.value.as_of ? `, imported ${new Date(seats.value.as_of).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`,
     };
 });
 const partyChips = computed(() =>
@@ -245,14 +240,23 @@ function selectUnit(
     if (!unit) {
         map?.clearSelection();
         if (fit) map?.fitKenya(animate);
-        if (push && location.pathname !== '/') history.pushState({}, '', '/');
+        if (push) replaceUrl('/', null);
         document.title = 'Kenya Electoral Map';
         return;
     }
     if (unit.l !== 'province') map?.select(unit.l, unit.c, { fit, animate });
-    if (push && unit.l !== 'province')
-        history.pushState({}, '', unitPath(unit.l, unit.c));
     const ancestors = index.value?.ancestors(unit.l, unit.c) ?? [];
+    if (push && unit.l !== 'province')
+        replaceUrl(unitPath(unit.l, unit.c), {
+            level: unit.l,
+            code: unit.c,
+            name: unit.n,
+            ancestors: ancestors.map((a) => ({
+                level: a.l,
+                code: a.c,
+                name: a.n,
+            })),
+        });
     announce.value = `Selected: ${unit.n} ${LEVEL_NAME[unit.l]}, ${ancestors.map((a) => a.n).join(', ')}`;
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
@@ -273,15 +277,19 @@ watch(
     },
 );
 
-if (typeof window !== 'undefined') {
-    window.addEventListener('popstate', () => {
-        const parsed = parseUnitPath(location.pathname);
-        selectUnit(
-            parsed
-                ? (index.value?.get(parsed.level, parsed.code) ?? null)
-                : null,
-            { push: false },
-        );
+/**
+ * Keep the address bar on the selected unit so it can be shared. This replaces the current
+ * history entry through Inertia (client-side, state preserved) instead of pushing new ones:
+ * Inertia remounts the page on Back, which would rebuild the map, so Back leaves the map and
+ * the breadcrumb and zoom-out control step back up a level.
+ */
+function replaceUrl(url: string, unit: ServerUnit) {
+    if (location.pathname === url) return;
+    router.replace({
+        url,
+        props: (current) => ({ ...current, unit }),
+        preserveState: true,
+        preserveScroll: true,
     });
 }
 
@@ -344,7 +352,7 @@ function scheduleRecentre() {
     );
 }
 watch([sheetHeight, isDesktop, () => mapRef.value?.ready], scheduleRecentre);
-onMounted(() => window.addEventListener('resize', scheduleRecentre));
+useEventListener(window, 'resize', scheduleRecentre);
 
 // When the person zooms out past a level, the panel follows to the selection's ancestor at that level.
 const panelUnit = computed(() => {
@@ -504,7 +512,10 @@ const showView = (v: typeof view.value) => {
                 :zoom-out-label="zoomOutLabel"
                 :show-recentre="!autoCentre"
                 :locating="locating"
-                @zoom-in="mapRef?.zoomIn()"
+                @zoom-in="
+                    autoCentre = false;
+                    mapRef?.zoomIn();
+                "
                 @zoom-out="zoomOut"
                 @recentre="recentre"
                 @locate="locate"

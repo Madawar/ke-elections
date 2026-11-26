@@ -46,6 +46,8 @@ export interface UseMapOptions {
     onUserMove?: () => void;
 }
 
+type Padding = { top: number; bottom: number; left: number; right: number };
+
 /** MapLibre is loaded on demand so the first paint (and phones without WebGL2) never pay for it. */
 export const loadMapLibre = () => import('maplibre-gl');
 
@@ -59,7 +61,9 @@ export function useMap(
     let selected: Picked | null = null;
     let hovered: Picked | null = null;
     let wardsLoaded = false;
-    let padding = { top: 72, bottom: 24, left: 24, right: 24 };
+    let wantWards = false;
+    let disposed = false;
+    let padding: Padding = { top: 72, bottom: 24, left: 24, right: 24 };
     let resizeObserver: ResizeObserver | null = null;
     const canHover =
         typeof window !== 'undefined' &&
@@ -74,13 +78,14 @@ export function useMap(
             wards: wardsLoaded,
         });
 
+    /** Fill the (initially empty) ward source; deferred until the style has loaded. */
     function ensureWards() {
+        wantWards = true;
         const m = map.value;
-        if (!m || wardsLoaded) return;
+        const source = m?.getSource('wards') as GeoJSONSource | undefined;
+        if (!m || wardsLoaded || !source) return;
         wardsLoaded = true;
-        void (m.getSource('wards') as GeoJSONSource | undefined)?.setData(
-            fileUrl(opts.manifest, 'wards.geojson'),
-        );
+        void source.setData(fileUrl(opts.manifest, 'wards.geojson'));
     }
 
     function setState(
@@ -88,8 +93,9 @@ export function useMap(
         key: 'selected' | 'hover',
         value: boolean,
     ) {
-        if (!unit || !map.value) return;
-        map.value.setFeatureState(
+        const m = map.value;
+        if (!unit || !m || !ready.value) return;
+        m.setFeatureState(
             { source: SOURCE_OF[unit.level], id: unit.code },
             { [key]: value },
         );
@@ -97,7 +103,7 @@ export function useMap(
 
     function addOverlays() {
         const m = map.value;
-        if (!m) return;
+        if (!m || !ready.value) return;
         const theme = THEMES[opts.theme.value];
         for (const overlay of opts.overlays.value) {
             const id = overlaySourceId(overlay);
@@ -119,14 +125,35 @@ export function useMap(
         }
     }
 
+    /**
+     * Theme and colouring changes only touch paint and visibility: the boundary sources
+     * (2+ MB of GeoJSON) are never reloaded, and feature-state (the selection) survives.
+     */
     function restyle() {
         const m = map.value;
-        if (!m) return;
-        m.setStyle(style(), { diff: true });
-        m.once('styledata', () => {
-            addOverlays();
-            setState(selected, 'selected', true);
-        });
+        if (!m || !ready.value) return;
+        const theme = THEMES[opts.theme.value];
+        const overlayLayers = new Set<string>();
+        const layers = [
+            ...style().layers,
+            ...opts.overlays.value.flatMap((o) =>
+                o.layers(theme, overlaySourceId(o)).map((l) => {
+                    overlayLayers.add(l.id);
+                    return l;
+                }),
+            ),
+        ];
+        for (const layer of layers) {
+            if (!m.getLayer(layer.id)) continue;
+            for (const [key, value] of Object.entries(layer.paint ?? {})) {
+                m.setPaintProperty(layer.id, key as never, value as never);
+            }
+            const visibility = (
+                layer.layout as { visibility?: 'visible' | 'none' } | undefined
+            )?.visibility;
+            if (visibility && !overlayLayers.has(layer.id))
+                m.setLayoutProperty(layer.id, 'visibility', visibility);
+        }
     }
 
     function fit(bounds: Bounds, animate = true) {
@@ -147,7 +174,7 @@ export function useMap(
         selected = { level, code };
         setState(selected, 'selected', true);
         const bounds = opts.boundsOf(level, code);
-        if (doFit && bounds) fit(bounds, animate);
+        if (doFit && bounds && ready.value) fit(bounds, animate);
     }
 
     function clearSelection() {
@@ -159,7 +186,7 @@ export function useMap(
         const m = map.value!;
         const pinned = pinnedLevel(opts.colouring.value.mode);
         const zoomLevel = levelForZoom(m.getZoom());
-        // With seat colouring, a tap below the seat's own level still picks the visible unit at this zoom.
+        // With seat colouring, a tap still picks the coloured unit even when zoomed out past it.
         const order = MAP_LEVELS.slice(
             0,
             MAP_LEVELS.indexOf(zoomLevel) + 1,
@@ -191,6 +218,7 @@ export function useMap(
             const workerUrl = (
                 await import('maplibre-gl/dist/maplibre-gl-worker.mjs?url')
             ).default;
+            if (disposed || !container.value) return;
             maplibre.setWorkerUrl(workerUrl);
             map.value = new maplibre.Map({
                 container: container.value,
@@ -215,11 +243,16 @@ export function useMap(
         m.on('error', (e) => console.warn('[map]', e.error?.message ?? e));
         m.on('load', () => {
             ready.value = true;
-            if (!selected) fit(KENYA_BOUNDS, false);
             addOverlays();
-            if (pinnedLevel(opts.colouring.value.mode) === 'ward')
+            if (wantWards || pinnedLevel(opts.colouring.value.mode) === 'ward')
                 ensureWards();
+            restyle();
             setState(selected, 'selected', true);
+            fit(
+                (selected && opts.boundsOf(selected.level, selected.code)) ??
+                    KENYA_BOUNDS,
+                false,
+            );
         });
         m.on('zoom', () => {
             zoom.value = m.getZoom();
@@ -279,6 +312,7 @@ export function useMap(
     });
 
     onBeforeUnmount(() => {
+        disposed = true;
         resizeObserver?.disconnect();
         map.value?.remove();
         map.value = null;
@@ -292,9 +326,8 @@ export function useMap(
         clearSelection,
         fit,
         fitKenya: (animate = true) => fit(KENYA_BOUNDS, animate),
-        setPadding(p: Partial<typeof padding>) {
+        setPadding(p: Partial<Padding>) {
             padding = { ...padding, ...p };
-            map.value?.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
         },
         getPadding: () => padding,
         zoomIn: () => map.value?.zoomIn(),
