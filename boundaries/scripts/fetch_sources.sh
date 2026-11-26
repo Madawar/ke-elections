@@ -27,4 +27,10 @@ for f in counties:0d7c191e-35b4-42cd-9df6-bb3b9add3467 constituencies:8c78dafe-f
   fetch "https://data.humdata.org/dataset/4da920dc-c1dc-4889-b06c-66ecb65e2b94/resource/$id/download/$name.zip" "hdx_iebc/$name.zip"
   unzip -oq "hdx_iebc/$name.zip" -d "hdx_iebc/$name"
 done
+
+# 4. OSM populated places (HOT export on HDX, ODbL); Overpass resets connections from cloud sessions.
+mkdir -p osm
+fetch https://production-raw-data-api.s3.amazonaws.com/ISO3/KEN/populated_places/hotosm_ken_populated_places_osm_geojson.zip osm/hotosm_ken_populated_places_osm_geojson.zip
+unzip -oq osm/hotosm_ken_populated_places_osm_geojson.zip -d osm/places
+
 echo "sources ready in $(pwd)"

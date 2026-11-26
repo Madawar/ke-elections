@@ -152,7 +152,7 @@ describe('boundary outputs', () => {
     it('manifest hashes match the file contents', () => {
         const files = Object.keys(manifest);
         expect(files.sort()).toEqual(
-            ['constituencies.geojson', 'counties.geojson', 'labels.geojson', 'provinces.geojson', 'units.json', 'wards.geojson'],
+            ['constituencies.geojson', 'counties.geojson', 'labels.geojson', 'provinces.geojson', 'towns.geojson', 'units.json', 'wards.geojson'],
         );
         for (const file of files) {
             expect(manifest[file]).toBe(createHash('sha256').update(read(file)).digest('hex').slice(0, 8));
