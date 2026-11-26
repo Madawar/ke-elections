@@ -1,7 +1,7 @@
 // Current office holders and parties from /data/seats.json (imported from cited CSVs),
 // turned into party colours, map colouring and per-unit seat rows.
 import { type Colouring, type SeatKey, SEAT_LEVEL } from './map/colouring';
-import { CATEGORICAL, OTHER } from './map/theme';
+import { OTHER } from './map/theme';
 
 export interface Party {
     abbrev: string;
@@ -56,8 +56,6 @@ export async function loadSeats(url = '/data/seats.json'): Promise<SeatsData> {
 }
 
 export const INDEPENDENT = 'IND';
-/** Palette size before "Other": Okabe-Ito minus black, which disappears on the dark theme. */
-const PALETTE = CATEGORICAL.slice(0, 7);
 
 /** Seats held per party across every current holder, largest first (ties by abbreviation). */
 export function partyRanking(
@@ -72,25 +70,15 @@ export function partyRanking(
 }
 
 /**
- * A display colour for every party. Admin colours win; the rest take the palette in order of
- * seats held, and everything after the palette (and independents) is grey "Other".
+ * A display colour for every party: the colour set in data/sources/party_colours.csv (defaults
+ * derived from each party's ORPP-registered colours, adjusted to stay distinct and legible), else
+ * the neutral grey "Other". Colours never depend on seat counts, so they don't shift as data changes.
  */
 export function partyColours(data: SeatsData): Map<string, string> {
-    const byAbbrev = new Map(data.parties.map((p) => [p.abbrev, p]));
     const out = new Map<string, string>();
-    const used = new Set(
-        data.parties.map((p) => p.colour).filter(Boolean) as string[],
-    );
-    const free = PALETTE.filter((c) => !used.has(c));
-    for (const { abbrev } of partyRanking(data)) {
-        const admin = byAbbrev.get(abbrev)?.colour;
-        if (admin) out.set(abbrev, admin);
-        else if (abbrev !== INDEPENDENT && free.length)
-            out.set(abbrev, free.shift()!);
-        else out.set(abbrev, OTHER);
-    }
-    for (const p of data.parties)
-        if (!out.has(p.abbrev)) out.set(p.abbrev, p.colour ?? OTHER);
+    for (const p of data.parties) out.set(p.abbrev, p.colour ?? OTHER);
+    for (const h of data.holders)
+        if (h.party && !out.has(h.party)) out.set(h.party, OTHER);
     return out;
 }
 

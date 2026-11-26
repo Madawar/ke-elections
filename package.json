@@ -12,7 +12,9 @@
         "test:js": "vitest run --passWithNoTests",
         "boundaries:fetch": "bash boundaries/scripts/fetch_sources.sh && bash boundaries/scripts/fetch_glyphs.sh",
         "boundaries:build": "node boundaries/pipeline/build.mjs",
-        "boundaries:towns": "node boundaries/pipeline/towns.mjs"
+        "boundaries:towns": "node boundaries/pipeline/towns.mjs",
+        "boundaries:stations": "node boundaries/pipeline/stations.mjs",
+        "boundaries:rebuild": "npm run boundaries:build && npm run boundaries:towns && npm run boundaries:stations"
     },
     "dependencies": {
         "@fontsource-variable/archivo": "^5.3.0",
@@ -45,6 +47,7 @@
         "mapshaper": "^0.8.10",
         "typescript": "^5.2.2",
         "vite": "npm:@voidzero-dev/vite-plus-core@8.3.8001",
+        "vite-plugin-pwa": "^2.0.0",
         "vite-plus": "1.8.0",
         "vitest": "^5.1.1",
         "vue-tsc": "^3.3.13"

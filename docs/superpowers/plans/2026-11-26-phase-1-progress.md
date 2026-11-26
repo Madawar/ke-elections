@@ -27,16 +27,16 @@ the owner's machine.
 | 2 Gazette loader, provinces, code validation | Complete, review clean | `587a887` |
 | 3 Ward assembly with 13 Red Cross fills | Complete, review clean | `3fd0506` |
 | 4 Derived layers, outputs, build report | Complete. Review needed fixes; fix round 1 was re-reviewed clean | `3af9490`, `4a2d9d0`, `216cf8a` |
-| 4b Evidence-based ward corrections | **Still open.** Deferred so the owner could get a browsable map first; a few ward polygons are still misfiled | — |
+| 4b Evidence-based ward corrections | Complete. 36 `mode=replace` rows, each passing the two-signal rule or tied by geometry to a cluster that does (Mandera East 212–215, Murera/Theta, Marachi East/North, Karachuonyo 1230/1231/1236, Mwanganthia/Abothuguchi Central, Mogotio/Lembus, Kitengela/Oloosirkon). Final review: a reference point outside every IEBC ward no longer counts (a coast or border difference, not a misfiled code), so 101 Faza and 225 Moyale Township are no longer replaced. 83 wards are "still uncertain" in the build report. Kitengela is marginal: only the brief's point supports it, for the owner to check. A failing build writes no outputs; `manifest.json` keeps entries for files it doesn't write | `455613f`, `614658a`, final-review fix |
 | 5 Towns and glyphs | Complete. Towns from the HOT OSM export on HDX (Overpass is unreachable from cloud sessions), each tagged with its ward | `b7f1381` |
 | 6 Unit directory, routes, meta tags | Complete. `og-default.png` rendered from the map | `8cfd425` |
 | 6b Visual direction tokens | Complete (`docs/design/visual-direction.md`) | `e4ce241` |
 | 7 Map core | Complete, with owner changes: `MapView` is a reusable component with an overlay registry (`lib/map/overlays.ts`); the ward source is always in the style but loads lazily | `e4ce241` |
 | 8 Panel, sheet, search, list, legend, About | Complete | `e4ce241` |
 | Owner request: real 2022 office holders, party colouring, seating charts | Pulled forward from Phase 2. Importer `data:import`, sourced CSVs under `data/sources/`, `/data/seats.json`, colour by any seat's party, National Assembly and Senate charts | `5d6f9f3`, `4af8420`, `e4ce241` |
-| 9 Export cards | Not started | — |
-| 10 PWA | Not started | — |
-| 11 Docs and verification | Partly: browser check at 390×844 and 1280×800 done by Playwright; PR open | — |
+| 9 Export cards | Complete. Locator card (any unit, with holders) and "In power now" card (both chambers), four sizes, Web Share or download | `7b387f3` |
+| 10 PWA | Complete. Precaches app, boundaries and glyphs; pages and seats network-first; only guests' copies of map pages are stored (`X-Public-Page`); hashed assets cached at runtime so saved pages survive deploys; polling stations cached on first use | `6fe910e`, final-review fix |
+| 11 Docs and verification | Complete. Playwright at 390×844 and 1280×800: deep links, drill-down, search, zoom-out to Kenya, labels without collisions at zooms 5/7/9/11, party colouring, dark mode, offline reopen, export PNGs. Setup in CLAUDE.md. Extra: polling stations overlay (IEBC 2013 locations) | `8365d70`, `8b2b668` |
 
 Infra outside the plan, requested by the owner: `962f7bd` (CLAUDE.md, `.claude/`, cloud
 scripts) and `fdec2ff` (owner additions to the plan).

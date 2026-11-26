@@ -1,11 +1,14 @@
 // Checks the committed outputs under public/boundaries/ against the gazette.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import * as turf from '@turf/turf';
+import { parseReferencePoints } from '../../../boundaries/pipeline/evidence.mjs';
 import { loadGazette, loadProvinces } from '../../../boundaries/pipeline/gazette.mjs';
+import { writeOutputs } from '../../../boundaries/pipeline/outputs.mjs';
 
 const root = resolve(import.meta.dirname, '../../..');
 const outDir = resolve(root, 'public/boundaries');
@@ -152,7 +155,7 @@ describe('boundary outputs', () => {
     it('manifest hashes match the file contents', () => {
         const files = Object.keys(manifest);
         expect(files.sort()).toEqual(
-            ['constituencies.geojson', 'counties.geojson', 'labels.geojson', 'provinces.geojson', 'towns.geojson', 'units.json', 'wards.geojson'],
+            ['constituencies.geojson', 'counties.geojson', 'labels.geojson', 'provinces.geojson', 'stations.geojson', 'towns.geojson', 'units.json', 'wards.geojson'],
         );
         for (const file of files) {
             expect(manifest[file]).toBe(createHash('sha256').update(read(file)).digest('hex').slice(0, 8));
@@ -164,5 +167,43 @@ describe('boundary outputs', () => {
         expect(gzipKb('constituencies.geojson')).toBeLessThanOrEqual(180);
         expect(gzipKb('wards.geojson')).toBeLessThanOrEqual(300);
         expect(gzipKb('units.json')).toBeLessThanOrEqual(60);
+    });
+
+    describe('reference points (Task 4b)', () => {
+        const wardsByCode = byCode(layers.wards);
+        const wardAt = (lon, lat) =>
+            layers.wards.features.find((f) => turf.booleanPointInPolygon(turf.point([lon, lat]), f))?.properties.code ?? null;
+
+        it('Mandera town centre is in 212 Township and Kitengela town in 922 Kitengela', () => {
+            expect(wardAt(41.855, 3.937)).toBe(212);
+            expect(wardAt(36.96, -1.475)).toBe(922);
+        });
+
+        const points = parseReferencePoints(readFileSync(resolve(root, 'boundaries/overrides/reference_points.csv'), 'utf8'));
+        for (const p of points) {
+            it(`${p.place} is in ward ${p.expectedCode} ${gazette.wards.get(p.expectedCode)?.name}`, () => {
+                expect(turf.booleanPointInPolygon(turf.point([p.lon, p.lat]), wardsByCode.get(p.expectedCode))).toBe(true);
+            });
+        }
+    });
+});
+
+describe('writeOutputs', () => {
+    it('keeps manifest entries for files it does not write, re-hashed from disk', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'outputs-'));
+        try {
+            writeFileSync(join(dir, 'towns.geojson'), '{"type":"FeatureCollection","features":[]}');
+            writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ 'towns.geojson': 'stale000', 'gone.geojson': 'deadbeef' }));
+            const fc = { type: 'FeatureCollection', features: [] };
+            const { manifest } = writeOutputs(dir, { 'wards.geojson': fc });
+            const onDisk = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
+            const hash = (name) => createHash('sha256').update(readFileSync(join(dir, name))).digest('hex').slice(0, 8);
+            expect(onDisk).toEqual(manifest);
+            expect(Object.keys(onDisk)).toEqual(['towns.geojson', 'wards.geojson']);
+            expect(onDisk['towns.geojson']).toBe(hash('towns.geojson'));
+            expect(onDisk['wards.geojson']).toBe(hash('wards.geojson'));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

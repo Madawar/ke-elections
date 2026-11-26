@@ -3,6 +3,8 @@ import { Head, router } from '@inertiajs/vue3';
 import { useEventListener, useMediaQuery, useStorage } from '@vueuse/core';
 import { useAppearance } from '@/composables/useAppearance';
 import { computed, onMounted, ref, shallowRef, watch } from 'vue';
+import InPowerExport from '@/components/export/InPowerExport.vue';
+import LocatorExport from '@/components/export/LocatorExport.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
 import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
@@ -25,6 +27,7 @@ import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
 import { OTHER, PROVINCE_TINTS, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
+import { formatAsOf } from '@/lib/export/format';
 import {
     type SeatsData,
     EMPTY_SEATS,
@@ -166,6 +169,9 @@ const colouring = computed<Colouring>(() => {
     });
 });
 
+const asOfText = computed(() =>
+    formatAsOf(seats.value.data_as_of ?? seats.value.as_of),
+);
 const legend = computed(() => {
     const k = colourKey.value;
     if (k === 'none') return null;
@@ -203,7 +209,7 @@ const legend = computed(() => {
     return {
         title: `${SEAT_LABEL[k]} seats by party`,
         rows: mapped,
-        note: `Elected 2022, with changes since. Source: IEBC gazette notices${(seats.value.data_as_of ?? seats.value.as_of) ? `, as of ${new Date((seats.value.data_as_of ?? seats.value.as_of)!).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`,
+        note: `Elected 2022, with changes since. Source: IEBC gazette notices${asOfText.value ? `, as of ${asOfText.value}` : ''}`,
     };
 });
 const partyChips = computed(() =>
@@ -233,6 +239,7 @@ function selectUnit(
     unit: Unit | null,
     { push = true, fit = true, animate = true } = {},
 ) {
+    overlayInfo.value = null;
     selection.value = unit;
     autoCentre.value = true;
     view.value = 'unit';
@@ -378,6 +385,22 @@ const townsIn = computed(() => {
 // ---- find my ward -----------------------------------------------------------------------
 const locating = ref(false);
 const locateMessage = ref('');
+
+// ---- overlay features (polling stations) -----------------------------------------------
+const overlayInfo = ref<{ title: string; detail: string } | null>(null);
+function onOverlayClick(
+    overlay: MapOverlay,
+    properties: Record<string, unknown>,
+) {
+    if (overlay.id !== 'stations') return;
+    const ward = index.value?.get('ward', Number(properties.ward_code));
+    const parent = ward ? index.value?.ancestors('ward', ward.c)[0] : undefined;
+    overlayInfo.value = {
+        title: String(properties.name ?? 'Polling station'),
+        detail: `Polling station${ward ? ` listed under ${ward.n} ward${parent ? `, ${parent.n}` : ''}` : ''}. IEBC 2013 location.`,
+    };
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
 async function locate() {
     if (!navigator.geolocation || !manifest.value) {
         locateMessage.value = 'This device cannot share its location.';
@@ -399,6 +422,9 @@ async function locate() {
                 else
                     locateMessage.value =
                         'Your location is outside Kenya’s wards.';
+            } catch {
+                locateMessage.value =
+                    'The ward map could not be loaded. Check your connection and try again.';
             } finally {
                 locating.value = false;
             }
@@ -436,6 +462,15 @@ const headTitle = computed(() =>
         ? `${props.unit.name} ${props.unit.level.charAt(0).toUpperCase()}${props.unit.level.slice(1)}`
         : '',
 );
+// ---- share image ------------------------------------------------------------------------
+// The unit is fixed when the dialog opens, so the card doesn't change under the person.
+const exportUnit = shallowRef<(Unit & { l: MapLevel }) | null>(null);
+const exportNational = ref(false);
+function shareUnit() {
+    const u = panelUnit.value;
+    if (u && u.l !== 'province') exportUnit.value = u as Unit & { l: MapLevel };
+}
+
 const showView = (v: typeof view.value) => {
     view.value = view.value === v ? 'unit' : v;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
@@ -462,6 +497,7 @@ const showView = (v: typeof view.value) => {
                 view = 'list';
             "
             @user-move="autoCentre = false"
+            @overlay-click="onOverlayClick"
         />
         <p
             v-if="loadError"
@@ -593,6 +629,26 @@ const showView = (v: typeof view.value) => {
                         </button>
                     </template>
                 </div>
+                <div
+                    v-if="overlayInfo"
+                    class="mb-2 flex items-start gap-2 rounded-md border border-hairline px-3 py-2"
+                >
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[15px] font-medium text-ink">
+                            {{ overlayInfo.title }}
+                        </p>
+                        <p class="text-[13px] text-muted-ink">
+                            {{ overlayInfo.detail }}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="min-h-11 px-2 text-[14px] underline underline-offset-4"
+                        @click="overlayInfo = null"
+                    >
+                        Close
+                    </button>
+                </div>
                 <p v-if="locateMessage" class="pb-2 text-[13px] text-muted-ink">
                     {{ locateMessage }}
                 </p>
@@ -627,14 +683,34 @@ const showView = (v: typeof view.value) => {
                     :seats="seats"
                     :towns="townsIn"
                     @go="(u) => selectUnit(u)"
+                    @share="shareUnit"
                 />
                 <NationalOverview
                     v-else
                     :seats="seats"
                     @colour-by="(s) => (colourKey = s)"
+                    @share="exportNational = true"
                 />
             </template>
         </BottomSheet>
+
+        <LocatorExport
+            v-if="exportUnit && index && manifest"
+            :open="true"
+            :unit="exportUnit"
+            :index="index"
+            :seats="seats"
+            :manifest="manifest"
+            :province-of-county="provinceOfCounty"
+            :theme="THEMES[theme]"
+            :colouring="colouring"
+            @update:open="(v) => !v && (exportUnit = null)"
+        />
+        <InPowerExport
+            v-model:open="exportNational"
+            :seats="seats"
+            :theme="THEMES[theme]"
+        />
 
         <div class="sr-only" aria-live="polite">{{ announce }}</div>
     </div>

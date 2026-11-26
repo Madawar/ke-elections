@@ -9,11 +9,20 @@ fetch() { # url dest
   [ -s "$2" ] || curl -fSL --retry 5 --http1.1 -o "$2" "$1"
 }
 
-# 1. IEBC 2012 delimitation, scraped from vote.iebc.or.ke in 2013 (github.com/mikelmaron/kenya-election-data)
-mkdir -p mikelmaron
-fetch https://codeload.github.com/mikelmaron/kenya-election-data/tar.gz/refs/heads/master mikelmaron.tar.gz
-[ -f mikelmaron/data/counties.geojson ] || tar -xzf mikelmaron.tar.gz -C mikelmaron --strip-components=1 \
-  kenya-election-data-master/data kenya-election-data-master/README.md
+# 1. IEBC 2012 delimitation, scraped from vote.iebc.or.ke in 2013 (github.com/mikelmaron/kenya-election-data).
+#    data/ holds the boundaries; output/pollingstations.shp the 2013 polling stations (Task 4b evidence).
+#    Cloud sessions get HTTP 403 from codeload.github.com, so fall back to a shallow git clone.
+if [ ! -f mikelmaron/data/wards.geojson ] || [ ! -f mikelmaron/output/pollingstations.shp ]; then
+  rm -rf mikelmaron
+  if curl -fsSL --retry 3 --http1.1 -o mikelmaron.tar.gz https://codeload.github.com/mikelmaron/kenya-election-data/tar.gz/refs/heads/master; then
+    mkdir -p mikelmaron && tar -xzf mikelmaron.tar.gz -C mikelmaron --strip-components=1 \
+      kenya-election-data-master/data kenya-election-data-master/output kenya-election-data-master/README.md
+  else
+    rm -f mikelmaron.tar.gz
+    git -c http.version=HTTP/1.1 clone -q --depth 1 https://github.com/mikelmaron/kenya-election-data.git mikelmaron
+    rm -rf mikelmaron/.git
+  fi
+fi
 
 # 2. HDX "Administrative Wards in Kenya 1450" (American Red Cross, CC BY 4.0)
 mkdir -p hdx_arc_wards

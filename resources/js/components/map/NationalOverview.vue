@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatAsOf } from '@/lib/export/format';
 import { computed } from 'vue';
 import Hemicycle from './Hemicycle.vue';
 import { type SeatsData, chamberGroups, seatLegend } from '@/lib/seats';
@@ -6,18 +7,12 @@ import { type SeatsData, chamberGroups, seatLegend } from '@/lib/seats';
 const props = defineProps<{ seats: SeatsData }>();
 const emit = defineEmits<{
     colourBy: [seat: 'governor' | 'mp' | 'senator' | 'woman_rep'];
+    share: [];
 }>();
 
-const asOf = computed(() => {
-    const date = props.seats.data_as_of ?? props.seats.as_of;
-    return date
-        ? new Date(date).toLocaleDateString('en-KE', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-          })
-        : null;
-});
+const asOf = computed(() =>
+    formatAsOf(props.seats.data_as_of ?? props.seats.as_of),
+);
 const caption = computed(
     () =>
         `Elected 2022, with by-elections and changes since. Source: IEBC gazette notices and parliament.go.ke${asOf.value ? `, as of ${asOf.value}` : ''}.`,
@@ -35,6 +30,13 @@ const hasData = computed(() => props.seats.holders.length > 0);
             constituencies and wards.
         </p>
         <template v-if="hasData">
+            <button
+                type="button"
+                class="flex h-11 w-full items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
+                @click="emit('share')"
+            >
+                Share an image of Parliament
+            </button>
             <section>
                 <Hemicycle
                     title="National Assembly"

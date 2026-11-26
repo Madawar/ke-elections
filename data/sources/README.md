@@ -20,5 +20,8 @@ Known gaps:
 - For a by-election, the previous holder's `ended_on` is the by-election date (an upper bound), since the gazettes don't give the vacancy date.
 - One nominated MP seat (ANC) is vacant pending a court case over ANC's dissolution.
 - Wiper is keyed `WDM-K` (its 2022 name); it is now Wiper Patriotic Front (WPF).
-- Party display colours are not set yet (`party_colours.csv`); the map uses a colour-blind-safe
-  palette by seats held.
+- Party display colours (`party_colours.csv`) are defaults for the ten parties with the most
+  seats, derived from each party's ORPP-registered colours and adjusted so they stay distinct and
+  keep map labels legible (checked by `tests/js/party-colours.test.ts`). Every other party, and
+  independents, show as neutral grey "Other". Edit the file and re-run the parties import to
+  change them.

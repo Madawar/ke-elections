@@ -269,7 +269,13 @@ export function useMap(
                     m.getLayer(id),
                 );
                 const hit = layers.length
-                    ? m.queryRenderedFeatures(e.point, { layers })[0]
+                    ? m.queryRenderedFeatures(
+                          [
+                              [e.point.x - 10, e.point.y - 10],
+                              [e.point.x + 10, e.point.y + 10],
+                          ],
+                          { layers },
+                      )[0]
                     : undefined;
                 if (hit) {
                     opts.onOverlayClick?.(overlay, hit.properties ?? {});
