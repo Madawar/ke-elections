@@ -85,6 +85,11 @@ scripts) and `fdec2ff` (owner additions to the plan).
   edit, a "questionable" flag, data-check tabs, CSV import and export, and audited rollback.
   See the spec section "Admin data review table".
 
+- **Party and candidate pages (owner, 2026-11-26):** when nominations arrive, each party gets a page
+  with its nominations per seat, status and sources, and each candidate gets a page. Keep links,
+  search and highlighting ready for that. See the spec section "Party pages, candidate pages and
+  nominations".
+
 ## Parked minor review findings (fix when touching the code)
 - **Task 4:**
   - A failing build still writes the outputs and report before exiting.
