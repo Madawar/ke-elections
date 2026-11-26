@@ -14,6 +14,7 @@ import {
     type SeatsData,
     legendScope,
     legendTitle,
+    hasOwnColour,
     partyColours,
     seatLegend,
     withIndependentColour,
@@ -136,11 +137,30 @@ export function viewPath(
     seat: SeatKey,
     focus: FocusSelection | null,
     only: readonly string[],
+    /**
+     * The parties the "Other parties" row stands for and which of the chosen parties have no
+     * colour of their own: with the whole row on, the link says `other` instead of listing them.
+     */
+    other: {
+        members: readonly string[];
+        uncoloured: (a: string) => boolean;
+    } = {
+        members: [],
+        uncoloured: () => false,
+    },
 ): string {
     const base = focus ? unitPath(focus.level, focus.code) : '/';
-    const parties = [...new Set(only)].map((a) =>
-        encodeURIComponent(a.toLowerCase()),
-    );
+    const chosen = [...new Set(only)];
+    const whole =
+        other.members.length > 0 &&
+        other.members.every((a) => chosen.includes(a));
+    const tokens: string[] = [];
+    for (const a of chosen) {
+        if (whole && other.uncoloured(a)) {
+            if (!tokens.includes('other')) tokens.push('other');
+        } else tokens.push(a);
+    }
+    const parties = tokens.map((a) => encodeURIComponent(a.toLowerCase()));
     return `${base}?seat=${seat}${parties.length ? `&parties=${parties.join(',')}` : ''}`;
 }
 
@@ -156,10 +176,18 @@ export function parseViewQuery(
     for (const p of seats.parties) known.set(p.abbrev.toLowerCase(), p.abbrev);
     for (const h of seats.holders)
         if (h.party) known.set(h.party.toLowerCase(), h.party);
-    const parties = (q.get('parties') ?? '')
-        .split(',')
-        .map((a) => known.get(a.trim().toLowerCase()))
-        .filter((a): a is string => !!a);
+    // `other` stands for every party holding this seat without a colour of its own.
+    const uncoloured = seat
+        ? seatLegend(seats, seat)
+              .filter((r) => !hasOwnColour(r.abbrev, r.colour))
+              .map((r) => r.abbrev)
+        : [];
+    const parties = (q.get('parties') ?? '').split(',').flatMap((a) => {
+        const t = a.trim().toLowerCase();
+        if (t === 'other') return uncoloured;
+        const known_ = known.get(t);
+        return known_ ? [known_] : [];
+    });
     return { seat, parties: seat ? [...new Set(parties)] : [] };
 }
 
@@ -279,7 +307,11 @@ export function snapshotView({
         source: sourceLine(holdersInView.map((h) => h.source_url)),
         sources: sourceParts(holdersInView.map((h) => h.source_url)),
         sample,
-        path: viewPath(seat, focus && focusUnit ? focus : null, only),
+        path: viewPath(seat, focus && focusUnit ? focus : null, only, {
+            members: legend.members.other ?? [],
+            uncoloured: (a) =>
+                !hasOwnColour(a, partyColours(seats).get(a) ?? OTHER),
+        }),
     };
 }
 

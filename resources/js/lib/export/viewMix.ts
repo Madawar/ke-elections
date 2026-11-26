@@ -179,7 +179,7 @@ export function mixBar(
 /**
  * The mix legend, wrapped across the width: each part's swatch, name and count, plus its share
  * where the bar could not print it, in bar order. Parties folded into "Other parties" for being
- * small follow it ("includes KANU 2 (2%)"), each with its own colour, so every colour on the card
+ * small follow it on a line of their own ("of which KANU 2"), each with its own colour, so every colour on the card
  * is named.
  */
 export function mixLegend(

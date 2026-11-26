@@ -319,13 +319,17 @@ export function footerBlock(
         });
     });
     y += fonts.url * 0.45 + lead(fonts.url);
-    const url = input.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    // A deep link is never cut, so a long one shrinks further than other text.
+    // A deep link is never cut: a long one shrinks further than other text, and when even the
+    // floor size is too wide the footer shows the plain page address without the query.
+    const floor = Math.round(fonts.small * 0.75);
+    let url = input.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (textWidth(url, floor, true) > area.w)
+        url = url.replace(/[?#].*$/, '').replace(/\/$/, '');
     const urlSize = fitFontSize(
         url,
         area.w,
         fonts.url,
-        Math.round(fonts.small * 0.75),
+        floor,
         true, // drawn at weight 600
     );
     const brandFits =

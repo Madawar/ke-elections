@@ -230,9 +230,18 @@ function applySharedView(data: SeatsData) {
         colourKey.value = seat;
         onlyParties.value = parties;
     }
+    // Take only our own two parameters off the address; anything else (utm_…) stays.
     const query = new URLSearchParams(location.search);
-    if (query.has('seat') || query.has('parties'))
-        history.replaceState(history.state, '', location.pathname);
+    if (query.has('seat') || query.has('parties')) {
+        query.delete('seat');
+        query.delete('parties');
+        const rest = query.toString();
+        history.replaceState(
+            history.state,
+            '',
+            `${location.pathname}${rest ? `?${rest}` : ''}${location.hash}`,
+        );
+    }
 }
 const partyChips = computed(() =>
     colourKey.value === 'none' || colourKey.value === 'province'

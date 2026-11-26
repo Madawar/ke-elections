@@ -565,14 +565,7 @@ function callouts(
             label: {
                 x: textX,
                 y: labelY,
-                text:
-                    wrapText(
-                        c.label === 'other parties' ? 'Other parties' : c.label,
-                        textW,
-                        f.label,
-                        1,
-                        true,
-                    )[0] ?? '',
+                text: wrapText(c.label, textW, f.label, 1, true)[0] ?? '',
                 size: f.label,
                 weight: 700,
                 tone: 'ink',

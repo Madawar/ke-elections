@@ -86,7 +86,7 @@ describe('the mix legend', () => {
 });
 
 describe('text inside the bar', () => {
-    it('takes whichever ink gives at least 4.5:1 on the part (dark on ODM orange)', () => {
+    it('takes the ink with the higher contrast on the part (dark on ODM orange, white on WDM-K blue)', () => {
         const v = view(MIX_SEATS, 'mca', nairobi);
         const bar = mixBar({ x: 0, y: 0, w: 900, h: 48 }, v);
         const odm = bar.segments.find((s) => s.key === 'ODM')!;

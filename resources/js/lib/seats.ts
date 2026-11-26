@@ -71,6 +71,14 @@ export function partyRanking(
         .sort((a, b) => b.seats - a.seats || a.abbrev.localeCompare(b.abbrev));
 }
 
+/**
+ * The one rule for "has its own colour": independents always do (the theme's `independent`
+ * token), and so does every party with a colour set; the rest share the "Other" grey and fold
+ * into "Other parties" on legends, seating charts and cards.
+ */
+export const hasOwnColour = (abbrev: string, colour: string): boolean =>
+    abbrev === INDEPENDENT || colour !== OTHER;
+
 /** The colour of a party with none set: the independent token for independents, else "Other". */
 const fallback = (abbrev: string) =>
     abbrev === INDEPENDENT ? THEMES.light.independent : OTHER;
@@ -241,9 +249,9 @@ export function chamberGroups(
         }),
     );
     rows.sort((a, b) => b.seats - a.seats || a.key.localeCompare(b.key));
-    const named = rows.filter((r) => r.colour !== OTHER);
+    const named = rows.filter((r) => hasOwnColour(r.key, r.colour));
     const other = rows
-        .filter((r) => r.colour === OTHER)
+        .filter((r) => !hasOwnColour(r.key, r.colour))
         .reduce((n, r) => n + r.seats, 0);
     return other > 0
         ? [

@@ -2,7 +2,13 @@
 // how the heading and chip describe that. The page only wires this to the legend and the map.
 import type { SeatKey } from './map/colouring';
 import { OTHER, PROVINCE_TINTS } from './map/theme';
-import { INDEPENDENT, legendTitle, seatLegend, type SeatsData } from './seats';
+import {
+    INDEPENDENT,
+    hasOwnColour,
+    legendTitle,
+    seatLegend,
+    type SeatsData,
+} from './seats';
 
 export interface LegendRow {
     key: string;
@@ -62,9 +68,7 @@ export function buildLegend(
     const rows = seatLegend(seats, seat, scope?.codes);
     // Every party drawn in a colour of its own on the map has a row (party_colours.csv is a
     // curated list), and so do independents; "Other parties" is only the parties without one.
-    const shown = rows.filter(
-        (r) => r.abbrev === INDEPENDENT || r.colour !== OTHER,
-    );
+    const shown = rows.filter((r) => hasOwnColour(r.abbrev, r.colour));
     const folded = rows.filter((r) => !shown.includes(r));
     const other = folded.reduce((n, r) => n + r.seats, 0);
     const mapped: LegendRow[] = shown.map((r) => ({

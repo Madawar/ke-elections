@@ -13,6 +13,10 @@ const MAX_LINES = 12;
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
 
+/** Length as X counts it: every link is shortened to a 23-character t.co link. */
+export const xLength = (text: string): number =>
+    text.replace(/https?:\/\/\S+/g, 'x'.repeat(23)).length;
+
 const list = (items: string[]) =>
     items.length <= 1
         ? (items[0] ?? '')
@@ -61,9 +65,9 @@ export function captionFor(
         let tail = '';
         for (const max of [2, 1]) {
             tail = `\n\n${sourceText(view, max)}\n${url}\n${TAGS}`;
-            if (tail.length <= X_MAX - 20) break;
+            if (xLength(tail) <= X_MAX - 20) break;
         }
-        return `${clip(headline, Math.max(1, X_MAX - tail.length))}${tail}`;
+        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
     }
     // The source, link and tags always go in; party lines are dropped from the end to make room.
     const head = clip(headline, 300);
@@ -79,7 +83,9 @@ export function captionFor(
             head,
             '',
             ...body,
-            ...(more ? [`And ${more} more parties.`] : []),
+            ...(more
+                ? [`And ${more} more ${more === 1 ? 'party' : 'parties'}.`]
+                : []),
             ...(body.length || more ? [''] : []),
             tail,
         ].join('\n');

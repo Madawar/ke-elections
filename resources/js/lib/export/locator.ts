@@ -11,7 +11,12 @@ import { combineFilter, focusFilters, focusOutside } from '@/lib/map/focus';
 import { KENYA_BOUNDS, type MapLevel } from '@/lib/map/levels';
 import { SOURCE_OF, buildStyle } from '@/lib/map/style';
 import { type MapTheme, OTHER } from '@/lib/map/theme';
-import { INDEPENDENT, type SeatsData, partyColours } from '@/lib/seats';
+import {
+    INDEPENDENT,
+    type SeatsData,
+    hasOwnColour,
+    partyColours,
+} from '@/lib/seats';
 import { type Level, type Unit, type UnitIndex, seatsFor } from '@/lib/units';
 import type { Box } from './layout';
 import { renderMapImage } from './renderMapImage';
@@ -160,7 +165,10 @@ export function mapLegend(
     // As on the map's own legend: every party with a colour of its own keeps its row (so does
     // Independent); only the parties without one fold into "Other parties", in the Other grey.
     const uncoloured = rows.filter(
-        (r) => r.key !== 'none' && r.key !== 'faded' && r.colour === OTHER,
+        (r) =>
+            r.key !== 'none' &&
+            r.key !== 'faded' &&
+            !hasOwnColour(r.key, r.colour ?? OTHER),
     );
     const kept = rows.filter(
         (r) => !uncoloured.includes(r) && r.key !== 'none',

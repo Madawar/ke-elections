@@ -113,6 +113,8 @@ const canShare = ref(false);
 // Map images by size, theme and box: a changed headline only redraws the map when it moves the box.
 const images = new Map<string, Promise<string>>();
 let token = 0;
+/** The map the latest build is waiting for; a queued drawing of any other map is skipped. */
+let wantedKey = '';
 // Off-screen maps are drawn one at a time, however fast the person switches.
 let queue: Promise<unknown> = Promise.resolve();
 class Superseded extends Error {}
@@ -140,13 +142,16 @@ async function build() {
         mapAspect: mapAspect.value,
     }).map;
     const key = `${s}|${name}|${box.w}x${box.h}`;
+    wantedKey = key;
     let pending = images.get(key);
     if (!pending) {
         mapImage.value = null;
         mapStatus.value = 'Drawing the map…';
         const view = shown.value;
         pending = queue.then(() => {
-            if (t !== token) throw new Superseded();
+            // Skip a map nobody waits for any more; a later build may still want this one,
+            // even after the build that queued it has moved on.
+            if (key !== wantedKey) throw new Superseded();
             return renderViewMap(
                 view,
                 {
@@ -166,10 +171,17 @@ async function build() {
         mapImage.value = image;
     } catch (error) {
         images.delete(key);
-        if (t !== token || error instanceof Superseded) return;
+        if (t !== token) return;
+        // Skipped while another size was wanted, and wanted again now: draw it.
+        if (error instanceof Superseded) return void build();
         console.error(error);
+        // Say so in the dialog, never on the card: no image is made without its map.
         mapImage.value = null;
-        mapStatus.value = 'The map could not be drawn on this device';
+        mapStatus.value = '';
+        status.value = 'error';
+        message.value =
+            'The map could not be drawn on this device, so no image was made. Try again, or try another browser.';
+        return;
     }
     const svg = await cardSvg();
     if (t !== token) return;
