@@ -109,7 +109,10 @@ describe('snapshotView', () => {
             ['UDM', 36, '2%'],
             ['FORD-K', 33, '2%'],
             ['ANC', 31, '2%'],
-            ['Other parties', 257, '18%'],
+            ['DAP-K', 28, '2%'],
+            ['KANU', 27, '2%'],
+            ['MCCP', 19, '1%'],
+            ['Other parties', 183, '13%'],
         ]);
         // The same rows, counts, colours and shares the on-screen legend draws.
         const legend = buildLegend(VIEW_SEATS, 'mca', null, ['UDA', 'ODM']);

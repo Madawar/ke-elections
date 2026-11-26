@@ -48,7 +48,15 @@ describe('MCA seats across Kenya', () => {
         const legend = buildLegend(seats, 'mca', null, []);
         const rows = legend.rows.map((r) => [r.label, r.count]);
         expect(rows).toContainEqual(['Independent', 114]);
-        expect(rows.at(-1)).toEqual(['Other parties', 257]);
+        expect(rows.at(-1)).toEqual(['Other parties', 183]);
+        // Every party with a colour of its own has a row, DAP-K, KANU and MCCP included.
+        for (const key of ['DAP-K', 'KANU', 'MCCP'])
+            expect(legend.rows.map((r) => r.key)).toContain(key);
+        const colourOf = new Map(
+            seats.parties.map((p) => [p.abbrev, p.colour]),
+        );
+        for (const a of legend.members.other)
+            expect(colourOf.get(a) ?? null).toBeNull();
         const ind = legend.rows.find((r) => r.key === 'IND')!;
         expect(ind.colour).toBe(THEMES.light.independent);
         // Sorted by count like any party: after ODM (312), before JP (76).
@@ -69,7 +77,7 @@ describe('MCA seats across Kenya', () => {
         expect(partyColours(VIEW_SEATS).get('IND')).not.toBe(OTHER);
     });
 
-    it('put a card snapshot on exactly the legend rows (share "8%" and "18%")', () => {
+    it('put a card snapshot on exactly the legend rows (share "8%" and "13%")', () => {
         const view = snapshotView({
             seats,
             index: viewIndex,
@@ -84,7 +92,7 @@ describe('MCA seats across Kenya', () => {
             legend.rows.map((r) => [r.key, r.count, r.colour]),
         );
         expect(view.rows.find((r) => r.key === 'IND')!.share).toBe('8%');
-        expect(view.rows.at(-1)!.share).toBe('18%');
+        expect(view.rows.at(-1)!.share).toBe('13%');
         expect(view.rows.at(-1)!.label).toBe('Other parties');
     });
 });

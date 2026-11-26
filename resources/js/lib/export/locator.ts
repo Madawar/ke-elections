@@ -118,61 +118,80 @@ export function mapLegend(
               unit)
             : unit;
     const colours = partyColours(data);
-    const counts = new Map<string, { colour: string | null; count: number }>();
+    // Rows by what they stand for: a party abbreviation, "faded" (left out by the highlight) or
+    // "none" (no approved holder).
+    const counts = new Map<
+        string,
+        { label: string; colour: string | null; count: number }
+    >();
     for (const code of codesAtLevel(index, unit, level)) {
         const h = data.holders.find(
             (x) => x.seat === mode.seat && x.level === level && x.code === code,
         );
         const colour = colouring.colours.get(code) ?? colouring.fallback;
         // A party left out by the "only these parties" filter is drawn faded: say so.
-        const label = !h?.party
-            ? 'No approved data'
-            : colour !== (colours.get(h.party) ?? OTHER)
-              ? 'Not selected'
-              : h.party === INDEPENDENT
-                ? 'Independent'
-                : h.party;
-        const row = counts.get(label) ?? { colour, count: 0 };
+        const key = !h?.party
+            ? 'none'
+            : colour !== colours.get(h.party)
+              ? 'faded'
+              : h.party;
+        const label =
+            key === 'none'
+                ? 'No approved data'
+                : key === 'faded'
+                  ? 'Not selected'
+                  : partyLabelShort(key);
+        const row = counts.get(key) ?? { label, colour, count: 0 };
         row.count++;
-        counts.set(label, row);
+        counts.set(key, row);
     }
     const rows = [...counts.entries()]
-        .map(([label, r]) => ({ label, ...r }))
+        .map(([key, r]) => ({ key, ...r }))
         .sort(
             (a, b) =>
-                Number(a.label === 'No approved data') -
-                    Number(b.label === 'No approved data') ||
+                Number(a.key === 'none') - Number(b.key === 'none') ||
                 b.count - a.count ||
                 a.label.localeCompare(b.label),
         );
+    const plain = (r: (typeof rows)[number]) => ({
+        label: r.label,
+        colour: r.colour,
+        count: r.count,
+    });
     // Past `maxRows` rows, the smallest parties fold into "Other parties"; independents and
     // units with no data always keep their own rows.
-    const apart = (r: { label: string }) =>
-        r.label === 'No approved data' || r.label === 'Independent';
-    const parties = rows.filter((r) => !apart(r));
-    const kept = rows.filter((r) => r.label === 'Independent');
+    const parties = rows.filter(
+        (r) => r.key !== 'none' && r.key !== INDEPENDENT,
+    );
+    const kept = rows.filter((r) => r.key === INDEPENDENT);
+    const none = rows.filter((r) => r.key === 'none');
     const room = Math.max(0, maxRows - 1 - kept.length);
     const rest = parties.slice(room);
-    if (parties.length + kept.length > maxRows && rest.length) {
+    if (parties.length + kept.length > maxRows && rest.length)
         return {
             title: legendTitle(mode.seat, area),
             rows: [
-                ...[...parties.slice(0, room), ...kept].sort(
-                    (a, b) =>
-                        b.count - a.count || a.label.localeCompare(b.label),
-                ),
+                ...[...parties.slice(0, room), ...kept]
+                    .sort(
+                        (a, b) =>
+                            b.count - a.count || a.label.localeCompare(b.label),
+                    )
+                    .map(plain),
                 {
                     // Their colours vary on the map, so this row gets no swatch.
                     label: 'Other parties',
                     colour: null,
                     count: rest.reduce((n, r) => n + r.count, 0),
                 },
-                ...rows.filter((r) => r.label === 'No approved data'),
+                ...none.map(plain),
             ],
         };
-    }
-    return { title: legendTitle(mode.seat, area), rows };
+    return { title: legendTitle(mode.seat, area), rows: rows.map(plain) };
 }
+
+/** A party's name on the map legend: its abbreviation, or "Independent". */
+const partyLabelShort = (abbrev: string) =>
+    abbrev === INDEPENDENT ? 'Independent' : abbrev;
 
 const legendTitle = (seat: SeatKey, area: Unit) =>
     `${SEAT_SHORT[seat]} seats by party in ${area.n}`;

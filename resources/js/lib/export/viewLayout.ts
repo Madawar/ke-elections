@@ -617,6 +617,9 @@ function arrange(
 ): Body | null {
     const { gap } = spec;
     const chartH = titleHeight(spec) + rows * spec.row.h;
+    // Under the map, a long chart (a dozen parties) takes at most about half the body and its
+    // rows tighten, so the map keeps its room.
+    const stackedChartH = Math.min(chartH, Math.round(b.h * 0.5));
     const colGap = Math.round(gap * 0.5);
     const calloutsColH = callouts * spec.callout.h + (callouts - 1) * colGap;
     switch (kind) {
@@ -624,7 +627,8 @@ function arrange(
             const map = box(b.x, b.y, b.w - spec.colW - gap, b.h);
             const x = map.x + map.w + gap;
             const room = b.h - spec.callout.h - gap;
-            if (room < rows * spec.row.h * 0.85) return null;
+            // A long chart (a dozen parties) may tighten its rows to about three quarters.
+            if (room < rows * spec.row.h * 0.72) return null;
             const title = room >= chartH;
             // The column is centred on the map when it needs less than the full height.
             const chartUsed = Math.min(
@@ -659,7 +663,12 @@ function arrange(
             };
         }
         case 'mapCallouts': {
-            const chartBox = box(b.x, b.y + b.h - chartH, b.w, chartH);
+            const chartBox = box(
+                b.x,
+                b.y + b.h - stackedChartH,
+                b.w,
+                stackedChartH,
+            );
             const topH = chartBox.y - gap - b.y;
             const map = box(b.x, b.y, b.w - spec.calloutColW - gap, topH);
             // The callouts sit level with the middle of the map.
@@ -679,7 +688,12 @@ function arrange(
             };
         }
         case 'tall': {
-            const chartBox = box(b.x, b.y + b.h - chartH, b.w, chartH);
+            const chartBox = box(
+                b.x,
+                b.y + b.h - stackedChartH,
+                b.w,
+                stackedChartH,
+            );
             const calloutBox = box(
                 b.x,
                 chartBox.y - gap - spec.callout.h,
@@ -815,8 +829,11 @@ export function viewLayout(
     let bestArea = -1;
     for (const kind of spec.arrangements) {
         const placed = arrange(kind, body, spec, nRows, nCallouts);
-        const area = placed ? fittedArea(placed.map, text.mapAspect) : -1;
-        if (placed && area > bestArea) {
+        // An arrangement that leaves the map less than a third of the body is no arrangement.
+        const usable =
+            placed && placed.map.h >= body.h / 3 && placed.map.w >= body.w / 3;
+        const area = usable ? fittedArea(placed.map, text.mapAspect) : -1;
+        if (usable && area > bestArea) {
             best = placed;
             bestArea = area;
         }

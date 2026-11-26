@@ -32,12 +32,6 @@ export function shareOf(count: number, total: number): string {
     return count > 0 && p < 0.5 ? '<1%' : `${Math.round(p)}%`;
 }
 
-/**
- * The most coloured-party rows the legend shows; every other party is folded into "Other
- * parties". Independents have a row of their own on top of these.
- */
-export const MAX_PARTY_ROWS = 7;
-
 export interface LegendModel {
     title: string;
     /** The collapsed chip says what is highlighted, so a phone shows it with the legend closed. */
@@ -66,13 +60,10 @@ export function buildLegend(
     asOf: string | null = '',
 ): LegendModel {
     const rows = seatLegend(seats, seat, scope?.codes);
-    // Independents always have their own row, sorted by count like a party, on top of the
-    // largest coloured parties; "Other parties" is every other party.
-    const top = rows
-        .filter((r) => r.abbrev !== INDEPENDENT && r.colour !== OTHER)
-        .slice(0, MAX_PARTY_ROWS);
+    // Every party drawn in a colour of its own on the map has a row (party_colours.csv is a
+    // curated list), and so do independents; "Other parties" is only the parties without one.
     const shown = rows.filter(
-        (r) => r.abbrev === INDEPENDENT || top.includes(r),
+        (r) => r.abbrev === INDEPENDENT || r.colour !== OTHER,
     );
     const folded = rows.filter((r) => !shown.includes(r));
     const other = folded.reduce((n, r) => n + r.seats, 0);

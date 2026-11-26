@@ -72,8 +72,8 @@ describe('ViewCard', () => {
         expect(text).toContain('IEBC gazette notices');
         expect(text).toContain('Data as of 16 July 2026');
         expect(text).toContain('example.org/?seat=mca&parties=uda,odm');
-        expect(wrapper.findAll('[data-row]')).toHaveLength(9);
-        expect(wrapper.get('[data-row="other"]').text()).toContain('257 (18%)');
+        expect(wrapper.findAll('[data-row]')).toHaveLength(12);
+        expect(wrapper.get('[data-row="other"]').text()).toContain('183 (13%)');
         expect(wrapper.findAll('[data-callout]')).toHaveLength(2);
         expect(wrapper.get('image[data-map]').attributes('href')).toBe(
             'data:image/png;base64,AAAA',
@@ -250,6 +250,27 @@ describe('chart labels', () => {
                     Math.abs(row.label.y - row.label.size * 0.36 - mid),
                 ).toBeLessThan(row.label.size * 0.6);
             }
+        }
+    });
+});
+
+describe('a dozen parties', () => {
+    it('keeps the map at least a third of the body in every size', () => {
+        // The fixture's MCA view has 12 rows: 10 coloured parties, Independent, Other parties.
+        expect(mca.rows).toHaveLength(12);
+        for (const size of SIZES) {
+            const l = viewLayout(size, mca, {
+                headline: headlineFor(mca),
+                url: 'https://example.org/',
+                mapAspect: 0.82,
+            });
+            const body = l.footerBox.y - (l.scopeLine.y + 10);
+            expect(l.map.h, size).toBeGreaterThan(
+                size === 'x' ? 500 : body / 3,
+            );
+            // Rows stay readable.
+            for (const row of l.rows)
+                expect(row.value.size, size).toBeGreaterThanOrEqual(18);
         }
     });
 });

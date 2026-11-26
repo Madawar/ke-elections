@@ -12,6 +12,9 @@ const PARTIES: Party[] = [
     ['UDM', 'United Democratic Movement', '#3ba39c'],
     ['FORD-K', 'Forum for Restoration of Democracy-Kenya', '#8e6bb0'],
     ['ANC', 'Amani National Congress', '#3fae49'],
+    ['DAP-K', 'Democratic Action Party-Kenya', '#6db3e0'],
+    ['KANU', 'Kenya African National Union', '#8a5a2b'],
+    ['MCCP', 'Maendeleo Chap Chap', '#b5508f'],
     ['IND', 'Independent', null],
     ...Array.from({ length: 9 }, (_, i) => [
         `SP${i + 1}`,
@@ -41,7 +44,11 @@ const holder = (
     source_url: 'https://www.iebc.or.ke/uploads/resources/sample.pdf',
 });
 
-/** MCA seats per party: 1,450 wards in all; SP1 to SP9 stand for the small parties in "Other". */
+/**
+ * MCA seats per party: 1,450 wards in all. Ten parties have a colour of their own (more than a
+ * legend of seven rows would show), as in the published data; SP1 to SP9 are placeholders for the
+ * parties without a colour, which are all that "Other parties" may hold.
+ */
 export const MCA_COUNTS: [string, number][] = [
     ['UDA', 523],
     ['ODM', 312],
@@ -51,10 +58,13 @@ export const MCA_COUNTS: [string, number][] = [
     ['UDM', 36],
     ['FORD-K', 33],
     ['ANC', 31],
-    // 257 seats among nine small parties without a colour, as in the published data.
+    ['DAP-K', 28],
+    ['KANU', 27],
+    ['MCCP', 19],
+    // 183 seats among the parties without a colour (placeholders here).
     ...Array.from({ length: 9 }, (_, i): [string, number] => [
         `SP${i + 1}`,
-        i < 8 ? 29 : 25,
+        i < 8 ? 20 : 23,
     ]),
 ];
 /** MP seats in Nairobi City's 17 constituencies (codes 274 to 290). */
