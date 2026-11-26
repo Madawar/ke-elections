@@ -32,12 +32,14 @@ export function downloadBlob(blob: Blob, filename: string): void {
 
 /**
  * Share the image as a file where the device supports it, otherwise download it. A cancelled
- * share sheet is left alone; any other share failure falls back to a download.
+ * share sheet is left alone; any other share failure falls back to a download. `text` goes with
+ * the file where the receiving app takes it (a caption, say).
  */
 export async function shareOrDownload(
     blob: Blob,
     filename: string,
     title: string,
+    text?: string,
 ): Promise<ShareResult> {
     const file = new File([blob], filename, {
         type: blob.type || 'image/png',
@@ -54,7 +56,9 @@ export async function shareOrDownload(
     }
     if (canShare) {
         try {
-            await navigator.share({ files, title });
+            await navigator.share(
+                text ? { files, title, text } : { files, title },
+            );
             return 'shared';
         } catch (error) {
             if (error instanceof DOMException && error.name === 'AbortError')

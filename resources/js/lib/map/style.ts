@@ -82,7 +82,13 @@ export function fillOpacity(
     colouring: Colouring,
     outside?: ExpressionSpecification,
     focusLevel?: MapLevel,
+    seatOpacity = SEAT_FILL_OPACITY,
 ): ExpressionSpecification {
+    const seatFill = state(
+        Math.max(0.9, seatOpacity),
+        Math.max(0.85, seatOpacity),
+        seatOpacity,
+    );
     const pinned = pinnedLevel(colouring.mode);
     // Outside the focused unit a fill is only a faint grey wash. With seat colouring only the
     // coloured level washes, so the levels do not stack.
@@ -93,16 +99,12 @@ export function fillOpacity(
     // Focused on a level below the seat colouring (a ward, for a Governor): the layer for that level
     // is the one that shows the colour, as the coloured level above it is out of the picture.
     if (focusLevel === level && isFinerThanSeat(level, colouring.mode)) {
-        const coloured = state(0.9, 0.85, SEAT_FILL_OPACITY);
         return (
-            outside ? ['case', outside, 0, coloured] : coloured
+            outside ? ['case', outside, 0, seatFill] : seatFill
         ) as ExpressionSpecification;
     }
     if (pinned === level)
-        return dim(
-            state(0.9, 0.85, SEAT_FILL_OPACITY),
-            OUTSIDE_FILL_OPACITY,
-        ) as ExpressionSpecification;
+        return dim(seatFill, OUTSIDE_FILL_OPACITY) as ExpressionSpecification;
     const tinted =
         colouring.mode.kind === 'province'
             ? state(0.95, 0.9, 0.72)
@@ -349,6 +351,8 @@ export interface StyleInput {
     wards?: boolean;
     /** Set while a unit is focused. */
     focus?: FocusStyle;
+    /** How opaque a seat colour is drawn; image exports draw it solid to match their bars. */
+    seatFillOpacity?: number;
 }
 
 export function buildStyle({
@@ -358,6 +362,7 @@ export function buildStyle({
     provinceOfCounty,
     wards = false,
     focus,
+    seatFillOpacity,
 }: StyleInput): StyleSpecification {
     const geojson = (file: string) => ({
         type: 'geojson' as const,
@@ -386,6 +391,7 @@ export function buildStyle({
                     colouring,
                     focus?.outside?.[SOURCE_OF[level]],
                     focus?.level,
+                    seatFillOpacity,
                 ),
             },
         }),

@@ -2,7 +2,7 @@
 // turned into party colours, map colouring and per-unit seat rows.
 import { type Colouring, type SeatKey, SEAT_LEVEL } from './map/colouring';
 import type { MapLevel } from './map/levels';
-import { OTHER } from './map/theme';
+import { OTHER, THEMES } from './map/theme';
 import type { Unit, UnitIndex } from './units';
 
 export interface Party {
@@ -72,16 +72,54 @@ export function partyRanking(
 }
 
 /**
+ * The one rule for "has its own colour": independents always do (the theme's `independent`
+ * token), and so does every party with a colour set; the rest share the "Other" grey and fold
+ * into "Other parties" on legends, seating charts and cards.
+ */
+export const hasOwnColour = (abbrev: string, colour: string): boolean =>
+    abbrev === INDEPENDENT || colour !== OTHER;
+
+/** The colour of a party with none set: the independent token for independents, else "Other". */
+const fallback = (abbrev: string) =>
+    abbrev === INDEPENDENT ? THEMES.light.independent : OTHER;
+
+/**
  * A display colour for every party: the colour set in data/sources/party_colours.csv (defaults
  * derived from each party's ORPP-registered colours, adjusted to stay distinct and legible), else
- * the neutral grey "Other". Colours never depend on seat counts, so they don't shift as data changes.
+ * the neutral grey "Other". Independents are never "Other": they take the theme's `independent`
+ * token (set per theme by withIndependentColour; the light token when the data is unthemed).
+ * Colours never depend on seat counts, so they don't shift as data changes.
  */
 export function partyColours(data: SeatsData): Map<string, string> {
     const out = new Map<string, string>();
-    for (const p of data.parties) out.set(p.abbrev, p.colour ?? OTHER);
+    for (const p of data.parties)
+        out.set(p.abbrev, p.colour ?? fallback(p.abbrev));
     for (const h of data.holders)
-        if (h.party && !out.has(h.party)) out.set(h.party, OTHER);
+        if (h.party && !out.has(h.party)) out.set(h.party, fallback(h.party));
     return out;
+}
+
+/**
+ * The seats data with independents drawn in this theme's `independent` colour. Everything that
+ * reads party colours (map, legend, seating charts, cards) then shows them as their own group.
+ */
+export function withIndependentColour(
+    data: SeatsData,
+    colour: string,
+): SeatsData {
+    const own = data.parties.find((p) => p.abbrev === INDEPENDENT);
+    return {
+        ...data,
+        parties: [
+            ...data.parties.filter((p) => p.abbrev !== INDEPENDENT),
+            {
+                abbrev: INDEPENDENT,
+                name: own?.name ?? 'Independent',
+                coalition_2022: own?.coalition_2022 ?? null,
+                colour,
+            },
+        ],
+    };
 }
 
 export const currentHolder = (data: SeatsData, seat: SeatKey, code: number) =>
@@ -104,7 +142,10 @@ export function seatColouring(
         if (h.seat !== seat || h.level !== level || !h.party) continue;
         const show =
             !opts.only || opts.only.size === 0 || opts.only.has(h.party);
-        map.set(h.code, show ? (colours.get(h.party) ?? OTHER) : opts.faded);
+        map.set(
+            h.code,
+            show ? (colours.get(h.party) ?? fallback(h.party)) : opts.faded,
+        );
     }
     return {
         mode: { kind: 'seat', seat },
@@ -179,12 +220,15 @@ export function seatLegend(
                     ? 'Independent'
                     : (names.get(abbrev) ?? abbrev),
             seats,
-            colour: colours.get(abbrev) ?? OTHER,
+            colour: colours.get(abbrev) ?? fallback(abbrev),
         }))
         .sort((a, b) => b.seats - a.seats || a.abbrev.localeCompare(b.abbrev));
 }
 
-/** Hemicycle groups for a chamber, largest party first, with "Other" merged at the end. */
+/**
+ * Hemicycle groups for a chamber, largest party first; independents are a group of their own and
+ * the parties without a colour are merged into "Other parties" at the end.
+ */
 export function chamberGroups(
     data: SeatsData,
     chamber: 'national_assembly' | 'senate',
@@ -201,20 +245,20 @@ export function chamberGroups(
                       ? `${names.get(abbrev)} (${abbrev})`
                       : abbrev,
             seats,
-            colour: colours.get(abbrev) ?? OTHER,
+            colour: colours.get(abbrev) ?? fallback(abbrev),
         }),
     );
     rows.sort((a, b) => b.seats - a.seats || a.key.localeCompare(b.key));
-    const named = rows.filter((r) => r.colour !== OTHER);
+    const named = rows.filter((r) => hasOwnColour(r.key, r.colour));
     const other = rows
-        .filter((r) => r.colour === OTHER)
+        .filter((r) => !hasOwnColour(r.key, r.colour))
         .reduce((n, r) => n + r.seats, 0);
     return other > 0
         ? [
               ...named,
               {
                   key: 'other',
-                  label: 'Other parties and independents',
+                  label: 'Other parties',
                   seats: other,
                   colour: OTHER,
               },

@@ -11,7 +11,12 @@ import { combineFilter, focusFilters, focusOutside } from '@/lib/map/focus';
 import { KENYA_BOUNDS, type MapLevel } from '@/lib/map/levels';
 import { SOURCE_OF, buildStyle } from '@/lib/map/style';
 import { type MapTheme, OTHER } from '@/lib/map/theme';
-import { INDEPENDENT, type SeatsData, partyColours } from '@/lib/seats';
+import {
+    INDEPENDENT,
+    type SeatsData,
+    hasOwnColour,
+    partyColours,
+} from '@/lib/seats';
 import { type Level, type Unit, type UnitIndex, seatsFor } from '@/lib/units';
 import type { Box } from './layout';
 import { renderMapImage } from './renderMapImage';
@@ -107,7 +112,6 @@ export function mapLegend(
     index: UnitIndex,
     unit: Unit,
     colouring: Colouring,
-    maxRows = 6,
 ): MapLegend | null {
     const mode = colouring.mode;
     if (mode.kind !== 'seat') return null;
@@ -118,53 +122,73 @@ export function mapLegend(
               unit)
             : unit;
     const colours = partyColours(data);
-    const counts = new Map<string, { colour: string | null; count: number }>();
+    // Rows by what they stand for: a party abbreviation, "faded" (left out by the highlight) or
+    // "none" (no approved holder).
+    const counts = new Map<
+        string,
+        { label: string; colour: string | null; count: number }
+    >();
     for (const code of codesAtLevel(index, unit, level)) {
         const h = data.holders.find(
             (x) => x.seat === mode.seat && x.level === level && x.code === code,
         );
         const colour = colouring.colours.get(code) ?? colouring.fallback;
         // A party left out by the "only these parties" filter is drawn faded: say so.
-        const label = !h?.party
-            ? 'No approved data'
-            : colour !== (colours.get(h.party) ?? OTHER)
-              ? 'Not selected'
-              : h.party === INDEPENDENT
-                ? 'Independent'
-                : h.party;
-        const row = counts.get(label) ?? { colour, count: 0 };
+        const key = !h?.party
+            ? 'none'
+            : colour !== colours.get(h.party)
+              ? 'faded'
+              : h.party;
+        const label =
+            key === 'none'
+                ? 'No approved data'
+                : key === 'faded'
+                  ? 'Not selected'
+                  : partyLabelShort(key);
+        const row = counts.get(key) ?? { label, colour, count: 0 };
         row.count++;
-        counts.set(label, row);
+        counts.set(key, row);
     }
     const rows = [...counts.entries()]
-        .map(([label, r]) => ({ label, ...r }))
+        .map(([key, r]) => ({ key, ...r }))
         .sort(
             (a, b) =>
-                Number(a.label === 'No approved data') -
-                    Number(b.label === 'No approved data') ||
+                Number(a.key === 'none') - Number(b.key === 'none') ||
                 b.count - a.count ||
                 a.label.localeCompare(b.label),
         );
-    // Past `maxRows` parties, the smallest fold into "Others"; units with no data stay apart.
-    const parties = rows.filter((r) => r.label !== 'No approved data');
-    if (parties.length > maxRows) {
-        const rest = parties.slice(maxRows - 1);
-        return {
-            title: legendTitle(mode.seat, area),
-            rows: [
-                ...parties.slice(0, maxRows - 1),
-                {
-                    // Their colours vary on the map, so this row gets no swatch.
-                    label: 'Others',
-                    colour: null,
-                    count: rest.reduce((n, r) => n + r.count, 0),
-                },
-                ...rows.filter((r) => r.label === 'No approved data'),
-            ],
-        };
-    }
-    return { title: legendTitle(mode.seat, area), rows };
+    const plain = (r: (typeof rows)[number]) => ({
+        label: r.label,
+        colour: r.colour,
+        count: r.count,
+    });
+    // As on the map's own legend: every party with a colour of its own keeps its row (so does
+    // Independent); only the parties without one fold into "Other parties", in the Other grey.
+    const uncoloured = rows.filter(
+        (r) =>
+            r.key !== 'none' &&
+            r.key !== 'faded' &&
+            !hasOwnColour(r.key, r.colour ?? OTHER),
+    );
+    const kept = rows.filter(
+        (r) => !uncoloured.includes(r) && r.key !== 'none',
+    );
+    const other = uncoloured.reduce((n, r) => n + r.count, 0);
+    return {
+        title: legendTitle(mode.seat, area),
+        rows: [
+            ...kept.map(plain),
+            ...(other
+                ? [{ label: 'Other parties', colour: OTHER, count: other }]
+                : []),
+            ...rows.filter((r) => r.key === 'none').map(plain),
+        ],
+    };
 }
+
+/** A party's name on the map legend: its abbreviation, or "Independent". */
+const partyLabelShort = (abbrev: string) =>
+    abbrev === INDEPENDENT ? 'Independent' : abbrev;
 
 const legendTitle = (seat: SeatKey, area: Unit) =>
     `${SEAT_SHORT[seat]} seats by party in ${area.n}`;
@@ -178,6 +202,8 @@ export interface LocatorMapContext {
     colouring: Colouring;
     /** The map as on screen: only the unit drawn, or with its surroundings faint when shown. */
     focus?: { index: UnitIndex; showSurroundings: boolean };
+    /** Draw seat colours at this opacity instead of the screen's (see StyleInput). */
+    seatFillOpacity?: number;
 }
 
 const centre = (b: Unit['b']): [number, number] => [
@@ -253,6 +279,7 @@ export function unitStyle(
         colouring: ctx.colouring,
         provinceOfCounty: ctx.provinceOfCounty,
         wards: true,
+        seatFillOpacity: ctx.seatFillOpacity,
         focus: ctx.focus
             ? {
                   outside: ctx.focus.showSurroundings

@@ -145,6 +145,125 @@ existing unit path plus `?seat=mca&parties=uda,odm`, so a shared link reopens th
     off.
 - [ ] **Step 6:** Commit: `feat(export): share the current map view as social images`.
 
+### Task 1b: Independents as their own group, everywhere
+
+The owner decided this on 2026-11-26: "Yes, separate everywhere". Today, holders with party
+`IND` (Independent) are folded into the grey "Other and independent" group on the map, in the
+legend, in the seating charts and on cards.
+
+From now on, Independents always have their own group and row, everywhere. That group is never
+folded into Other, and "Other" means only the small parties with no colour of their own.
+
+**Files:**
+- Modify:
+  - `resources/js/lib/legend.ts`: `buildLegend` and `buildProvinceLegend`, Other folding, labels.
+  - `resources/js/lib/seats.ts`: party colours, chamber groups, `chamberHighlight`.
+  - `resources/js/lib/map/colouring.ts`: `seatColouring`.
+  - `resources/js/lib/map/theme.ts`: a new `independent` token for light and dark.
+  - `resources/js/components/map/NationalOverview.vue` and `Hemicycle.vue`, if their grouping
+    labels change.
+  - `resources/js/lib/export/*`: cards and captions follow automatically through `buildLegend`.
+    Check them.
+- Tests: `tests/js/legend.test.ts`, `tests/js/seats.test.ts`, `tests/js/map/style.test.ts`,
+  `tests/js/export/*` and `tests/js/components/NationalOverview.test.ts`.
+
+**Rules:**
+- **Colour:** a new theme token `independent`.
+  - It's a neutral colour that isn't a party colour: a warm slate, for example.
+  - It must be visibly distinct from `OTHER` grey, `faded` and `noData`, with 3:1 contrast
+    against the ground and the land fill in both themes.
+  - Check it against the party palette for colour-blind safety, loading the `dataviz` skill for
+    guidance.
+- **Legend rows:**
+  - "Independent" is a normal row, sorted by count like any party.
+  - The grouped row is renamed "**Other parties**" and covers only uncoloured parties.
+  - Its member count stays available, for example "Other parties (43)" in accessible text.
+- **Map:** independent-held units take the `independent` colour, including colour by ancestor
+  and the party highlight. "Independent" can be highlighted like any party.
+- **Seating charts** (`NationalOverview`): Independents get their own group and colour, and
+  "Other parties and independents" becomes "Other parties".
+- **Cards and captions** follow through `buildLegend`. Nothing is special-cased in export code.
+- **Deep links:** `parties=ind` works.
+
+- [ ] **Step 1:** Write failing tests:
+  - MCA national gives an "Independent 114 (8%)" row and "Other parties 257 (18%)", using the
+    real `seats.json` fixtures or the existing test data.
+  - The theme token `independent` differs from `OTHER`, `faded` and `noData` in both themes.
+  - `seatColouring` maps an IND-held unit to `independent`.
+  - Highlighting "Independent" keeps only IND units coloured.
+  - The `NationalOverview` groups include Independents separately.
+  - A card snapshot's rows equal `buildLegend`'s rows.
+- [ ] **Step 2:** Run them. Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run `npm run test:js`, `types:check` and the Sail build. Expected: PASS.
+- [ ] **Step 5:** Playwright: screen legend plus map in MCA mode nationally (light and dark), the
+  seating charts, and a square card. Look at them.
+- [ ] **Step 6:** Commit: `feat(map): independents as their own group everywhere`.
+
+### Task 1c: Seat mix bars on unit cards
+
+The owner asked on 2026-11-26: "The export infographic for a county, can it have a mix of the
+constituents, like the multicoloured progress bar showing the percentage mix per county."
+
+**Files:**
+- Create: `resources/js/lib/export/seatMix.ts`, with `seatMix(seats, key, unit, index)`
+  returning `{ total, segments: {key, label, colour, count, share}[], rows: MixRow[] }`.
+- Modify: `resources/js/lib/export/viewState.ts`, `viewLayout.ts` and
+  `resources/js/components/export/ViewCard.vue`.
+- Tests: `tests/js/export/seatMix.test.ts`, plus extensions to `tests/js/export/viewLayout.test.ts`
+  and `tests/js/export/ViewCard.test.ts`.
+
+**The mix bar:**
+- It sits under the headline: a 100%-width stacked bar for the current scope.
+- Segments are in the same order and use the same colours as the legend rows from
+  `buildLegend`, including Independents per Task 1b.
+- Segments under 3% merge into "Other parties".
+- A percentage label is printed inside a segment only when the segment is wide enough for it.
+  Otherwise the share appears in the legend only.
+
+**Rows inside a focused unit**, when it has children at the seat level:
+- **MCA mode with a county focused:** one row per constituency, holding the constituency name,
+  a stacked bar of its wards' MCA parties, and "N wards".
+- **MCA mode with a constituency focused:** one row per ward, showing its MCA's party colour
+  chip, the holder's name and the party.
+- **MP mode with a county focused:** one row per constituency, showing the MP's party colour
+  chip, the MP's name and the party. This is a "who holds what" list.
+- **Governor, Senator and Woman Rep with a county focused:** no rows. The card shows those
+  holders.
+- **Ordering:** rows follow IEBC code order. They're never sorted by party, because the order
+  must stay neutral.
+
+**Fitting:**
+- Story and portrait fit up to about 17 rows; Nairobi has 17 constituencies.
+- Square and X show the first N rows by code, plus "and N more constituencies", and suggest the
+  story size in the dialog.
+- Names are never truncated mid-word. Shrink type down to a floor, then wrap.
+
+**Neutral and checked:**
+- Everything joins on codes.
+- No adjectives.
+- The scope line says exactly what is counted, e.g. "40 wards in Machakos County".
+- Story safe zones from Task 1 still apply.
+
+- [ ] **Step 1:** Write failing tests:
+  - `seatMix` for county 47 in MCA mode: the segments total 85 wards, and there are 17 rows whose
+    counts sum to 85.
+  - MP mode for county 47 gives 17 rows of single holders.
+  - Small segments merge into "Other parties".
+  - Rows come in code order.
+  - The layout fits 17 rows on story and portrait. Square shows "and N more".
+  - No text overlaps or overflows, and the safe zones hold.
+- [ ] **Step 2:** Run them. Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run `npm run test:js`, `types:check` and the Sail build. Expected: PASS.
+- [ ] **Step 5:** Playwright exports:
+  - Machakos County MCA, in story and square.
+  - Nairobi City MCA and MP, in story and portrait.
+  - Mathare MCA, which has ward rows.
+  - Both themes.
+  - Look at them.
+- [ ] **Step 6:** Commit: `feat(export): seat mix bars on unit cards`.
+
 ### Task 2: Animated video for TikTok, Reels and stories
 
 **Files:**

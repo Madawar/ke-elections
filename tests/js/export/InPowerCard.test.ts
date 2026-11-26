@@ -38,7 +38,8 @@ describe('InPowerCard', () => {
         expect(text).toContain('National Assembly');
         expect(text).toContain('Senate');
         expect(text).toContain('SPA');
-        expect(text).toContain('Others');
+        expect(text).toContain('Independent');
+        expect(text).not.toContain('Others');
         expect(text).toContain('160');
         expect(text).toContain('Majority: 175');
         expect(text).toContain('Majority: 34');

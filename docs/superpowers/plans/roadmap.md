@@ -15,12 +15,18 @@ a feature finishes.
   - Cased borders and border hierarchy in colour views.
   - A bar-chart legend with percentages, scoped to the selection.
   - Multi-select party highlight.
+- **Social export of party views**
+  (`docs/superpowers/plans/2026-11-26-social-export.md`, Tasks 1, 1b and 1c):
+  - "Share this view" cards in square, portrait, story and X sizes, with captions, the share
+    sheet and compact deep links (`?seat=&parties=`, `parties=other`).
+  - Independents as their own group everywhere. "Other parties" means uncoloured parties only,
+    and every coloured party gets a legend row.
+  - Seat-mix bars, per-constituency mix rows, and a "who holds what" list. Single-seat cards show
+    the holder.
 
 ## Queue, in order (owner priorities as of 2026-11-26)
-1. **Social export: still infographics.** Plan: `2026-11-26-social-export.md`, Task 1. Branch
-   `feature/social-export`.
-   - Covers the party views first. The owner said "focus on infographics."
-   - The numeric (census and voters) views are added once the pocketbook data lands.
+1. ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
+   added once the pocketbook data lands.
 2. **Voter guide, "How elections work".** English first, then a reviewed Kiswahili version.
    - Built on the infographic card system, so each section can export as a carousel or story.
    - Draft content, for the **owner to review before the build**, is in
@@ -32,6 +38,20 @@ a feature finishes.
    - (g) A back button, the browser and phone back gesture, and the new outside-tap rule (no-op,
      or select a neighbour when surroundings are shown), with a hint card.
    - (c) Onboarding tips.
+   - **Drill-down tapping.** The owner noted on 2026-11-26 that "selecting Machakos, I end up
+     clicking constituencies".
+     - A tap picks the level from the current focus, not from the zoom:
+       - With nothing focused, a tap selects the **county** under the finger, at any zoom.
+       - With a county focused, a tap inside it selects that **constituency**.
+       - With a constituency focused, a tap inside it selects that **ward**.
+       - With a ward focused, a tap inside it does nothing.
+     - This replaces the zoom-based level picking in `useMap`'s click handler.
+     - Stepping up stays as it is: the back button, browser and phone back, zoom-out, and
+       breadcrumbs.
+     - Hover tooltips follow the same rule, so they name the unit a tap would select.
+     - Update the onboarding tip and the outside-tap hint wording to match, e.g. "Tap a county,
+       then tap again to go deeper."
+     - Tests: unit-test `tapTarget(focus, featuresUnderPoint)` for each case.
 4. **Pocketbook data.**
    - KNBS 2019 census at county level (population, households, area, density). Ward and
      constituency figures only from an official KNBS table, never derived from sub-counties.
@@ -75,14 +95,16 @@ a feature finishes.
     candidate pages and nominations". Look at Kiongozi Online first.
 11. **Optional:** one-tap coalition buttons (Kenya Kwanza, Azimio) in the party highlight.
 
+## Owner answers (2026-11-26)
+- **Pocketbook context trigger:** the **middle of the screen**. The context is the unit under the
+  centre of the visible map at the current zoom level, updated on `moveend`. A tap still focuses.
+- **The by-elections the owner meant:** **Ol Kalou** (Jubilee to DCP, 16 Jul 2026) and
+  **Mbeere**: Mbeere North MP (DP to UDA, 27 Nov 2025) and its wards Muminji and Evurore (to UDA,
+  26 Feb 2026). All are in the data, and they're the reference cases for "changed hands since
+  2022".
+
 ## Open questions for the owner
-- Pocketbook context trigger: should it follow the place at the centre of the screen at the
-  current zoom, or the finger or cursor?
 - Past results work (step 4): yes or no, and in that order?
-- Which "two" by-elections the owner meant. IEBC held three by-election polling days in 2026:
-  - 26 Feb: Isiolo South MP, plus the Muminji, Evurore and West Kabras MCAs.
-  - 14 May: Emurua Dikirr MP, plus the Porro and Endo MCAs.
-  - 16 Jul: Ol Kalou MP.
 - None-mode inner borders inside a focused unit are now heavier (plan item (e)). Is that OK, given
   the owner liked "boundaries only"?
 
@@ -110,6 +132,21 @@ a feature finishes.
 - The Senate notice says "Saturday, 25th June", but 25 Jun 2027 is a Friday.
 
 ## Parked minor findings (fix when touching the code)
+- **Social export:**
+  - A scoped deep link with `parties=other` expands against the national uncoloured set, so a
+    county link can highlight a small party from outside that county. Expand it within the link's
+    unit scope instead.
+  - In the light theme, the faded grey is close to Other grey when Other parties is highlighted.
+  - The national MCA square card drops its callouts (12 rows).
+  - Story maps are smaller because of the TikTok and Reels safe zone.
+  - The holder block's "Source" repeats the footer.
+  - The Mathare MP square leaves empty space around a small map.
+  - Unit row counts ("N wards") count only held seats. They need to become vacancy-aware with the
+    by-election model.
+  - The hemicycle legend sorts "Other parties" above Independent.
+  - In dark tritan vision, the gap between Independent and UDA is ΔE 4.9.
+  - The selected-unit outline is faint over the Independent colour.
+  - `ShareViewDialog`'s restore through `applySharedView` isn't tested end to end.
 - **Search:** picking the same person twice doesn't re-scroll.
 - **Nominated picks:** a pick with a null party shows no message.
 - **Accessibility:** the "Show surroundings" switch's hint should use `aria-describedby`.

@@ -51,6 +51,18 @@ describe('shareOrDownload', () => {
         expect(clicked).toHaveLength(0);
     });
 
+    it('sends the caption with the file when one is given', async () => {
+        const share = vi.fn(async () => {});
+        nav.share = share;
+        nav.canShare = vi.fn(() => true);
+
+        await shareOrDownload(blob(), 'view.png', 'MCA seats', 'Caption text');
+
+        const data = (share.mock.calls[0] as unknown[])[0] as ShareData;
+        expect(data.text).toBe('Caption text');
+        expect(data.files).toHaveLength(1);
+    });
+
     it('downloads through an anchor when the device cannot share files', async () => {
         nav.canShare = vi.fn(() => false);
         nav.share = vi.fn();

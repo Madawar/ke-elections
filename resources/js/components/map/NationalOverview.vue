@@ -13,10 +13,13 @@ const props = defineProps<{
     seats: SeatsData;
     /** Abbreviation of a party whose seats to emphasise in both chambers. */
     highlightParty?: string;
+    /** A seat colouring is on, so the map itself can be shared ("Share this view"). */
+    canShareView?: boolean;
 }>();
 const emit = defineEmits<{
     colourBy: [seat: 'governor' | 'mp' | 'senator' | 'woman_rep'];
     share: [];
+    shareView: [];
 }>();
 
 const asOf = computed(() =>
@@ -73,8 +76,8 @@ const hasData = computed(() => props.seats.holders.length > 0);
                 the Senate.</template
             >
             <template v-else-if="inOther"
-                >{{ highlightName }} is counted in the highlighted Other group
-                below.</template
+                >{{ highlightName }} is counted in the highlighted Other parties
+                group below.</template
             >
             <template v-else
                 >Seats held by {{ highlightName }} are highlighted
@@ -82,13 +85,24 @@ const hasData = computed(() => props.seats.holders.length > 0);
             >
         </p>
         <template v-if="hasData">
-            <button
-                type="button"
-                class="flex h-11 w-full items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
-                @click="emit('share')"
-            >
-                Share an image of Parliament
-            </button>
+            <div class="flex flex-col gap-2">
+                <button
+                    v-if="canShareView"
+                    type="button"
+                    data-share-view
+                    class="flex h-11 w-full items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
+                    @click="emit('shareView')"
+                >
+                    Share this view
+                </button>
+                <button
+                    type="button"
+                    class="flex h-11 w-full items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
+                    @click="emit('share')"
+                >
+                    Share an image of Parliament
+                </button>
+            </div>
             <section>
                 <Hemicycle
                     title="National Assembly"

@@ -319,8 +319,19 @@ export function footerBlock(
         });
     });
     y += fonts.url * 0.45 + lead(fonts.url);
-    const url = input.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const urlSize = fitFontSize(url, area.w, fonts.url, fonts.small);
+    // A deep link is never cut: a long one shrinks further than other text, and when even the
+    // floor size is too wide the footer shows the plain page address without the query.
+    const floor = Math.round(fonts.small * 0.75);
+    let url = input.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (textWidth(url, floor, true) > area.w)
+        url = url.replace(/[?#].*$/, '').replace(/\/$/, '');
+    const urlSize = fitFontSize(
+        url,
+        area.w,
+        fonts.url,
+        floor,
+        true, // drawn at weight 600
+    );
     const brandFits =
         textWidth(BRAND, fonts.url, true) +
             textWidth(url, urlSize, true) +

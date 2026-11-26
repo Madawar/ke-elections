@@ -35,10 +35,10 @@ export const siteUrl = (path = '/'): string => `${siteOrigin()}${path}`;
 const OFFICIAL = /(^|\.)(iebc\.or\.ke|gazettes\.africa|kenyalaw\.org)$/;
 
 /**
- * The source line for a card, from the source links of the records it shows: IEBC gazette
- * notices (IEBC and gazette archives), then any other sites by name.
+ * The sources for a card, from the source links of the records it shows: IEBC gazette notices
+ * (IEBC and gazette archives), then any other sites by name.
  */
-export function sourceLine(urls: string[]): string {
+export function sourceParts(urls: string[]): string[] {
     const others = new Set<string>();
     let official = false;
     for (const url of urls) {
@@ -52,10 +52,15 @@ export function sourceLine(urls: string[]): string {
         else others.add(host);
     }
     // With no records at all, the card still rests on the gazetted IEBC codes and names.
-    const parts = [
+    return [
         ...(official || others.size === 0 ? ['IEBC gazette notices'] : []),
         ...[...others].sort(),
     ];
+}
+
+/** The source line for a card: its sources in one sentence ("A, B and C"). */
+export function sourceLine(urls: string[]): string {
+    const parts = sourceParts(urls);
     return parts.length === 1
         ? parts[0]
         : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;

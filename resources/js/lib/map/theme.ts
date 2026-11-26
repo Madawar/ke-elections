@@ -20,6 +20,13 @@ export interface MapTheme {
     town: string;
     noData: string; // a seat with no approved holder
     faded: string; // a seat whose party is not highlighted; distinct from the "Other" party grey and from noData
+    /**
+     * Seats held by independents: a warm slate that is no party's colour. Dark on light and light
+     * on dark, so it is at least 3:1 against ground and land and stays apart (OKLab ΔE ≥ 8 under
+     * protan and deutan simulation, ≥ 15 in normal vision) from every party colour, the "Other"
+     * grey, faded and noData.
+     */
+    independent: string;
 }
 
 export const THEMES: Record<ThemeName, MapTheme> = {
@@ -41,6 +48,7 @@ export const THEMES: Record<ThemeName, MapTheme> = {
         town: '#4C5B6B',
         noData: '#E3E8E5',
         faded: '#C3CBC7',
+        independent: '#4E3F4B',
     },
     // Direction B "Tally night"
     dark: {
@@ -60,6 +68,7 @@ export const THEMES: Record<ThemeName, MapTheme> = {
         town: '#9DB0BA',
         noData: '#1C3A4A',
         faded: '#34566A',
+        independent: '#E4C6D2',
     },
 };
 
@@ -85,7 +94,6 @@ export const CATEGORICAL = [
     '#000000',
 ];
 export const OTHER = '#9AA5A0';
-
 /** Former provinces get muted tints so the "Former province" colouring stays calm. */
 export const PROVINCE_TINTS = [
     '#C9D8C5',
@@ -100,4 +108,4 @@ export const PROVINCE_TINTS = [
 
 /** Shown in the About sheet and on every export (plan: Global Constraints). */
 export const ATTRIBUTION =
-    'Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data) · 13 wards: American Red Cross (HDX), CC BY 4.0 · Codes: Kenya Gazette Notice 13771 (2026) · Towns: © OpenStreetMap contributors';
+    'Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data); 13 wards: American Red Cross (HDX), CC BY 4.0; Codes: Kenya Gazette Notice 13771 (2026); Towns: © OpenStreetMap contributors';

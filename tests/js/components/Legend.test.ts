@@ -6,8 +6,9 @@ import { legendTitle } from '@/lib/seats';
 const rows = [
     {
         key: 'other',
-        label: 'Other',
-        name: 'Other and independent',
+        label: 'Other parties',
+        name: 'Other parties',
+        parties: 9,
         colour: '#9AA5A0',
         count: 6,
         last: true,
@@ -112,7 +113,7 @@ describe('Legend as a bar chart', () => {
             'Orange Democratic Movement: 13 seats, 46 percent',
         );
         expect(items[4].find('.sr-only').text()).toBe(
-            'Other and independent: 6 seats, 21 percent',
+            'Other parties (9): 6 seats, 21 percent',
         );
         expect(items[0].text()).toContain('13');
         const one = mountLegend({
@@ -291,8 +292,8 @@ describe('Legend as a bar chart', () => {
                 },
                 {
                     key: 'other',
-                    label: 'Other',
-                    name: 'Other and independent',
+                    label: 'Other parties',
+                    name: 'Other parties',
                     colour: '#9AA5A0',
                     count: 2,
                     last: true,
@@ -379,5 +380,22 @@ describe('Legend as a bar chart', () => {
         expect(
             legendTitle('MP', 'Nairobi City', ['UDA', 'ODM', 'JP', 'ANC']),
         ).toBe('MP seats in Nairobi City by party: showing 4 parties');
+    });
+
+    it('offers "Share this view" when shareable, standing out while something is in focus', async () => {
+        expect(mountLegend().find('[data-share-view]').exists()).toBe(false);
+        const plain = mountLegend({ shareable: true });
+        const button = plain.get('[data-share-view]');
+        expect(button.text()).toBe('Share this view');
+        expect(button.classes()).not.toContain('bg-ink');
+        await button.trigger('click');
+        expect(plain.emitted('share')).toHaveLength(1);
+        const emphasised = mountLegend({
+            shareable: true,
+            shareEmphasis: true,
+        });
+        expect(emphasised.get('[data-share-view]').classes()).toContain(
+            'bg-ink',
+        );
     });
 });

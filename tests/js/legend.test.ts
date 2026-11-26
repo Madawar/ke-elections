@@ -21,8 +21,9 @@ const holder = (seat: string, code: number, party: string) => ({
     source_url: 'https://example.org',
 });
 
-// Nine coloured parties (A1 holds the most seats), two without a colour (Z1, Z2), so the legend
-// shows seven and folds the two smallest coloured parties and both uncoloured ones into "Other".
+// Nine coloured parties (A1 holds the most seats), more than the seven the legend once capped at,
+// and two without a colour (Z1, Z2): every coloured party gets a row, and only the uncoloured
+// ones fold into "Other parties".
 const coloured = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'];
 const parties = [
     ...coloured.map((abbrev, i) => ({
@@ -52,18 +53,23 @@ const seats: SeatsData = {
 describe('buildLegend', () => {
     const legend = buildLegend(seats, 'mp', null, []);
 
-    it('shows the seven largest coloured parties and folds the rest into Other, last', () => {
+    it('gives every coloured party a row, however many, and folds only the uncoloured into Other parties, last', () => {
         const keys = legend.rows.map((r) => r.key);
-        expect(keys).toEqual([...coloured.slice(0, 7), 'other']);
+        expect(keys).toEqual([...coloured, 'other']);
         const other = legend.rows.at(-1)!;
         expect(other.last).toBe(true);
         expect(other.colour).toBe(OTHER);
-        // A8 (2) + A9 (1) + Z1 (2) + Z2 (1)
-        expect(other.count).toBe(6);
+        // Z1 (2) + Z2 (1)
+        expect(other.count).toBe(3);
+        expect(other.parties).toBe(2);
     });
 
-    it('lists every folded party as the members of Other, and one party per other row', () => {
-        expect(legend.members.other.sort()).toEqual(['A8', 'A9', 'Z1', 'Z2']);
+    it('lists only uncoloured parties as the members of Other parties, and one party per other row', () => {
+        expect(legend.members.other.sort()).toEqual(['Z1', 'Z2']);
+        // No party drawn in its own colour on the map hides in the grey row.
+        const colourOf = new Map(parties.map((p) => [p.abbrev, p.colour]));
+        for (const a of legend.members.other)
+            expect(colourOf.get(a)).toBeNull();
         expect(legend.members.A1).toEqual(['A1']);
     });
 
@@ -106,16 +112,18 @@ describe('buildLegend', () => {
     });
 
     it('turns Other on only when every folded party is highlighted, and counts it once', () => {
-        const some = buildLegend(seats, 'mp', null, ['A8', 'Z1']);
+        const some = buildLegend(seats, 'mp', null, ['Z1']);
         expect(some.highlighted).toEqual([]);
         // Parties that no single row stands for are still listed, and still count.
-        expect(some.showing).toEqual(['A8', 'Z1']);
+        expect(some.showing).toEqual(['Z1']);
         expect(some.filtered).toBe(true);
 
-        const all = buildLegend(seats, 'mp', null, ['A8', 'A9', 'Z1', 'Z2']);
+        const all = buildLegend(seats, 'mp', null, ['Z1', 'Z2']);
         expect(all.highlighted).toEqual(['other']);
-        expect(all.showing).toEqual(['Other']);
-        expect(all.title).toBe('MP seats across Kenya by party: showing Other');
+        expect(all.showing).toEqual(['Other parties']);
+        expect(all.title).toBe(
+            'MP seats across Kenya by party: showing Other parties',
+        );
     });
 
     it('counts only the seats in scope and names the unit', () => {
@@ -167,11 +175,11 @@ describe('toggleParty', () => {
 
     it('switches Other on as one unit: every folded party at once', () => {
         const only = toggleParty(members, ['A1'], 'other');
-        expect(only.sort()).toEqual(['A1', 'A8', 'A9', 'Z1', 'Z2']);
+        expect(only.sort()).toEqual(['A1', 'Z1', 'Z2']);
         const model = buildLegend(seats, 'mp', null, only);
         expect(model.highlighted.sort()).toEqual(['A1', 'other']);
         // The person pressed two rows: A1 and Other.
-        expect(model.showing).toEqual(['A1', 'Other']);
+        expect(model.showing).toEqual(['A1', 'Other parties']);
     });
 
     it('switches Other off as one unit, leaving the other highlights alone', () => {
@@ -180,8 +188,8 @@ describe('toggleParty', () => {
     });
 
     it('completes a partly highlighted Other instead of clearing it', () => {
-        const only = toggleParty(members, ['A8'], 'other');
-        expect(only.sort()).toEqual(['A8', 'A9', 'Z1', 'Z2']);
+        const only = toggleParty(members, ['Z1'], 'other');
+        expect(only.sort()).toEqual(['Z1', 'Z2']);
     });
 
     it('ignores a row that does not exist', () => {
@@ -226,8 +234,8 @@ describe('settingsCount (the layers button badge)', () => {
         expect(settingsCount('none', null)).toBe(0);
         expect(settingsCount('mp', buildLegend(seats, 'mp', null, []))).toBe(1);
         const other = toggleParty(members, [], 'other');
-        // Four parties are folded into Other, but the person pressed one row.
-        expect(other).toHaveLength(4);
+        // Two parties are folded into Other parties, but the person pressed one row.
+        expect(other).toHaveLength(2);
         expect(settingsCount('mp', buildLegend(seats, 'mp', null, other))).toBe(
             2,
         );

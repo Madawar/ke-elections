@@ -53,7 +53,7 @@ describe('NationalOverview party highlight', () => {
         const w = mountWith('ZZZ');
         expect(highlights(w)).toEqual(['other', undefined]);
         expect(status(w)).toContain(
-            'Zeta is counted in the highlighted Other group',
+            'Zeta is counted in the highlighted Other parties group',
         );
     });
 
@@ -70,5 +70,37 @@ describe('NationalOverview party highlight', () => {
         const w = mountWith();
         expect(w.find('[role="status"]').exists()).toBe(false);
         expect(highlights(w)).toEqual([undefined, undefined]);
+    });
+});
+
+describe('NationalOverview seating charts', () => {
+    const withInd: SeatsData = {
+        ...seats,
+        chambers: {
+            national_assembly: { AAA: 5, ZZZ: 2, IND: 3 },
+            senate: { AAA: 3 },
+        },
+    };
+
+    it('seat Independents as their own group, apart from "Other parties"', () => {
+        const w = mount(NationalOverview, { props: { seats: withInd } });
+        const groups = w.findAllComponents(Hemicycle)[0].props('groups') as {
+            key: string;
+            label: string;
+            seats: number;
+        }[];
+        expect(groups.map((g) => [g.key, g.label, g.seats])).toEqual([
+            ['AAA', 'Alpha (AAA)', 5],
+            ['IND', 'Independent', 3],
+            ['other', 'Other parties', 2],
+        ]);
+        expect(w.text()).not.toContain('Other parties and independents');
+    });
+
+    it('highlights the Independent group itself for a picked independent', () => {
+        const w = mount(NationalOverview, {
+            props: { seats: withInd, highlightParty: 'IND' },
+        });
+        expect(highlights(w)[0]).toBe('IND');
     });
 });

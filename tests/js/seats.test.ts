@@ -61,7 +61,8 @@ describe('seats', () => {
         expect(c.get('BBB')).toBe('#123456');
         expect(c.get('AAA')).toBe('#E69F00');
         expect(c.get('ZZZ')).toBeUndefined();
-        expect(c.get('IND')).toBe(OTHER);
+        // Independents are never the Other grey: they take the independent token.
+        expect(c.get('IND')).toBe(THEMES.light.independent);
         const noColour = {
             ...data,
             parties: [{ ...data.parties[0], colour: null }],
@@ -110,7 +111,7 @@ describe('seats', () => {
         ).toEqual([
             ['AAA', 2],
             ['BBB', 1],
-            ['other', 1],
+            ['IND', 1],
         ]);
     });
 
@@ -193,7 +194,7 @@ describe('legend counts that follow the focus', () => {
     });
 });
 
-describe('highlighting "Other and independent"', () => {
+describe('highlighting "Other parties" and Independent', () => {
     // CCC has no colour of its own, so it is drawn as the Other grey; AAA and BBB have colours.
     const noColour: SeatsData = {
         ...data,
@@ -221,9 +222,10 @@ describe('highlighting "Other and independent"', () => {
                 faded: theme.faded,
                 only: new Set(['CCC', 'IND']),
             });
-            // The highlighted remainder keeps the Other grey; everything else is the faded wash.
+            // A highlighted uncoloured party keeps the Other grey, a highlighted independent its
+            // own colour; everything else is the faded wash.
             expect(col.colours.get(3)).toBe(OTHER);
-            expect(col.colours.get(4)).toBe(OTHER);
+            expect(col.colours.get(4)).toBe(THEMES.light.independent);
             expect(col.colours.get(1)).toBe(theme.faded);
             expect(col.colours.get(2)).toBe(theme.faded);
             expect(theme.faded).not.toBe(OTHER);
@@ -242,7 +244,11 @@ describe('chamberHighlight', () => {
 
     it('highlights Other for a party that sits in it', () => {
         expect(chamberHighlight(groups, chamber, 'ZZZ')).toBe('other');
+        // Without an Independent group of its own (an old groups list), Other still stands in.
         expect(chamberHighlight(groups, chamber, 'IND')).toBe('other');
+        expect(
+            chamberHighlight([...groups, { key: 'IND' }], chamber, 'IND'),
+        ).toBe('IND');
     });
 
     it('highlights nothing for a party with no seats in the chamber', () => {
