@@ -73,4 +73,59 @@ describe('UnitPanel', () => {
             HTMLElement.prototype.scrollIntoView = original;
         }
     });
+
+    it('scrolls again once the bottom sheet has finished opening', async () => {
+        const calls: string[] = [];
+        const original = HTMLElement.prototype.scrollIntoView;
+        HTMLElement.prototype.scrollIntoView = function () {
+            calls.push(this.textContent ?? '');
+        };
+        const sheet = document.createElement('aside');
+        sheet.setAttribute('data-sheet', '');
+        document.body.appendChild(sheet);
+        try {
+            mount(UnitPanel, {
+                props: {
+                    unit: county,
+                    index,
+                    seats,
+                    towns: [],
+                    highlightSeat: 'woman_rep',
+                },
+                attachTo: sheet,
+            });
+            await new Promise((r) => setTimeout(r, 0));
+            const before = calls.length;
+            const end = new Event('transitionend', { bubbles: true });
+            Object.assign(end, { propertyName: 'height' });
+            sheet.dispatchEvent(end);
+            expect(calls.length).toBe(before + 1);
+            expect(calls.at(-1)).toContain('Test Person Three');
+            // Only the first end of the transition: later ones do not scroll again.
+            sheet.dispatchEvent(end);
+            expect(calls.length).toBe(before + 1);
+        } finally {
+            HTMLElement.prototype.scrollIntoView = original;
+            sheet.remove();
+        }
+    });
+
+    it('offers a labelled switch for showing the surroundings', async () => {
+        const wrapper = mount(UnitPanel, {
+            props: {
+                unit: county,
+                index,
+                seats,
+                towns: [],
+                showSurroundings: false,
+            },
+        });
+        const toggle = wrapper.get('button[role="switch"]');
+        expect(toggle.text()).toContain('Show surroundings');
+        expect(toggle.attributes('aria-checked')).toBe('false');
+        await toggle.trigger('click');
+        expect(wrapper.emitted('update:showSurroundings')).toEqual([[true]]);
+        await wrapper.setProps({ showSurroundings: true });
+        expect(toggle.attributes('aria-checked')).toBe('true');
+    });
 });

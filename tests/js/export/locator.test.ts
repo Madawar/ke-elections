@@ -120,6 +120,63 @@ describe('map styles for the card', () => {
         );
     });
 
+    it('draws only the unit when focused, with the same filters as the screen', () => {
+        const focused = { ...ctx, focus: { index, showSurroundings: false } };
+        const style = unitStyle(focused, unit('ward', 1448) as never);
+        const layer = (id: string) =>
+            style.layers.find((l) => l.id === id) as { filter?: unknown };
+        expect(layer('wards-fill').filter).toEqual([
+            '==',
+            ['get', 'code'],
+            1448,
+        ]);
+        expect(layer('counties-fill').filter).toEqual([
+            '==',
+            ['get', 'code'],
+            -1,
+        ]);
+        expect(layer('labels-ward').filter).toEqual([
+            'all',
+            ['==', ['get', 'level'], 'ward'],
+            expect.anything(),
+        ]);
+        // Hidden means not drawn, so there is no wash over the neighbours.
+        expect(style.layers.some((l) => l.id === 'export-dim')).toBe(false);
+        expect(
+            (
+                style.layers.find(
+                    (l) => l.id === 'wards-selected',
+                ) as never as {
+                    paint: Record<string, unknown>;
+                }
+            ).paint['line-color'],
+        ).toBe(THEMES.light.ink);
+    });
+
+    it('keeps the neighbours, faint and grey, when the surroundings are shown', () => {
+        const focused = { ...ctx, focus: { index, showSurroundings: true } };
+        const style = unitStyle(focused, unit('ward', 1448) as never);
+        const wards = style.layers.find((l) => l.id === 'wards-fill') as {
+            filter?: unknown;
+            paint: Record<string, unknown>;
+        };
+        expect(wards.filter).toBeUndefined();
+        expect(JSON.stringify(wards.paint['fill-color'])).toContain(
+            THEMES.light.muted,
+        );
+        expect(
+            (
+                style.layers.find((l) => l.id === 'labels-county') as {
+                    filter: unknown[];
+                }
+            ).filter,
+        ).toEqual([
+            'all',
+            ['==', ['get', 'level'], 'county'],
+            expect.anything(),
+        ]);
+    });
+
     it('draws Kenya without labels, with the county filled and the unit dotted', () => {
         const style = insetStyle(ctx, unit('ward', 1448), 47);
         expect(style.layers.some((l) => l.type === 'symbol')).toBe(false);

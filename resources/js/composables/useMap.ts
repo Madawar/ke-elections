@@ -1,4 +1,5 @@
 import type {
+    FilterSpecification,
     GeoJSONSource,
     Map as MapLibreMap,
     MapGeoJSONFeature,
@@ -7,6 +8,12 @@ import type {
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import { type Colouring, pinnedLevel } from '@/lib/map/colouring';
+import {
+    type FocusSelection,
+    combineFilter,
+    focusFilters,
+    focusOutside,
+} from '@/lib/map/focus';
 import {
     KENYA_BOUNDS,
     MAX_BOUNDS,
@@ -19,6 +26,7 @@ import { MAP_LEVELS, SOURCE_OF, buildStyle, fileUrl } from '@/lib/map/style';
 import type { ThemeName } from '@/lib/map/theme';
 import { THEMES } from '@/lib/map/theme';
 import { supportsWebGL2 } from '@/lib/map/webgl';
+import type { UnitIndex } from '@/lib/units';
 
 export type Bounds = [number, number, number, number];
 export interface Picked {
@@ -29,6 +37,8 @@ export interface Picked {
 export interface UseMapOptions {
     manifest: Record<string, string>;
     provinceOfCounty: Map<number, number>;
+    /** The unit directory: focus mode reads which units sit inside the selected one. */
+    index: UnitIndex;
     theme: Ref<ThemeName>;
     colouring: Ref<Colouring>;
     overlays: Ref<MapOverlay[]>;
@@ -41,6 +51,8 @@ export interface UseMapOptions {
         overlay: MapOverlay,
         properties: Record<string, unknown>,
     ) => void;
+    /** A tap landed on the map, outside the focused unit (the page steps up one level). */
+    onOutsideClick?: () => void;
     onUnsupported: () => void;
     /** The user moved the camera by hand (auto-centre pauses until the next selection). */
     onUserMove?: () => void;
@@ -59,6 +71,8 @@ export function useMap(
     const ready = ref(false);
     const zoom = ref(5.5);
     let selected: Picked | null = null;
+    let focus: FocusSelection | null = null;
+    let surroundings = false;
     let hovered: Picked | null = null;
     let wardsLoaded = false;
     let wantWards = false;
@@ -76,6 +90,9 @@ export function useMap(
             colouring: opts.colouring.value,
             provinceOfCounty: opts.provinceOfCounty,
             wards: wardsLoaded,
+            focus: focus
+                ? { outside: surroundings ? focusOutside(focus) : undefined }
+                : undefined,
         });
 
     /** Fill the (initially empty) ward source; deferred until the style has loaded. */
@@ -123,6 +140,7 @@ export function useMap(
                     );
             }
         }
+        applyFocus();
     }
 
     /**
@@ -154,12 +172,32 @@ export function useMap(
             if (visibility && !overlayLayers.has(layer.id))
                 m.setLayoutProperty(layer.id, 'visibility', visibility);
         }
+        applyFocus();
+    }
+
+    /** Every layer's filter: its own, plus the focus filter while a unit is focused. */
+    function applyFocus() {
+        const m = map.value;
+        if (!m || !ready.value) return;
+        const theme = THEMES[opts.theme.value];
+        const filters = focusFilters(focus, opts.index, { surroundings });
+        const layers = [
+            ...style().layers,
+            ...opts.overlays.value.flatMap((o) =>
+                o.layers(theme, overlaySourceId(o)),
+            ),
+        ];
+        for (const layer of layers) {
+            if (!(layer.id in filters) || !m.getLayer(layer.id)) continue;
+            const base = (layer as { filter?: FilterSpecification }).filter;
+            m.setFilter(layer.id, combineFilter(base, filters[layer.id]));
+        }
     }
 
     function fit(bounds: Bounds, animate = true) {
         map.value?.fitBounds(bounds, {
             padding,
-            maxZoom: 13,
+            maxZoom: 14,
             duration: animate ? 600 : 0,
         });
     }
@@ -204,6 +242,17 @@ export function useMap(
             if (f && typeof f.id === 'number') return { level: l, code: f.id };
         }
         return null;
+    }
+
+    /** Is the tap on the focused unit itself (it can be too small to pick at this zoom)? */
+    function onFocusedUnit(e: MapMouseEvent): boolean {
+        const m = map.value;
+        if (!m || !focus) return false;
+        return m
+            .queryRenderedFeatures(e.point, {
+                layers: [`${SOURCE_OF[focus.level]}-fill`],
+            })
+            .some((f) => f.id === focus!.code);
     }
 
     onMounted(async () => {
@@ -284,6 +333,7 @@ export function useMap(
             }
             const unit = pick(e);
             if (unit) opts.onSelect(unit);
+            else if (focus && !onFocusedUnit(e)) opts.onOutsideClick?.();
         });
         if (canHover) {
             m.on('mousemove', (e) => {
@@ -330,6 +380,16 @@ export function useMap(
         zoom,
         select,
         clearSelection,
+        /** Show only this unit (and what is inside it); null shows everything again. */
+        setFocus(sel: FocusSelection | null) {
+            focus = sel;
+            restyle();
+        },
+        /** Keep the rest of the map faintly in view, in grey, instead of hiding it. */
+        setShowSurroundings(on: boolean) {
+            surroundings = on;
+            restyle();
+        },
         fit,
         fitKenya: (animate = true) => fit(KENYA_BOUNDS, animate),
         setPadding(p: Partial<Padding>) {

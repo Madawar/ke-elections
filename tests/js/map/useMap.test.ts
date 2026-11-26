@@ -1,13 +1,63 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, ref } from 'vue';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { defineComponent, h, nextTick, ref } from 'vue';
 
+type Handler = (e?: unknown) => void;
 const imported = vi.fn();
+/** A stand-in for the MapLibre map that records what the composable asks of it. */
+const fake = vi.hoisted(() => ({
+    throws: true,
+    current: null as null | {
+        handlers: Map<string, Handler>;
+        layers: Set<string>;
+        filters: Map<string, unknown>;
+        setFilter: ReturnType<typeof vi.fn>;
+        setPaintProperty: ReturnType<typeof vi.fn>;
+        fitBounds: ReturnType<typeof vi.fn>;
+        queryRenderedFeatures: ReturnType<typeof vi.fn>;
+    },
+}));
 vi.mock('maplibre-gl', () => {
     imported();
     return {
-        Map: vi.fn(() => {
-            throw new Error('no webgl');
+        Map: vi.fn(function (options: {
+            style: { layers: { id: string }[]; sources: object };
+        }) {
+            if (fake.throws) throw new Error('no webgl');
+            const handlers = new Map<string, Handler>();
+            const layers = new Set(options.style.layers.map((l) => l.id));
+            const filters = new Map<string, unknown>();
+            const sources = new Set(Object.keys(options.style.sources));
+            const self = {
+                handlers,
+                layers,
+                filters,
+                touchZoomRotate: { disableRotation: () => {} },
+                on: (name: string, cb: Handler) => handlers.set(name, cb),
+                getLayer: (id: string) => (layers.has(id) ? { id } : undefined),
+                getSource: (id: string) =>
+                    sources.has(id)
+                        ? { setData: () => Promise.resolve() }
+                        : undefined,
+                addSource: (id: string) => sources.add(id),
+                addLayer: (l: { id: string }) => layers.add(l.id),
+                setLayoutProperty: () => {},
+                setPaintProperty: vi.fn(),
+                setFilter: vi.fn((id: string, f: unknown) =>
+                    filters.set(id, f),
+                ),
+                setFeatureState: () => {},
+                fitBounds: vi.fn(),
+                queryRenderedFeatures: vi.fn(() => []),
+                getZoom: () => 6,
+                getCanvas: () => ({ style: {} }),
+                resize: () => {},
+                remove: () => {},
+            };
+            fake.current = self;
+            return self;
         }),
         setWorkerUrl: vi.fn(),
     };
@@ -20,32 +70,59 @@ vi.mock('@/lib/map/webgl', () => ({ supportsWebGL2: () => webgl.ok }));
 
 import { useMap } from '@/composables/useMap';
 import { NO_COLOURING } from '@/lib/map/colouring';
+import { FOCUS_LAYERS } from '@/lib/map/focus';
+import { OVERLAYS } from '@/lib/map/overlays';
+import { type Unit, UnitIndex } from '@/lib/units';
 
-function harness(onUnsupported: () => void) {
-    return defineComponent({
-        setup() {
-            const el = ref<HTMLElement | null>(null);
-            useMap(el, {
-                manifest: {},
-                provinceOfCounty: new Map(),
-                theme: ref('light'),
-                colouring: ref(NO_COLOURING),
-                overlays: ref([]),
-                enabledOverlays: ref([]),
-                boundsOf: () => undefined,
-                onSelect: () => {},
-                onUnsupported,
-            });
-            return () => h('div', { ref: el });
-        },
-    });
+const index = UnitIndex.fromRows(
+    JSON.parse(
+        readFileSync(
+            resolve(
+                import.meta.dirname,
+                '../../../public/boundaries/units.json',
+            ),
+            'utf8',
+        ),
+    ) as Unit[],
+);
+
+function harness(
+    onUnsupported: () => void,
+    out: {
+        api?: ReturnType<typeof useMap>;
+        outside?: ReturnType<typeof vi.fn>;
+    } = {},
+) {
+    const colouring = ref(NO_COLOURING);
+    return {
+        colouring,
+        component: defineComponent({
+            setup() {
+                const el = ref<HTMLElement | null>(null);
+                out.api = useMap(el, {
+                    manifest: {},
+                    provinceOfCounty: new Map(),
+                    index,
+                    theme: ref('light'),
+                    colouring,
+                    overlays: ref(OVERLAYS),
+                    enabledOverlays: ref(['towns', 'stations']),
+                    boundsOf: (l, c) => index.get(l, c)?.b,
+                    onSelect: () => {},
+                    onOutsideClick: out.outside,
+                    onUnsupported,
+                });
+                return () => h('div', { ref: el });
+            },
+        }),
+    };
 }
 
 describe('useMap', () => {
     it('falls back without importing MapLibre when WebGL2 is missing', async () => {
         webgl.ok = false;
         const onUnsupported = vi.fn();
-        mount(harness(onUnsupported));
+        mount(harness(onUnsupported).component);
         await new Promise((r) => setTimeout(r, 0));
         expect(onUnsupported).toHaveBeenCalledTimes(1);
         expect(imported).not.toHaveBeenCalled();
@@ -53,9 +130,124 @@ describe('useMap', () => {
 
     it('falls back when the Map constructor throws', async () => {
         webgl.ok = true;
+        fake.throws = true;
         const onUnsupported = vi.fn();
         vi.spyOn(console, 'error').mockImplementation(() => {});
-        mount(harness(onUnsupported));
+        mount(harness(onUnsupported).component);
         await vi.waitFor(() => expect(onUnsupported).toHaveBeenCalledTimes(1));
+    });
+});
+
+describe('useMap focus', () => {
+    const out: {
+        api?: ReturnType<typeof useMap>;
+        outside?: ReturnType<typeof vi.fn>;
+    } = {};
+    let colouring: ReturnType<typeof harness>['colouring'];
+    const map = () => fake.current!;
+
+    beforeEach(async () => {
+        webgl.ok = true;
+        fake.throws = false;
+        fake.current = null;
+        out.outside = vi.fn();
+        const h = harness(() => {}, out);
+        colouring = h.colouring;
+        mount(h.component);
+        await vi.waitFor(() => expect(fake.current).not.toBeNull());
+        map().handlers.get('load')!();
+        await nextTick();
+        map().setFilter.mockClear();
+    });
+
+    it('filters every focus layer, keeping each layer’s own filter', () => {
+        out.api!.setFocus({ level: 'county', code: 47 });
+        const touched = new Set(map().setFilter.mock.calls.map((c) => c[0]));
+        for (const id of FOCUS_LAYERS) expect(touched).toContain(id);
+        expect(map().filters.get('wards-fill')).toEqual([
+            '==',
+            ['get', 'county_code'],
+            47,
+        ]);
+        expect(map().filters.get('labels-ward')).toEqual([
+            'all',
+            ['==', ['get', 'level'], 'ward'],
+            expect.arrayContaining(['in']),
+        ]);
+    });
+
+    it('re-applies the filters when the colouring changes while focused', async () => {
+        out.api!.setFocus({ level: 'county', code: 47 });
+        map().setFilter.mockClear();
+        colouring.value = { ...NO_COLOURING, mode: { kind: 'province' } };
+        await nextTick();
+        const touched = new Set(map().setFilter.mock.calls.map((c) => c[0]));
+        for (const id of FOCUS_LAYERS) expect(touched).toContain(id);
+        expect(map().filters.get('wards-fill')).toEqual([
+            '==',
+            ['get', 'county_code'],
+            47,
+        ]);
+    });
+
+    it('restores each layer’s own filter when focus is cleared', () => {
+        out.api!.setFocus({ level: 'ward', code: 1448 });
+        out.api!.setFocus(null);
+        expect(map().filters.get('wards-fill')).toBeNull();
+        expect(map().filters.get('labels-ward')).toEqual([
+            '==',
+            ['get', 'level'],
+            'ward',
+        ]);
+    });
+
+    it('keeps the outside drawn and greyed when surroundings are shown', () => {
+        out.api!.setFocus({ level: 'county', code: 47 });
+        out.api!.setShowSurroundings(true);
+        expect(map().filters.get('wards-fill')).toBeNull();
+        expect(map().filters.get('labels-county')).toEqual([
+            'all',
+            ['==', ['get', 'level'], 'county'],
+            expect.arrayContaining(['in']),
+        ]);
+        const painted = map().setPaintProperty.mock.calls.findLast(
+            (c) => c[0] === 'wards-fill' && c[1] === 'fill-color',
+        );
+        expect(JSON.stringify(painted?.[2])).toContain('"case"');
+    });
+
+    it('fits the unit’s own bounds inside the current padding', () => {
+        out.api!.setPadding({ top: 72, bottom: 420, left: 16, right: 64 });
+        out.api!.select('constituency', 280, { animate: false });
+        const [bounds, options] = map().fitBounds.mock.calls.at(-1)!;
+        expect(bounds).toEqual(index.get('constituency', 280)!.b);
+        expect(options.padding).toEqual({
+            top: 72,
+            bottom: 420,
+            left: 16,
+            right: 64,
+        });
+    });
+
+    it('reports a tap outside the focused unit, but not one on it', () => {
+        out.api!.setFocus({ level: 'ward', code: 1448 });
+        const click = map().handlers.get('click')!;
+        map().queryRenderedFeatures.mockReturnValue([]);
+        click({ point: { x: 5, y: 5 } });
+        expect(out.outside).toHaveBeenCalledTimes(1);
+
+        map().queryRenderedFeatures.mockImplementation(
+            (_p: unknown, o: { layers?: string[] }) =>
+                o.layers?.[0] === 'wards-fill' ? [{ id: 1448 }] : [],
+        );
+        click({ point: { x: 6, y: 6 } });
+        // Picking the ward itself selects it; the page is not asked to step out.
+        expect(out.outside).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report taps when nothing is focused', () => {
+        map().queryRenderedFeatures.mockReturnValue([]);
+        map().handlers.get('click')!({ point: { x: 5, y: 5 } });
+        expect(out.outside).not.toHaveBeenCalled();
     });
 });

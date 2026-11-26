@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+} from 'vue';
 import { siteUrl } from '@/lib/export/format';
 import { unitPath } from '@/lib/map/urls';
 import type { SeatsData } from '@/lib/seats';
@@ -14,8 +21,14 @@ const props = defineProps<{
     towns: string[];
     /** Seat key of a person picked in search; that row gets a highlight and scrolls into view. */
     highlightSeat?: string;
+    /** Whether the rest of the map stays faintly in view around the focused unit. */
+    showSurroundings?: boolean;
 }>();
-const emit = defineEmits<{ go: [unit: Unit]; share: [] }>();
+const emit = defineEmits<{
+    go: [unit: Unit];
+    share: [];
+    'update:showSurroundings': [on: boolean];
+}>();
 
 const LEVEL = {
     province: 'Former province',
@@ -68,13 +81,34 @@ const rows = computed(() =>
     })),
 );
 const seatList = ref<HTMLElement | null>(null);
+let stopWaiting: (() => void) | null = null;
 async function showHighlight() {
     if (!props.highlightSeat) return;
     await nextTick();
-    seatList.value
-        ?.querySelector('[data-highlighted="true"]')
-        ?.scrollIntoView?.({ block: 'nearest' });
+    const scroll = () =>
+        seatList.value
+            ?.querySelector('[data-highlighted="true"]')
+            ?.scrollIntoView?.({ block: 'nearest' });
+    scroll();
+    // On a phone the sheet may still be growing from its peek height: scroll again once it has settled.
+    const sheet = seatList.value?.closest('[data-sheet]');
+    stopWaiting?.();
+    if (!sheet) return;
+    const onEnd = (e: Event) => {
+        if ((e as TransitionEvent).propertyName !== 'height') return;
+        stop();
+        scroll();
+    };
+    const timer = window.setTimeout(() => stop(), 600);
+    const stop = () => {
+        window.clearTimeout(timer);
+        sheet.removeEventListener('transitionend', onEnd);
+        stopWaiting = null;
+    };
+    stopWaiting = stop;
+    sheet.addEventListener('transitionend', onEnd);
 }
+onBeforeUnmount(() => stopWaiting?.());
 onMounted(showHighlight);
 watch(() => [props.highlightSeat, props.unit], showHighlight);
 
@@ -206,6 +240,34 @@ const sourceHost = (url: string) => {
         </section>
 
         <div v-if="unit.l !== 'province'">
+            <button
+                type="button"
+                role="switch"
+                :aria-checked="showSurroundings === true"
+                class="mb-2 flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px]"
+                @click="emit('update:showSurroundings', !showSurroundings)"
+            >
+                <span>
+                    Show surroundings
+                    <span class="block text-[13px] text-muted-ink"
+                        >The rest of the map, faint and in grey</span
+                    >
+                </span>
+                <span
+                    class="relative h-6 w-10 shrink-0 rounded-full border border-ink transition-colors motion-reduce:transition-none"
+                    :class="showSurroundings ? 'bg-ink' : 'bg-surface'"
+                    aria-hidden="true"
+                >
+                    <span
+                        class="absolute top-0.5 size-4 rounded-full transition-[left] motion-reduce:transition-none"
+                        :class="
+                            showSurroundings
+                                ? 'left-[18px] bg-surface'
+                                : 'left-0.5 bg-ink'
+                        "
+                    />
+                </span>
+            </button>
             <div class="flex gap-2">
                 <button
                     type="button"

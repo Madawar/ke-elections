@@ -7,6 +7,7 @@ import {
     type SeatKey,
     SEAT_LEVEL,
 } from '@/lib/map/colouring';
+import { combineFilter, focusFilters, focusOutside } from '@/lib/map/focus';
 import { KENYA_BOUNDS, type MapLevel } from '@/lib/map/levels';
 import { SOURCE_OF, buildStyle } from '@/lib/map/style';
 import { type MapTheme, OTHER } from '@/lib/map/theme';
@@ -175,6 +176,8 @@ export interface LocatorMapContext {
     provinceOfCounty: Map<number, number>;
     theme: MapTheme;
     colouring: Colouring;
+    /** The map as on screen: only the unit drawn, or with its surroundings faint when shown. */
+    focus?: { index: UnitIndex; showSurroundings: boolean };
 }
 
 const centre = (b: Unit['b']): [number, number] => [
@@ -250,7 +253,33 @@ export function unitStyle(
         colouring: ctx.colouring,
         provinceOfCounty: ctx.provinceOfCounty,
         wards: true,
+        focus: ctx.focus
+            ? {
+                  outside: ctx.focus.showSurroundings
+                      ? focusOutside({ level: unit.l, code: unit.c })
+                      : undefined,
+              }
+            : undefined,
     });
+    if (ctx.focus) {
+        const filters = focusFilters(
+            { level: unit.l, code: unit.c },
+            ctx.focus.index,
+            { surroundings: ctx.focus.showSurroundings },
+        );
+        return {
+            ...base,
+            layers: base.layers.map((layer) => {
+                if (!(layer.id in filters)) return layer;
+                const filter = combineFilter(
+                    (layer as { filter?: never }).filter,
+                    filters[layer.id],
+                );
+                if (!filter) return layer;
+                return { ...layer, filter } as LayerSpecification;
+            }),
+        };
+    }
     const dim: LayerSpecification = {
         id: 'export-dim',
         type: 'fill',

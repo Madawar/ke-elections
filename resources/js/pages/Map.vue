@@ -16,6 +16,7 @@ import SearchBox from '@/components/map/SearchBox.vue';
 import UnitList from '@/components/map/UnitList.vue';
 import UnitPanel from '@/components/map/UnitPanel.vue';
 import type { Picked } from '@/composables/useMap';
+import { mapPadding } from '@/lib/map/camera';
 import {
     type Colouring,
     type SeatKey,
@@ -236,6 +237,27 @@ const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
 const highlightSeat = ref<string | undefined>();
 const highlightParty = ref<string | undefined>();
 
+// With a unit selected the map shows only that unit; this keeps the rest faintly in view instead.
+const SURROUNDINGS_KEY = 'kem.showSurroundings';
+function readSurroundings() {
+    try {
+        return localStorage.getItem(SURROUNDINGS_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
+const showSurroundings = ref(readSurroundings());
+watch(showSurroundings, (on) => {
+    try {
+        localStorage.setItem(SURROUNDINGS_KEY, String(on));
+    } catch {
+        // Storage can be blocked; the choice then lasts until the page closes.
+    }
+    mapRef.value?.setShowSurroundings(on);
+});
+const focusOf = (unit: Unit | null) =>
+    unit && unit.l !== 'province' ? { level: unit.l, code: unit.c } : null;
+
 const boundsOf = (level: MapLevel, code: number) =>
     index.value?.get(level, code)?.b;
 
@@ -250,6 +272,7 @@ function selectUnit(
     autoCentre.value = true;
     view.value = 'unit';
     const map = mapRef.value;
+    map?.setFocus(focusOf(unit));
     if (!unit) {
         map?.clearSelection();
         if (fit) map?.fitKenya(animate);
@@ -289,6 +312,10 @@ const onPick = (p: Picked) =>
 watch(
     () => mapRef.value?.ready,
     (ready) => {
+        if (ready) {
+            mapRef.value?.setShowSurroundings(showSurroundings.value);
+            mapRef.value?.setFocus(focusOf(selection.value));
+        }
         if (ready && selection.value && selection.value.l !== 'province')
             mapRef.value?.select(selection.value.l, selection.value.c, {
                 fit: true,
@@ -350,16 +377,11 @@ function applyPadding() {
     const map = mapRef.value;
     if (!map) return;
     map.setPadding(
-        isDesktop.value
-            ? { left: 380 + 24, bottom: 24, top: 80, right: 72 }
-            : {
-                  left: 16,
-                  right: 64,
-                  top: 72,
-                  bottom:
-                      Math.min(sheetHeight.value, window.innerHeight * 0.6) +
-                      16,
-              },
+        mapPadding({
+            desktop: isDesktop.value,
+            sheetHeight: sheetHeight.value,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+        }),
     );
 }
 let recentreTimer = 0;
@@ -498,6 +520,7 @@ const showView = (v: typeof view.value) => {
             ref="mapRef"
             :manifest="manifest"
             :province-of-county="provinceOfCounty"
+            :index="index"
             :bounds-of="boundsOf"
             :theme="theme"
             :colouring="colouring"
@@ -510,6 +533,7 @@ const showView = (v: typeof view.value) => {
                 view = 'list';
             "
             @user-move="autoCentre = false"
+            @outside-click="zoomOut"
             @overlay-click="onOverlayClick"
         />
         <p
@@ -701,6 +725,7 @@ const showView = (v: typeof view.value) => {
                     :seats="seats"
                     :towns="townsIn"
                     :highlight-seat="highlightSeat"
+                    v-model:show-surroundings="showSurroundings"
                     @go="(u) => selectUnit(u)"
                     @share="shareUnit"
                 />
@@ -724,6 +749,7 @@ const showView = (v: typeof view.value) => {
             :province-of-county="provinceOfCounty"
             :theme="THEMES[theme]"
             :colouring="colouring"
+            :show-surroundings="showSurroundings"
             @update:open="(v) => !v && (exportUnit = null)"
         />
         <InPowerExport

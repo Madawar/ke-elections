@@ -26,6 +26,19 @@ export const SOURCE_OF: Record<
     'counties' | 'constituencies' | 'wards'
 > = { county: 'counties', constituency: 'constituencies', ward: 'wards' };
 
+/** Per source, true for features outside the focused unit (set only while "Show surroundings" is on). */
+export type OutsideTests = Partial<
+    Record<'counties' | 'constituencies' | 'wards', ExpressionSpecification>
+>;
+/** Present while a unit is focused: borders turn neutral and the unit's outline turns strong. */
+export interface FocusStyle {
+    outside?: OutsideTests;
+}
+/** Outside the focused unit, fills are at most this opaque, in a neutral grey. */
+export const OUTSIDE_FILL_OPACITY = 0.15;
+/** Outside the focused unit, boundary lines are drawn at this share of their usual opacity. */
+export const OUTSIDE_LINE_FACTOR = 0.3;
+
 export const fileUrl = (manifest: Record<string, string>, file: string) =>
     `/boundaries/${file}?v=${manifest[file] ?? ''}`;
 
@@ -62,18 +75,36 @@ const scaled = (e: ExpressionSpecification, f: number) =>
 export function fillOpacity(
     level: MapLevel,
     colouring: Colouring,
+    outside?: ExpressionSpecification,
 ): ExpressionSpecification {
     const pinned = pinnedLevel(colouring.mode);
-    if (pinned === level) return state(0.97, 0.92, 0.86);
+    // Outside the focused unit a fill is only a faint grey wash. With seat colouring only the
+    // coloured level washes, so the levels do not stack.
+    const dim = (inner: ExpressionSpecification | number, wash: number) =>
+        !outside || wash === 0
+            ? inner
+            : (['case', outside, wash, inner] as ExpressionSpecification);
+    if (pinned === level)
+        return dim(
+            state(0.97, 0.92, 0.86),
+            OUTSIDE_FILL_OPACITY,
+        ) as ExpressionSpecification;
     const tinted =
         colouring.mode.kind === 'province'
             ? state(0.95, 0.9, 0.72)
             : state(0.16, 0.08, 0);
-    return banded(level, (f) => scaled(tinted, f));
+    return banded(
+        level,
+        (f) =>
+            dim(
+                scaled(tinted, f),
+                pinned || f === 0 ? 0 : OUTSIDE_FILL_OPACITY * f,
+            ) as never,
+    );
 }
 
 /** Boundary lines, thickest for counties; constituency and ward lines fade in ahead of their fills. */
-function lineLayers(theme: MapTheme): LayerSpecification[] {
+function lineLayers(theme: MapTheme, focus?: FocusStyle): LayerSpecification[] {
     const width = (stops: number[]) =>
         [
             'interpolate',
@@ -81,6 +112,26 @@ function lineLayers(theme: MapTheme): LayerSpecification[] {
             ['zoom'],
             ...stops,
         ] as ExpressionSpecification;
+    // Line opacity, faded outside the focused unit when the surroundings are shown.
+    const opacity = (
+        stops: number[],
+        source: 'counties' | 'constituencies' | 'wards',
+    ): ExpressionSpecification | number => {
+        const outside = focus?.outside?.[source];
+        const fade = (v: number) =>
+            outside
+                ? (['case', outside, v * OUTSIDE_LINE_FACTOR, v] as never)
+                : v;
+        if (stops.length === 1) return fade(stops[0]) as never;
+        return [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            ...stops.flatMap((v, i) => (i % 2 === 0 ? [v] : [fade(v)])),
+        ] as ExpressionSpecification;
+    };
+    // While focused, every border inside the unit is one neutral colour; only its outline is strong.
+    const inner = focus ? theme.constituencyLine : undefined;
     return [
         {
             id: 'wards-line',
@@ -88,9 +139,9 @@ function lineLayers(theme: MapTheme): LayerSpecification[] {
             source: 'wards',
             minzoom: 8.6,
             paint: {
-                'line-color': theme.wardLine,
+                'line-color': inner ?? theme.wardLine,
                 'line-width': width([9, 0.3, 12, 1, 15, 1.6]),
-                'line-opacity': width([8.6, 0, 9.4, 1]),
+                'line-opacity': opacity([8.6, 0, 9.4, 1], 'wards'),
             },
         },
         {
@@ -99,9 +150,9 @@ function lineLayers(theme: MapTheme): LayerSpecification[] {
             source: 'constituencies',
             minzoom: 6.2,
             paint: {
-                'line-color': theme.constituencyLine,
+                'line-color': inner ?? theme.constituencyLine,
                 'line-width': width([6.2, 0.4, 9, 1, 12, 1.8]),
-                'line-opacity': width([6.2, 0, 7.1, 0.9]),
+                'line-opacity': opacity([6.2, 0, 7.1, 0.9], 'constituencies'),
             },
         },
         {
@@ -112,7 +163,7 @@ function lineLayers(theme: MapTheme): LayerSpecification[] {
             paint: {
                 'line-color': theme.countyLine,
                 'line-width': width([4, 0.8, 7, 1.6, 12, 2.8]),
-                'line-opacity': 0.9,
+                'line-opacity': opacity([0.9], 'counties'),
             },
         },
         ...SOURCES.filter((s) => s !== 'provinces').map(
@@ -122,8 +173,10 @@ function lineLayers(theme: MapTheme): LayerSpecification[] {
                 source,
                 layout: { 'line-join': 'round' },
                 paint: {
-                    'line-color': theme.selected,
-                    'line-width': width([4, 2.4, 12, 4]),
+                    'line-color': focus ? theme.ink : theme.selected,
+                    'line-width': width(
+                        focus ? [4, 3.4, 12, 5.6] : [4, 2.4, 12, 4],
+                    ),
                     'line-opacity': ['case', selected, 1, 0],
                 },
             }),
@@ -222,6 +275,16 @@ function labelLayers(
     ];
 }
 
+/** Outside the focused unit nothing is party-coloured: it is one neutral grey. */
+const focusedColour = (
+    colour: ExpressionSpecification | string,
+    outside: ExpressionSpecification | undefined,
+    neutral: string,
+) =>
+    outside
+        ? (['case', outside, neutral, colour] as ExpressionSpecification)
+        : colour;
+
 export interface StyleInput {
     manifest: Record<string, string>;
     theme: MapTheme;
@@ -229,6 +292,8 @@ export interface StyleInput {
     provinceOfCounty: Map<number, number>;
     /** Load ward geometry now (otherwise the source starts empty and is filled on demand). */
     wards?: boolean;
+    /** Set while a unit is focused. */
+    focus?: FocusStyle;
 }
 
 export function buildStyle({
@@ -237,6 +302,7 @@ export function buildStyle({
     colouring = NO_COLOURING,
     provinceOfCounty,
     wards = false,
+    focus,
 }: StyleInput): StyleSpecification {
     const geojson = (file: string) => ({
         type: 'geojson' as const,
@@ -249,13 +315,16 @@ export function buildStyle({
             type: 'fill',
             source: SOURCE_OF[level],
             paint: {
-                'fill-color': fillColor(
-                    colouring,
-                    level,
-                    provinceOfCounty,
-                    theme.ink,
+                'fill-color': focusedColour(
+                    fillColor(colouring, level, provinceOfCounty, theme.ink),
+                    focus?.outside?.[SOURCE_OF[level]],
+                    theme.muted,
                 ) as string,
-                'fill-opacity': fillOpacity(level, colouring),
+                'fill-opacity': fillOpacity(
+                    level,
+                    colouring,
+                    focus?.outside?.[SOURCE_OF[level]],
+                ),
             },
         }),
     );
@@ -291,7 +360,7 @@ export function buildStyle({
                 paint: { 'fill-color': theme.land },
             },
             ...fills,
-            ...lineLayers(theme),
+            ...lineLayers(theme, focus),
             {
                 id: 'overlays-anchor',
                 type: 'background',

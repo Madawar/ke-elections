@@ -8,10 +8,12 @@ import type { Colouring } from '@/lib/map/colouring';
 import type { MapLevel } from '@/lib/map/levels';
 import type { MapOverlay } from '@/lib/map/overlays';
 import type { ThemeName } from '@/lib/map/theme';
+import type { UnitIndex } from '@/lib/units';
 
 const props = defineProps<{
     manifest: Record<string, string>;
     provinceOfCounty: Map<number, number>;
+    index: UnitIndex;
     boundsOf: (level: MapLevel, code: number) => Bounds | undefined;
     theme: ThemeName;
     colouring: Colouring;
@@ -22,6 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     select: [unit: Picked];
     hover: [unit: Picked | null, point: { x: number; y: number }];
+    outsideClick: [];
     overlayClick: [overlay: MapOverlay, properties: Record<string, unknown>];
     unsupported: [];
     userMove: [];
@@ -31,6 +34,7 @@ const container = ref<HTMLElement | null>(null);
 const api = useMap(container, {
     manifest: props.manifest,
     provinceOfCounty: props.provinceOfCounty,
+    index: props.index,
     boundsOf: props.boundsOf,
     theme: toRef(props, 'theme'),
     colouring: toRef(props, 'colouring'),
@@ -39,6 +43,7 @@ const api = useMap(container, {
     onSelect: (u) => emit('select', u),
     onHover: (u, p) => emit('hover', u, p),
     onOverlayClick: (o, p) => emit('overlayClick', o, p),
+    onOutsideClick: () => emit('outsideClick'),
     onUnsupported: () => emit('unsupported'),
     onUserMove: () => emit('userMove'),
 });

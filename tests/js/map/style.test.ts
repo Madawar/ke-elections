@@ -97,4 +97,137 @@ describe('buildStyle', () => {
             ),
         ).toEqual(['match', ['get', 'code'], 1, '#0f0', 2, '#f00', '#ccc']);
     });
+
+    describe('while a unit is focused', () => {
+        const theme = THEMES.light;
+        const paint = (st: typeof style, id: string) =>
+            (
+                st.layers.find((l) => l.id === id) as {
+                    paint: Record<string, unknown>;
+                }
+            ).paint;
+        const focused = buildStyle({
+            manifest,
+            theme,
+            provinceOfCounty,
+            focus: {},
+        });
+        const topStop = (e: unknown) => {
+            const stops = (e as unknown[]).slice(3);
+            return Math.max(...stops.filter((_, i) => i % 2 === 1).map(Number));
+        };
+
+        it('draws the unit outline in the one ink colour, thicker than every inner border', () => {
+            const inner = Math.max(
+                topStop(paint(focused, 'wards-line')['line-width']),
+                topStop(paint(focused, 'constituencies-line')['line-width']),
+                topStop(paint(focused, 'counties-line')['line-width']),
+            );
+            for (const id of [
+                'counties-selected',
+                'constituencies-selected',
+                'wards-selected',
+            ]) {
+                expect(paint(focused, id)['line-color']).toBe(theme.ink);
+                expect(
+                    topStop(paint(focused, id)['line-width']),
+                ).toBeGreaterThan(inner);
+            }
+        });
+
+        it('uses one neutral colour for every border inside the unit', () => {
+            expect(paint(focused, 'wards-line')['line-color']).toBe(
+                theme.constituencyLine,
+            );
+            expect(paint(focused, 'constituencies-line')['line-color']).toBe(
+                theme.constituencyLine,
+            );
+            // Without focus the ward lines keep their own, lighter colour.
+            expect(paint(style, 'wards-line')['line-color']).toBe(
+                theme.wardLine,
+            );
+        });
+
+        it('greys and fades what is outside the unit when the surroundings are shown', () => {
+            const outside = ['!=', ['get', 'county_code'], 47];
+            const shown = buildStyle({
+                manifest,
+                theme,
+                provinceOfCounty,
+                colouring: { ...NO_COLOURING, mode: { kind: 'province' } },
+                focus: { outside: { wards: outside as never } },
+            });
+            const colour = paint(shown, 'wards-fill')[
+                'fill-color'
+            ] as unknown[];
+            expect(colour).toEqual([
+                'case',
+                outside,
+                theme.muted,
+                expect.arrayContaining(['match']),
+            ]);
+            const opacity = JSON.stringify(
+                paint(shown, 'wards-fill')['fill-opacity'],
+            );
+            expect(opacity).toContain(
+                `["case",${JSON.stringify(outside)},0.15,`,
+            );
+            const lines = JSON.stringify(
+                paint(shown, 'wards-line')['line-opacity'],
+            );
+            expect(lines).toContain(`["case",${JSON.stringify(outside)},0.3,`);
+            // A plain map has no fills to dim, but the surroundings still get the grey wash.
+            const plain = buildStyle({
+                manifest,
+                theme,
+                provinceOfCounty,
+                focus: { outside: { wards: outside as never } },
+            });
+            expect(
+                JSON.stringify(paint(plain, 'wards-fill')['fill-opacity']),
+            ).toContain(`["case",${JSON.stringify(outside)},0.15,`);
+        });
+
+        it('washes only the coloured level when a seat colouring is on, so the washes do not stack', () => {
+            const outside = ['!=', ['get', 'code'], 290];
+            const seat = buildStyle({
+                manifest,
+                theme,
+                provinceOfCounty,
+                colouring: {
+                    mode: { kind: 'seat', seat: 'mp' },
+                    colours: new Map(),
+                    fallback: '#ccc',
+                },
+                focus: {
+                    outside: {
+                        constituencies: outside as never,
+                        counties: outside as never,
+                    },
+                },
+            });
+            expect(
+                JSON.stringify(
+                    paint(seat, 'constituencies-fill')['fill-opacity'],
+                ),
+            ).toContain('"case"');
+            expect(
+                JSON.stringify(paint(seat, 'counties-fill')['fill-opacity']),
+            ).not.toContain(JSON.stringify(outside));
+        });
+
+        it('leaves other sources alone', () => {
+            const outside = ['!=', ['get', 'county_code'], 47];
+            const shown = buildStyle({
+                manifest,
+                theme,
+                provinceOfCounty,
+                focus: { outside: { wards: outside as never } },
+            });
+            // Layers of the other sources are not touched.
+            expect(paint(shown, 'counties-fill')['fill-color']).not.toEqual(
+                expect.arrayContaining(['case']),
+            );
+        });
+    });
 });

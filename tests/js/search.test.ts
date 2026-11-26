@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     describePerson,
     normalise,
@@ -214,6 +214,23 @@ describe('searchPeople', () => {
         expect(searchPeople(holders, index, '')).toEqual([]);
         expect(searchPeople(holders, index, '   ')).toEqual([]);
         expect(searchPeople(holders, index, 'test', 0)).toEqual([]);
+    });
+
+    it('works out ancestors only for the people it returns', () => {
+        const spy = vi.spyOn(index, 'ancestors');
+        try {
+            expect(searchPeople(holders, index, 'test', 2)).toHaveLength(2);
+            expect(spy).toHaveBeenCalledTimes(2);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it('does not let a person whose unit is missing take a place in the results', () => {
+        const lost = person({ seat: 'governor', name: 'Test Aaa', code: 999 });
+        const found = searchPeople([lost, ...holders], index, 'test', 3);
+        expect(found).toHaveLength(3);
+        expect(found.every((r) => r.holder !== lost)).toBe(true);
     });
 
     it('skips people whose unit is not in the index', () => {
