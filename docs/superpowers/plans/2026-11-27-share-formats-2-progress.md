@@ -167,6 +167,21 @@ Each one: what was decided, why, and what it costs if it is wrong.
   Embu going south; Nyeri, Kirinyaga, Murang'a going south) is the familiar one, and shape outranks
   the pair count. The other moves (Turkana, Baringo and Elgeyo/Marakwet, Garissa) stay. Tested — cost
   if wrong: one pair more apart (24, not 23).
+- **Ruling: a shared border across water counts** (the county polygons include the lake, so
+  Siaya and Homa Bay share about 70 km of border, all of it across Lake Victoria) — cost if wrong:
+  Siaya–Homa Bay would drop out of the list (they are next to each other anyway).
+- **Ruling: the pair count is taken as computed, though four neighbour pairs share under 1.5 km of
+  border where several counties meet** (Machakos–Kirinyaga 0.2 km, Meru–Embu 0.3 km, Tharaka -
+  Nithi–Kirinyaga 0.4 km, Meru–Kirinyaga 1.2 km), so the count is sensitive to simplification
+  there; and Embu–Nyeri, Tharaka - Nithi–Nyeri and Embu–Murang'a come within 140–280 m of each
+  other without sharing a segment and are not counted — cost if wrong: a pair or two more or fewer
+  in the count after a boundary rebuild (the neighbours test shows it).
+- **Ruling: a no-data tile and the key's "No approved holder yet" chip are outlined in the theme's
+  hairline** (`outlined` on the tile and the key entry in `tilesLayout`, drawn by `TilesCard.vue`; a
+  2px line on a tile, the five-seats key's 1px on the chip) — the no-data fill is 1.09:1 against the
+  light card and 1.33:1 on the dark one, so a vacant county read as a hole in the grid with a name
+  floating in it. Tested with a vacancy in both themes and looked at (three vacant coast counties,
+  light and dark) — cost if wrong: one stroke.
 - **Ruling: the grid is kept as compact as the mock-up's, and its shape outranks the count** — 22
   or fewer pairs were possible only with Nairobi City under Kajiado, West Pokot above Turkana or a
   hole in the grid — cost if wrong: a few pairs more apart than a looser grid would have.
@@ -232,6 +247,11 @@ Each one: what was decided, why, and what it costs if it is wrong.
   "This view|County tiles|Five seats|By the numbers" (the plan adds the card there); its mocked
   dialog also reports the tiles card's seat.
 - The story leaves about 80px empty between the grid and the footer (the grid is width-bound).
+- With 40 or more parties that have colours of their own, the tiles key goes under the grid, the
+  tile name size reaches its floor and long names leave their tiles; the data has 10 such parties,
+  and up to 30 lay out clean. Not fixed.
+- The tiles card's link is now also fed through `parseViewQuery` in a test (it opens that seat with
+  nothing highlighted); it passed at once, as the link was already right.
 - The neighbour data is not rebuilt by `npm run boundaries:rebuild`; after a boundary change, rerun
   `node boundaries/pipeline/neighbours.mjs` (the test fails until then).
 

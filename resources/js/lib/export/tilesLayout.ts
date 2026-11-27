@@ -36,6 +36,11 @@ export interface TileItem {
     ink: string;
     /** The name's lines, top-left in the tile. */
     name: TextItem[];
+    /**
+     * A county with no approved holder: its no-data fill is close to the card's ground, so it is
+     * outlined in the theme's hairline (as the five-seats key outlines its no-data chip).
+     */
+    outlined: boolean;
 }
 
 export interface TilesKeyItem {
@@ -47,6 +52,8 @@ export interface TilesKeyItem {
     count: TextItem;
     /** The space before the count, set after the label as the browser draws it. */
     gap: number;
+    /** "No approved holder yet": its no-data chip is outlined, as its tiles are. */
+    outlined: boolean;
 }
 
 export interface TilesLayout {
@@ -195,6 +202,7 @@ function keyAt(card: TilesCardView, x: number, y: number, size: number, otherOwn
                 tone: 'muted',
             },
             gap: m.countGap,
+            outlined: k.key === 'none',
         };
     };
     const entries = cols.map((k, i) =>
@@ -313,6 +321,7 @@ export function tilesLayout(
             box: box(x, y, side, side),
             colour: tile.colour,
             ink: tile.ink,
+            outlined: tile.group === 'none',
             name: lines.map((line, i) => ({
                 x: x + tilePad,
                 y: y + first + i * lead,

@@ -313,6 +313,28 @@ describe('TilesCard', () => {
         expect(footer).not.toContain('OpenStreetMap');
     });
 
+    it('outlines a county with no approved holder, and its key chip, in the theme’s hairline, in both themes', () => {
+        for (const theme of ['light', 'dark'] as const) {
+            const c = view('governor', without('governor', 2), theme);
+            const vacant = c.tiles.filter((t) => t.group === 'none');
+            expect(vacant.length, theme).toBeGreaterThan(0);
+            // The layout says which tiles and chips are outlined; the card draws them so.
+            const l = layout(c, 'portrait');
+            for (const t of l.tiles)
+                expect(t.outlined, `${theme} ${t.code}`).toBe(vacant.some((v) => v.code === t.code));
+            for (const e of l.key.entries) expect(e.outlined, `${theme} ${e.key}`).toBe(e.key === 'none');
+            const w = draw(c, 'portrait', theme);
+            for (const v of vacant)
+                expect(w.find(`[data-tile="${v.code}"] rect`).attributes('stroke'), theme).toBe(
+                    THEMES[theme].hairline,
+                );
+            const filled = c.tiles.find((t) => t.group !== 'none')!;
+            expect(w.find(`[data-tile="${filled.code}"] rect`).attributes('stroke')).toBeUndefined();
+            expect(w.find('[data-party="none"] rect').attributes('stroke')).toBe(THEMES[theme].hairline);
+            expect(w.find('[data-party="UDA"] rect').attributes('stroke')).toBeUndefined();
+        }
+    });
+
     it('marks sample data as sample', () => {
         expect(draw({ ...card, sample: true }).text()).toContain('SAMPLE DATA');
         expect(draw(card).find('[data-watermark]').exists()).toBe(false);

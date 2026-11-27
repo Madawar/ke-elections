@@ -107,6 +107,8 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                     :height="t.box.h"
                     rx="2"
                     :fill="t.colour"
+                    :stroke="t.outlined ? theme.hairline : undefined"
+                    :stroke-width="t.outlined ? 2 : undefined"
                 />
                 <text
                     v-for="(line, i) in t.name"
@@ -122,7 +124,12 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
             </g>
 
             <g data-key>
-                <g v-for="e in layout.key.entries" :key="e.key">
+                <g
+                    v-for="e in layout.key.entries"
+                    :key="e.key"
+                    data-key-entry
+                    :data-party="e.key"
+                >
                     <rect
                         :x="e.chip.x"
                         :y="e.chip.y"
@@ -130,6 +137,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                         :height="e.chip.h"
                         rx="2"
                         :fill="e.chip.colour"
+                        :stroke="e.outlined ? theme.hairline : undefined"
                     />
                     <!-- The count as a span after the label, so the browser sets the gap. -->
                     <text

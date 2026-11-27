@@ -26,6 +26,7 @@ import {
     tilesHeadline,
 } from '@/lib/export/tilesCard';
 import { viewColouring } from '@/lib/export/viewMap';
+import { parseViewQuery } from '@/lib/export/viewState';
 import { buildLegend } from '@/lib/legend';
 import { OTHER, THEMES, type ThemeName } from '@/lib/map/theme';
 import { type SeatsData, seatSources, withIndependentColour } from '@/lib/seats';
@@ -185,6 +186,14 @@ describe('tilesCardView', () => {
         expect(card.source).toBe(sourceLine(seatSources(themed(NUMBERS_SEATS, 'light'), 'woman_rep')));
         expect(card.asOf).toBe('2026-07-16');
         expect(card.sample).toBe(false);
+    });
+
+    it('links to a page that opens that seat with nothing highlighted', () => {
+        for (const seat of SEATS) {
+            const { pathname, search } = new globalThis.URL(view(seat).path, 'https://example.org');
+            expect(pathname).toBe('/');
+            expect(parseViewQuery(search, NUMBERS_SEATS)).toEqual({ seat, parties: [] });
+        }
     });
 });
 
