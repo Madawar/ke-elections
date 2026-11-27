@@ -268,7 +268,7 @@ describe('sharing the leaders of a unit', () => {
         ).toBeUndefined();
         expect(
             kenya.get('[data-share-kind]').attributes('data-share-cards'),
-        ).toBe('This view');
+        ).toBe('This view|By the numbers');
     });
 
     it('opens the leaders card straight from the panel, with no seat colouring at all', async () => {

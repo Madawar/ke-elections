@@ -6,6 +6,7 @@
 import {
     captionFor,
     leadersCaption,
+    numbersCaption,
     partyCaption,
     type CaptionPlatform,
 } from './caption';
@@ -15,6 +16,12 @@ import {
     leadersHeadline,
 } from './leadersCard';
 import { type LeadersLayout, leadersLayout } from './leadersLayout';
+import {
+    type NumbersCardView,
+    numbersCardView,
+    numbersHeadline,
+} from './numbersCard';
+import { type NumbersLayout, numbersLayout } from './numbersLayout';
 import { type PartyCardView, partyHeadline } from './partyCard';
 import { type PartyLayout, partyLayout } from './partyLayout';
 import { VIEW_SIZES, type ViewSize, viewFilename } from './sizes';
@@ -31,8 +38,16 @@ import type { ThemeName } from '@/lib/map/theme';
 import type { SeatsData } from '@/lib/seats';
 import type { UnitIndex } from '@/lib/units';
 
-export type ShareableView = ViewState | PartyCardView | LeadersCardView;
-export type ShareLayout = ViewLayout | PartyLayout | LeadersLayout;
+export type ShareableView =
+    | ViewState
+    | PartyCardView
+    | LeadersCardView
+    | NumbersCardView;
+export type ShareLayout =
+    | ViewLayout
+    | PartyLayout
+    | LeadersLayout
+    | NumbersLayout;
 export type ShareKind = ShareableView['kind'];
 
 /** What a layout is laid out for besides the card: its headline, link and map shape. */
@@ -161,12 +176,40 @@ const LEADERS_CARD: CardKind<LeadersCardView> = {
     filename: viewFilename,
 };
 
+const NUMBERS_CARD: CardKind<NumbersCardView> = {
+    key: 'numbers',
+    // No map: square for feeds, story for TikTok and Reels.
+    sizes: ['square', 'story'],
+    editableHeadline: true,
+    label: () => 'By the numbers',
+    headline: numbersHeadline,
+    caption: numbersCaption,
+    layout: numbersLayout,
+    maps: () => [],
+    aspect: () => 1,
+    copy: () => ({
+        title: 'Share by the numbers',
+        description:
+            'Every elected seat below the President and who holds them now, sized for Instagram or stories.',
+    }),
+    // Taken again from the seats in that theme, so independents follow it.
+    inTheme: (view, theme, ctx) =>
+        numbersCardView({
+            seats: seatsInTheme(ctx.seats, theme),
+            index: ctx.index,
+            theme,
+            sample: view.sample,
+        }),
+    filename: (_view, size) => `kenya-electoral-map-numbers-${size}.png`,
+};
+
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
 
 const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
     party: SEAT_VIEW,
     partyCard: PARTY_CARD,
     leaders: LEADERS_CARD,
+    numbers: NUMBERS_CARD,
 };
 
 // TypeScript cannot follow a union of views to the matching entry, so this one lookup says it.

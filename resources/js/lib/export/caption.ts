@@ -6,6 +6,12 @@ import {
     leadersHeadline,
     mcaMixLabel,
 } from './leadersCard';
+import {
+    type NumbersCardView,
+    numbersHeadline,
+    numbersNote,
+    numbersRowLine,
+} from './numbersCard';
 import { type PartyCardView, TOP_COUNTIES_TITLE, partyHeadline } from './partyCard';
 import { type ViewState, headlineFor } from './viewState';
 
@@ -28,7 +34,7 @@ const list = (items: string[]) =>
         ? (items[0] ?? '')
         : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
-/** What the source line needs of a card: both kinds of card have it. */
+/** What the source line needs of a card: every kind of card has it. */
 type Sourced = Pick<ViewState, 'asOf' | 'source' | 'sources' | 'sample'>;
 
 /** The sources, naming at most `max` of them and counting the rest. */
@@ -62,22 +68,26 @@ function partyLine(
 const clip = (text: string, max: number) =>
     text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 
+/**
+ * Every card's caption on X: the headline, then the source, link and tags. Those always fit: the
+ * source names at most two sites, then one; only the headline is shortened.
+ */
+function xCaption(card: Sourced, url: string, headline: string): string {
+    let tail = '';
+    for (const max of [2, 1]) {
+        tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
+        if (xLength(tail) <= X_MAX - 20) break;
+    }
+    return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
+}
+
 export function captionFor(
     view: ViewState,
     url: string,
     platform: CaptionPlatform = 'instagram',
     headline = headlineFor(view),
 ): string {
-    if (platform === 'x') {
-        // The source, link and tags always fit: the source names at most two sites, then one;
-        // only the headline is shortened.
-        let tail = '';
-        for (const max of [2, 1]) {
-            tail = `\n\n${sourceText(view, max)}\n${url}\n${TAGS}`;
-            if (xLength(tail) <= X_MAX - 20) break;
-        }
-        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
-    }
+    if (platform === 'x') return xCaption(view, url, headline);
     // The source, link and tags always go in; party lines are dropped from the end to make room.
     const head = clip(headline, 300);
     const tail = [sourceText(view, 10), url, '', TAGS].join('\n');
@@ -118,14 +128,7 @@ export function partyCaption(
     platform: CaptionPlatform = 'instagram',
     headline = partyHeadline(card),
 ): string {
-    if (platform === 'x') {
-        let tail = '';
-        for (const max of [2, 1]) {
-            tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
-            if (xLength(tail) <= X_MAX - 20) break;
-        }
-        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
-    }
+    if (platform === 'x') return xCaption(card, url, headline);
     const lines = card.hasSeats || card.scope
         ? [
               ...card.rows.map(
@@ -163,14 +166,7 @@ export function leadersCaption(
     platform: CaptionPlatform = 'instagram',
     headline = leadersHeadline(card),
 ): string {
-    if (platform === 'x') {
-        let tail = '';
-        for (const max of [2, 1]) {
-            tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
-            if (xLength(tail) <= X_MAX - 20) break;
-        }
-        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
-    }
+    if (platform === 'x') return xCaption(card, url, headline);
     const lines = card.rows.map((r) => {
         const seat = `${r.title}${r.where ? ` (${r.where})` : ''}`;
         if (!r.holder) return `${seat}: no approved data yet`;
@@ -181,6 +177,32 @@ export function leadersCaption(
         clip(headline, 300),
         '',
         ...lines,
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "By the numbers": the headline, one line per seat with its count and the groups
+ * holding the most, the card's note, the source with its date, the link and the tags. On X only
+ * the headline, source, link and tags fit.
+ */
+export function numbersCaption(
+    card: NumbersCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = numbersHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    return [
+        clip(headline, 300),
+        '',
+        ...card.rows.map(numbersRowLine),
+        '',
+        numbersNote(card),
         '',
         sourceText(card, 10),
         url,

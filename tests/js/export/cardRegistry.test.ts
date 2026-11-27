@@ -2,11 +2,7 @@
 // seat view, the party card and the leaders card) must give exactly what their own functions
 // give, so moving them into the registry changed nothing.
 import { describe, expect, it } from 'vitest';
-import {
-    captionFor,
-    leadersCaption,
-    partyCaption,
-} from '@/lib/export/caption';
+import { captionFor, leadersCaption, partyCaption } from '@/lib/export/caption';
 import { leadersCardView, leadersHeadline } from '@/lib/export/leadersCard';
 import { leadersLayout } from '@/lib/export/leadersLayout';
 import { partyCardView, partyHeadline } from '@/lib/export/partyCard';
@@ -27,10 +23,7 @@ import {
 } from '@/lib/export/shareView';
 import { VIEW_SIZES, type ViewSize, viewFilename } from '@/lib/export/sizes';
 import { viewLayout } from '@/lib/export/viewLayout';
-import {
-    viewColouring,
-    viewMapAspect,
-} from '@/lib/export/viewMap';
+import { viewColouring, viewMapAspect } from '@/lib/export/viewMap';
 import {
     headlineFor,
     seatsInTheme,
@@ -128,7 +121,11 @@ describe('the card registry, for the kinds that came before it', () => {
     it('has one map, "map", in the box its layout gives, drawn from the card itself', () => {
         for (const v of [seatView, countyView, party, county, constituency])
             for (const size of SIZES) {
-                const text = { headline: headlineOf(v), url: URL, mapAspect: 1.2 };
+                const text = {
+                    headline: headlineOf(v),
+                    url: URL,
+                    mapAspect: 1.2,
+                };
                 const slots = mapSlotsOf(size, v, text);
                 expect(slots).toHaveLength(1);
                 expect(slots[0].key).toBe('map');

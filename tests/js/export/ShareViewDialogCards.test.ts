@@ -20,9 +20,19 @@ const renders: {
 vi.mock('@/lib/export/viewMap', async (actual) => ({
     ...(await actual<typeof import('@/lib/export/viewMap')>()),
     renderViewMap: vi.fn(
-        (spec: unknown, _c: unknown, _t: unknown, box: { w: number; h: number }) =>
+        (
+            spec: unknown,
+            _c: unknown,
+            _t: unknown,
+            box: { w: number; h: number },
+        ) =>
             new Promise<string>((resolve, reject) =>
-                renders.push({ box: `${box.w}x${box.h}`, spec, resolve, reject }),
+                renders.push({
+                    box: `${box.w}x${box.h}`,
+                    spec,
+                    resolve,
+                    reject,
+                }),
             ),
     ),
 }));
@@ -189,7 +199,9 @@ describe('ShareViewDialog: cards of other shapes', () => {
 
     it('lists only the sizes a card comes in, and keeps the person’s stored size for the cards that have it', async () => {
         vi.mocked(shareView.sizesOf).mockImplementation((v) =>
-            isLeaders(v) ? ['square', 'story'] : ['square', 'portrait', 'story', 'x'],
+            isLeaders(v)
+                ? ['square', 'story']
+                : ['square', 'portrait', 'story', 'x'],
         );
         // Stored as a plain string (useStorage with a string default).
         localStorage.setItem('km.viewSize', 'portrait');
@@ -208,7 +220,9 @@ describe('ShareViewDialog: cards of other shapes', () => {
         expect(sizeInputs().map((i) => i.value)).toEqual(['square', 'story']);
         expect(sizeInputs().find((i) => i.checked)?.value).toBe('square');
         expect(
-            document.querySelector('[data-preview] svg')?.getAttribute('viewBox'),
+            document
+                .querySelector('[data-preview] svg')
+                ?.getAttribute('viewBox'),
         ).toBe('0 0 1080 1080');
         expect(localStorage.getItem('km.viewSize')).toBe('portrait');
         cardOption('view').click();
@@ -217,7 +231,9 @@ describe('ShareViewDialog: cards of other shapes', () => {
         // A size picked on the card is stored as usual.
         cardOption('leaders').click();
         await settle();
-        sizeInputs().find((i) => i.value === 'story')!.click();
+        sizeInputs()
+            .find((i) => i.value === 'story')!
+            .click();
         await settle();
         expect(localStorage.getItem('km.viewSize')).toBe('story');
     });
@@ -234,7 +250,9 @@ describe('ShareViewDialog: cards of other shapes', () => {
         await settle();
         expect(document.querySelector('#view-headline')).toBeNull();
         expect(
-            document.querySelector('[data-fixed-headline]')?.textContent?.trim(),
+            document
+                .querySelector('[data-fixed-headline]')
+                ?.textContent?.trim(),
         ).toBe('County leaders in Nairobi City');
         expect(document.body.textContent).toContain(
             'This card’s headline is fixed, so it stays neutral.',

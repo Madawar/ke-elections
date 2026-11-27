@@ -83,6 +83,7 @@ import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { formatAsOf } from '@/lib/export/format';
 import { leadersCardView } from '@/lib/export/leadersCard';
+import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
 import { type ShareCard, shareCards } from '@/lib/export/shareView';
 import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
@@ -1126,6 +1127,12 @@ function shareView() {
             onlyMp: onlyMpParties.value,
         }),
         leadersOf(focus),
+        !focus &&
+            numbersCardView({
+                seats: seats.value,
+                index: index.value,
+                theme: theme.value,
+            }),
     ]);
 }
 

@@ -16,6 +16,7 @@ import {
 } from 'reka-ui';
 import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import LeadersCard from './LeadersCard.vue';
+import NumbersCard from './NumbersCard.vue';
 import PartyCard from './PartyCard.vue';
 import ViewCard from './ViewCard.vue';
 import { CARD_FONTS } from '@/lib/export/fonts';
@@ -95,7 +96,7 @@ const shown = computed(() =>
 /** Each kind of card has its own component; these narrow `shown` for the template. */
 const seatView = computed(() => {
     const v = shown.value;
-    return isPartyCard(v) || isLeadersCard(v) ? null : v;
+    return v.kind === 'party' ? v : null;
 });
 const leadersCard = computed(() => {
     const v = shown.value;
@@ -104,6 +105,10 @@ const leadersCard = computed(() => {
 const partyCard = computed(() => {
     const v = shown.value;
     return isPartyCard(v) ? v : null;
+});
+const numbersCard = computed(() => {
+    const v = shown.value;
+    return v.kind === 'numbers' ? v : null;
 });
 const copy = computed(() => dialogCopy(base.value));
 
@@ -561,6 +566,14 @@ async function copyCaption() {
                             :map-image="mapImage"
                             :map-placeholder="mapStatus"
                             :map-aspect="mapAspect"
+                            :url="url"
+                            :theme="theme"
+                        />
+                        <NumbersCard
+                            v-else-if="numbersCard"
+                            :view="numbersCard"
+                            :size="size"
+                            :headline="headline"
                             :url="url"
                             :theme="theme"
                         />

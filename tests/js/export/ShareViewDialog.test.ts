@@ -2,10 +2,12 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { leadersCardView } from '@/lib/export/leadersCard';
+import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
 import { shareCards } from '@/lib/export/shareView';
 import { seatsInTheme, snapshotView } from '@/lib/export/viewState';
 import { PARTY_SEATS } from '../party/partyFixtures';
+import { NUMBERS_SEATS, numbersIndex } from './numbersFixtures';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
 
 // Map drawing is a deferred we resolve by hand; rasterising returns a PNG at once.
@@ -360,5 +362,68 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         expect(
             document.querySelectorAll('[data-preview] [data-leader]'),
         ).toHaveLength(3);
+    });
+});
+
+describe('ShareViewDialog: "By the numbers" beside the national view', () => {
+    const numbersContext = { ...context, index: numbersIndex, seats: NUMBERS_SEATS };
+    const kenya = snapshotView({
+        seats: NUMBERS_SEATS,
+        index: numbersIndex,
+        seat: 'mca',
+        focus: null,
+        only: [],
+        showSurroundings: false,
+        theme: 'dark',
+    });
+    const numbers = numbersCardView({
+        seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+        index: numbersIndex,
+        theme: 'dark',
+    });
+    beforeEach(() => {
+        renders.length = 0;
+        localStorage.setItem('km.viewSize', 'portrait');
+    });
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    it('offers it as a card, made with no map, in square and story', async () => {
+        mount(ShareViewDialog, {
+            props: {
+                open: true,
+                view: kenya,
+                cards: shareCards([kenya, numbers]),
+                context: numbersContext,
+            },
+            attachTo: document.body,
+        });
+        await settle();
+        const option = document.querySelector<HTMLInputElement>(
+            'input[name="view-card"][value="numbers"]',
+        )!;
+        expect(option.closest('label')?.textContent?.trim()).toBe('By the numbers');
+        expect(renders).toHaveLength(1); // the view's map
+        option.click();
+        await settle();
+        expect(renders).toHaveLength(1); // none for the numbers
+        expect(
+            [...document.querySelectorAll<HTMLInputElement>('input[name="view-size"]')].map(
+                (i) => i.value,
+            ),
+        ).toEqual(['square', 'story']);
+        expect(document.querySelectorAll('[data-preview] [data-seat]')).toHaveLength(5);
+        expect(
+            document.querySelector('[data-preview] svg')?.getAttribute('viewBox'),
+        ).toBe('0 0 1080 1080');
+        expect(
+            document.querySelector<HTMLInputElement>('#view-headline')!.value,
+        ).toBe('1,881 elected seats below the President');
+        expect(
+            document.querySelector<HTMLTextAreaElement>('#view-caption')!.value,
+        ).toContain('MCAs: 1,450 seats. Most held: UDA 523, ODM 312, Independent 114.');
+        expect(download().disabled).toBe(false);
+        expect(document.body.textContent).toContain('Share by the numbers');
     });
 });
