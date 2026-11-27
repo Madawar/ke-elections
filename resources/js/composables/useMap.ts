@@ -8,6 +8,7 @@ import type {
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import { type Colouring, pinnedLevel } from '@/lib/map/colouring';
+import { type TapFeature, tapTarget } from '@/lib/map/tap';
 import {
     type FocusSelection,
     combineFilter,
@@ -21,7 +22,6 @@ import {
     MAX_BOUNDS,
     type MapLevel,
     WARD_MIN_ZOOM,
-    levelForZoom,
 } from '@/lib/map/levels';
 import { type MapOverlay, overlaySourceId } from '@/lib/map/overlays';
 import { MAP_LEVELS, SOURCE_OF, buildStyle, fileUrl } from '@/lib/map/style';
@@ -290,40 +290,30 @@ export function useMap(
         selected = null;
     }
 
-    function pick(e: MapMouseEvent): Picked | null {
+    /** Every unit's fill under the point, finest first; a level's own code is its feature id. */
+    function featuresAt(point: MapMouseEvent['point']): TapFeature[] {
         const m = map.value!;
-        const pinned = pinnedLevel(opts.colouring.value.mode);
-        const zoomLevel = levelForZoom(m.getZoom());
-        // With seat colouring, a tap still picks the coloured unit even when zoomed out past it.
-        const order = MAP_LEVELS.slice(
-            0,
-            MAP_LEVELS.indexOf(zoomLevel) + 1,
-        ).reverse();
-        const level =
-            pinned && MAP_LEVELS.indexOf(pinned) > MAP_LEVELS.indexOf(zoomLevel)
-                ? pinned
-                : zoomLevel;
-        for (const l of [level, ...order.filter((x) => x !== level)]) {
-            const features: MapGeoJSONFeature[] = m.queryRenderedFeatures(
-                e.point,
-                { layers: [`${SOURCE_OF[l]}-fill`] },
-            );
-            const f = features[0];
-            if (f && typeof f.id === 'number') return { level: l, code: f.id };
-        }
-        return null;
+        return [...MAP_LEVELS].reverse().flatMap((level) =>
+            m
+                .queryRenderedFeatures(point, {
+                    layers: [`${SOURCE_OF[level]}-fill`],
+                })
+                .filter((f: MapGeoJSONFeature) => typeof f.id === 'number')
+                .map((f: MapGeoJSONFeature) => ({
+                    level,
+                    code: f.id as number,
+                    county_code: f.properties?.county_code,
+                    constituency_code: f.properties?.constituency_code,
+                })),
+        );
     }
 
-    /** Is the tap on the focused unit itself (it can be too small to pick at this zoom)? */
-    function onFocusedUnit(e: MapMouseEvent): boolean {
-        const m = map.value;
-        if (!m || !focus) return false;
-        return m
-            .queryRenderedFeatures(e.point, {
-                layers: [`${SOURCE_OF[focus.level]}-fill`],
-            })
-            .some((f) => f.id === focus!.code);
-    }
+    /**
+     * What a tap here would do, from the focus and not from the zoom (see `tapTarget`). A ward
+     * focus is read as the constituency drawn in its place until the ward geometry has loaded.
+     */
+    const tapAt = (e: MapMouseEvent) =>
+        tapTarget(drawnFocus(), featuresAt(e.point));
 
     /** The zoom the camera would fit this unit at, with the current padding. */
     function fitZoomOf(sel: FocusSelection): number {
@@ -442,13 +432,18 @@ export function useMap(
                     return;
                 }
             }
-            const unit = pick(e);
-            if (unit) opts.onSelect(unit);
-            else if (focus && !onFocusedUnit(e)) opts.onOutsideClick?.();
+            const target = tapAt(e);
+            if (target === 'outside') opts.onOutsideClick?.();
+            else if (target && target !== 'inside') opts.onSelect(target);
         });
         if (canHover) {
             m.on('mousemove', (e) => {
-                const unit = pick(e);
+                // The tooltip and the pointer name what a tap would select.
+                const target = tapAt(e);
+                const unit =
+                    target && target !== 'inside' && target !== 'outside'
+                        ? target
+                        : null;
                 if (
                     unit?.level !== hovered?.level ||
                     unit?.code !== hovered?.code
@@ -494,7 +489,9 @@ export function useMap(
         /** Show only this unit (and what is inside it); null shows everything again. */
         setFocus(sel: FocusSelection | null) {
             focus = sel;
-            if (sel?.level === 'ward') ensureWards();
+            // Tapping inside a constituency picks a ward, so its geometry is wanted, not just a ward's.
+            if (sel?.level === 'ward' || sel?.level === 'constituency')
+                ensureWards();
             applyZoomAnchor();
             restyle();
         },

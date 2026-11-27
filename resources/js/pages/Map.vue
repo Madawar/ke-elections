@@ -8,12 +8,13 @@ import LocatorExport from '@/components/export/LocatorExport.vue';
 import ShareViewDialog from '@/components/export/ShareViewDialog.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
-import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
+import LayersPanel from '@/components/map/LayersPanel.vue';
 import Legend from '@/components/map/Legend.vue';
 import MapControls from '@/components/map/MapControls.vue';
 import MapView from '@/components/map/MapView.vue';
 import NationalOverview from '@/components/map/NationalOverview.vue';
 import SearchBox from '@/components/map/SearchBox.vue';
+import SeatChips from '@/components/map/SeatChips.vue';
 import UnitList from '@/components/map/UnitList.vue';
 import UnitPanel from '@/components/map/UnitPanel.vue';
 import type { Picked } from '@/composables/useMap';
@@ -24,11 +25,17 @@ import {
 } from '@/lib/map/announce';
 import { mapPadding } from '@/lib/map/camera';
 import {
+    type ColourKey,
     type Colouring,
     type SeatKey,
     NO_COLOURING,
 } from '@/lib/map/colouring';
 import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
+import {
+    type RememberedModes,
+    modeForFocus,
+    rememberLevel,
+} from '@/lib/map/seatMode';
 import type { FocusSelection } from '@/lib/map/focus';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
@@ -48,7 +55,6 @@ import {
     legendScope,
     loadSeats,
     seatColouring,
-    seatLegend,
     withIndependentColour,
 } from '@/lib/seats';
 import {
@@ -111,6 +117,8 @@ onMounted(async () => {
         index.value = units;
         loadedSeats.value = data;
         manifest.value = m;
+        // What the person had before arrived (their last choice, or a link's): the county level's.
+        remembered.value = { county: colourKey.value };
         applySharedView(data);
         if (props.unit)
             selectUnit(units.get(props.unit.level, props.unit.code) ?? null, {
@@ -153,24 +161,39 @@ const overlays = ref<MapOverlay[]>(OVERLAYS);
 
 const seatCount = (seat: SeatKey) =>
     Object.values(seats.value.totals[seat] ?? {}).reduce((a, b) => a + b, 0);
-const colourOptions = computed(() => [
-    { key: 'none' as const, label: 'Boundaries only', available: true },
-    { key: 'province' as const, label: 'Former province', available: true },
-    ...(Object.keys(SEAT_LABEL) as SeatKey[]).map((seat) => {
-        const n = seatCount(seat);
-        return {
-            key: seat,
-            label: `${SEAT_LABEL[seat]} party`,
-            available: n > 0,
-            note: n > 0 ? undefined : 'No approved data yet',
-            swatch: SEAT_COLOURS[seat],
-        };
-    }),
-]);
-watch(colourOptions, (opts) => {
-    if (!opts.find((o) => o.key === colourKey.value)?.available)
+// The chips for seats with no approved data yet cannot be chosen (all stay open until it loads).
+const unavailableSeats = computed(() =>
+    loadedSeats.value === EMPTY_SEATS
+        ? []
+        : (Object.keys(SEAT_LABEL) as SeatKey[]).filter(
+              (seat) => seatCount(seat) === 0,
+          ),
+);
+watch(unavailableSeats, (off) => {
+    if ((off as ColourKey[]).includes(colourKey.value))
         colourKey.value = 'none';
 });
+
+// What the person chose at each level (Kenya shares the county level's), so stepping back out
+// brings their choice back after the focus switched the mode on its own.
+const remembered = ref<RememberedModes>({});
+/** The person chose a mode: use it, and remember it for the level they are looking at. */
+function chooseMode(mode: ColourKey) {
+    colourKey.value = mode;
+    const level = rememberLevel(focusOf(selection.value)?.level ?? null);
+    remembered.value = { ...remembered.value, [level]: mode };
+}
+/** The mode that fits the focus: the person's choice for that level, else one that fits. */
+function modeFor(unit: Unit | null): ColourKey {
+    const mode = modeForFocus(
+        focusOf(unit)?.level ?? null,
+        colourKey.value,
+        remembered.value,
+    );
+    return (unavailableSeats.value as ColourKey[]).includes(mode)
+        ? 'none'
+        : mode;
+}
 
 const colouring = computed<Colouring>(() => {
     const k = colourKey.value;
@@ -227,7 +250,7 @@ watch(colourKey, (k) => {
 function applySharedView(data: SeatsData) {
     const { seat, parties } = parseViewQuery(location.search, data);
     if (seat) {
-        colourKey.value = seat;
+        chooseMode(seat);
         onlyParties.value = parties;
     }
     // Take only our own two parameters off the address; anything else (utm_…) stays.
@@ -243,11 +266,6 @@ function applySharedView(data: SeatsData) {
         );
     }
 }
-const partyChips = computed(() =>
-    colourKey.value === 'none' || colourKey.value === 'province'
-        ? []
-        : seatLegend(seats.value, colourKey.value),
-);
 // What the person set: a colouring, plus each legend row they pressed ("Other" counts once).
 const activeSettings = computed(() =>
     settingsCount(colourKey.value, legend.value),
@@ -322,6 +340,7 @@ function selectUnit(
         focusing: unit !== null,
     });
     selection.value = unit;
+    colourKey.value = modeFor(unit);
     applyPadding();
     autoCentre.value = recentre;
     view.value = 'unit';
@@ -373,6 +392,23 @@ function onPickPerson({ holder, unit }: PersonResult) {
     );
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
+
+// A chip for a seat held above the focus was pressed: go up to the unit that shows it, and show it.
+function onChipStepUp(seat: ColourKey, level: 'county' | 'constituency') {
+    const s = selection.value;
+    const target =
+        s && index.value?.ancestors(s.l, s.c).find((a) => a.l === level);
+    if (!target) return;
+    selectUnit(target);
+    chooseMode(seat);
+}
+const chipParents = computed(() => {
+    const s = selection.value;
+    const up = (level: string) =>
+        (s && index.value?.ancestors(s.l, s.c).find((a) => a.l === level)?.n) ||
+        undefined;
+    return { county: up('county'), constituency: up('constituency') };
+});
 
 const onPick = (p: Picked) =>
     selectUnit(index.value?.get(p.level, p.code) ?? null);
@@ -664,6 +700,22 @@ const showView = (v: typeof view.value) => {
             </button>
         </div>
 
+        <!-- Seat chips: under the search bar on phones, beside it on wide desktops. Hidden while the
+             sheet is at full height, as the legend is. -->
+        <div
+            v-if="!(snap === 'full' && !isDesktop)"
+            class="pointer-events-none absolute top-[64px] right-3 left-3 z-20 md:left-[400px] xl:top-3 xl:left-[864px]"
+        >
+            <SeatChips
+                :model-value="colourKey"
+                :unavailable="unavailableSeats"
+                :focus-level="focusOf(selection)?.level ?? null"
+                :parents="chipParents"
+                @update:modelValue="chooseMode"
+                @step-up="onChipStepUp"
+            />
+        </div>
+
         <div
             class="absolute right-3 z-10 transition-[bottom] duration-200"
             :style="{
@@ -801,12 +853,10 @@ const showView = (v: typeof view.value) => {
 
             <LayersPanel
                 v-if="view === 'layers'"
-                v-model:colour="colourKey"
-                v-model:only="onlyParties"
+                :colour="colourKey"
+                @update:colour="chooseMode"
                 v-model:enabled="enabledOverlays"
                 v-model:theme="themePref"
-                :colour-options="colourOptions"
-                :parties="partyChips"
                 :overlays="overlays"
                 :swatch-for="(o) => o.swatch?.(THEMES[theme])"
             />
@@ -835,7 +885,7 @@ const showView = (v: typeof view.value) => {
                     :seats="seats"
                     :highlight-party="highlightParty"
                     :can-share-view="isSeatMode"
-                    @colour-by="(s) => (colourKey = s)"
+                    @colour-by="chooseMode"
                     @share="exportNational = true"
                     @share-view="shareView"
                 />

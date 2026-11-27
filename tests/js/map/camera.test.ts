@@ -46,6 +46,38 @@ describe('mapPadding', () => {
     });
 });
 
+describe('mapPadding with the seat chips', () => {
+    // The chips sit under the search bar (44px high, from 12px down, then the chips from 64px).
+    const CHIPS_BOTTOM = 64 + 44;
+
+    it('keeps a phone unit clear of the search bar and the chip row', () => {
+        const p = mapPadding({
+            desktop: false,
+            sheetHeight: 388,
+            viewport: { width: 390, height: 844 },
+        });
+        expect(p.top).toBeGreaterThan(CHIPS_BOTTOM);
+    });
+
+    it('keeps a narrow desktop window clear of the chip row under the search bar', () => {
+        const p = mapPadding({
+            desktop: true,
+            sheetHeight: 0,
+            viewport: { width: 1024, height: 768 },
+        });
+        expect(p.top).toBeGreaterThan(CHIPS_BOTTOM);
+    });
+
+    it('needs only the search bar clear on a wide desktop, where the chips sit beside it', () => {
+        const p = mapPadding({
+            desktop: true,
+            sheetHeight: 0,
+            viewport: { width: 1440, height: 900 },
+        });
+        expect(p.top).toBe(72);
+    });
+});
+
 describe('mapPadding with the legend open', () => {
     const viewport = { width: 1440, height: 900 };
 

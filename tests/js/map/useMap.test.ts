@@ -132,6 +132,8 @@ function harness(
         api?: ReturnType<typeof useMap>;
         outside?: ReturnType<typeof vi.fn>;
         zoomOut?: ReturnType<typeof vi.fn>;
+        select?: ReturnType<typeof vi.fn>;
+        hover?: ReturnType<typeof vi.fn>;
     } = {},
 ) {
     const colouring = ref(NO_COLOURING);
@@ -149,7 +151,8 @@ function harness(
                     overlays: ref(OVERLAYS),
                     enabledOverlays: ref(['towns', 'stations']),
                     boundsOf: (l, c) => index.get(l, c)?.b,
-                    onSelect: () => {},
+                    onSelect: out.select ?? (() => {}),
+                    onHover: out.hover,
                     onOutsideClick: out.outside,
                     onZoomOut: out.zoomOut,
                     onUnsupported,
@@ -185,6 +188,8 @@ describe('useMap focus', () => {
         api?: ReturnType<typeof useMap>;
         outside?: ReturnType<typeof vi.fn>;
         zoomOut?: ReturnType<typeof vi.fn>;
+        select?: ReturnType<typeof vi.fn>;
+        hover?: ReturnType<typeof vi.fn>;
     } = {};
     let colouring: ReturnType<typeof harness>['colouring'];
     const map = () => fake.current!;
@@ -195,6 +200,8 @@ describe('useMap focus', () => {
         fake.current = null;
         out.outside = vi.fn();
         out.zoomOut = vi.fn();
+        out.select = vi.fn();
+        out.hover = vi.fn();
         const h = harness(() => {}, out);
         colouring = h.colouring;
         mount(h.component);
@@ -336,20 +343,150 @@ describe('useMap focus', () => {
         expect(options.duration).toBe(0);
     });
 
-    it('reports a tap outside the focused unit, but not one on it', () => {
-        out.api!.setFocus({ level: 'ward', code: 1448 });
+    /** What the map would report under the finger, by queried layer (fill layers only). */
+    const under = (
+        features: Record<string, { id: number; properties?: object }[]>,
+    ) =>
+        map().queryRenderedFeatures.mockImplementation(
+            (_p: unknown, o: { layers?: string[] }) =>
+                features[o.layers?.[0] ?? ''] ?? [],
+        );
+    // Machakos 16 holds Mwala 82, which holds the ward Muthetheni 408.
+    const tapped = {
+        'counties-fill': [{ id: 16, properties: { code: 16 } }],
+        'constituencies-fill': [
+            { id: 82, properties: { code: 82, county_code: 16 } },
+        ],
+        'wards-fill': [
+            {
+                id: 408,
+                properties: {
+                    code: 408,
+                    constituency_code: 82,
+                    county_code: 16,
+                },
+            },
+        ],
+    };
+
+    it('reports a tap outside the focused unit, but not one on it', async () => {
+        out.api!.setFocus({ level: 'ward', code: 408 });
+        map().loadWards[0]();
+        await vi.waitFor(() =>
+            expect(map().filters.get('wards-fill')).toBeTruthy(),
+        );
         const click = map().handlers.get('click')!;
         map().queryRenderedFeatures.mockReturnValue([]);
         click({ point: { x: 5, y: 5 } });
         expect(out.outside).toHaveBeenCalledTimes(1);
 
-        map().queryRenderedFeatures.mockImplementation(
-            (_p: unknown, o: { layers?: string[] }) =>
-                o.layers?.[0] === 'wards-fill' ? [{ id: 1448 }] : [],
-        );
+        under(tapped);
         click({ point: { x: 6, y: 6 } });
-        // Picking the ward itself selects it; the page is not asked to step out.
+        // A tap on the focused ward picks nothing deeper, and is not a step out either.
         expect(out.outside).toHaveBeenCalledTimes(1);
+        expect(out.select).not.toHaveBeenCalled();
+    });
+
+    describe('drill-down tapping', () => {
+        const click = (x = 5) =>
+            map().handlers.get('click')!({ point: { x, y: x } });
+
+        it('selects the county under the finger when nothing is focused, at any zoom', () => {
+            under(tapped);
+            for (const zoom of [5.5, 8, 10.5, 13]) {
+                map().zoom = zoom;
+                out.select!.mockClear();
+                click();
+                expect(out.select).toHaveBeenCalledWith({
+                    level: 'county',
+                    code: 16,
+                });
+            }
+        });
+
+        it('selects the constituency inside a focused county', () => {
+            out.api!.setFocus({ level: 'county', code: 16 });
+            map().zoom = 11;
+            under(tapped);
+            click();
+            expect(out.select).toHaveBeenCalledWith({
+                level: 'constituency',
+                code: 82,
+            });
+        });
+
+        it('selects the ward inside a focused constituency, even zoomed out of ward level', () => {
+            out.api!.setFocus({ level: 'constituency', code: 82 });
+            map().zoom = 7.5;
+            under(tapped);
+            click();
+            expect(out.select).toHaveBeenCalledWith({
+                level: 'ward',
+                code: 408,
+            });
+        });
+
+        it('loads the ward geometry as soon as a constituency is focused', () => {
+            expect(map().loadWards).toHaveLength(0);
+            out.api!.setFocus({ level: 'constituency', code: 82 });
+            expect(map().loadWards).toHaveLength(1);
+        });
+
+        it('does nothing for a tap inside a focused ward', async () => {
+            out.api!.setFocus({ level: 'ward', code: 408 });
+            map().loadWards[0]();
+            await vi.waitFor(() =>
+                expect(map().filters.get('wards-fill')).toBeTruthy(),
+            );
+            under(tapped);
+            click();
+            expect(out.select).not.toHaveBeenCalled();
+            expect(out.outside).not.toHaveBeenCalled();
+        });
+
+        it('steps out, not in, for a tap outside the focused county', () => {
+            out.api!.setFocus({ level: 'county', code: 16 });
+            under({
+                'counties-fill': [{ id: 17, properties: {} }],
+                'constituencies-fill': [
+                    { id: 99, properties: { county_code: 17 } },
+                ],
+            });
+            click();
+            expect(out.select).not.toHaveBeenCalled();
+            expect(out.outside).toHaveBeenCalledTimes(1);
+        });
+
+        it('ignores a seat colouring: a tap still picks the county from the national view', () => {
+            colouring.value = {
+                ...NO_COLOURING,
+                mode: { kind: 'seat', seat: 'mp' },
+            } as typeof NO_COLOURING;
+            under(tapped);
+            click();
+            expect(out.select).toHaveBeenCalledWith({
+                level: 'county',
+                code: 16,
+            });
+        });
+
+        it('hovers the unit a tap would select, and nothing inside a focused ward', async () => {
+            const move = map().handlers.get('mousemove')!;
+            expect(move).toBeDefined();
+            under(tapped);
+            move({ point: { x: 4, y: 4 } });
+            expect(out.hover).toHaveBeenLastCalledWith(
+                { level: 'county', code: 16 },
+                { x: 4, y: 4 },
+            );
+            out.api!.setFocus({ level: 'ward', code: 408 });
+            map().loadWards[0]();
+            await vi.waitFor(() =>
+                expect(map().filters.get('wards-fill')).toBeTruthy(),
+            );
+            move({ point: { x: 4, y: 4 } });
+            expect(out.hover).toHaveBeenLastCalledWith(null, { x: 4, y: 4 });
+        });
     });
 
     it('does not report taps when nothing is focused', () => {

@@ -38,6 +38,11 @@ const LEGEND_LEFT = SIDE_PANEL_WIDTH + 16;
 const CONTROLS_CLEARANCE = 56;
 /** A fitted unit keeps at least this much map width; below it the legend overlaps the map instead. */
 const MIN_UNIT_WIDTH = 320;
+/** From this width the seat chips sit beside the search bar; below it they sit under it. */
+export const CHIPS_BESIDE_SEARCH = 1280;
+/** The top margin: the search bar, plus the chip row under it where the chips do not sit beside it. */
+const TOP_WITH_SEARCH = 72;
+const TOP_WITH_CHIPS_BELOW = 120;
 /** The sheet may cover this share of a phone screen before the map stops making room for it. */
 const MAX_SHEET_SHARE = 0.6;
 
@@ -67,14 +72,17 @@ export function mapPadding({
                     ? clearOfLegend
                     : SIDE_PANEL_WIDTH + CONTROLS_CLEARANCE,
             right: CONTROLS_CLEARANCE,
-            top: 72,
+            top:
+                viewport.width >= CHIPS_BESIDE_SEARCH
+                    ? TOP_WITH_SEARCH
+                    : TOP_WITH_CHIPS_BELOW,
             bottom: 72,
         };
     }
     return {
         left: CONTROLS_CLEARANCE,
         right: CONTROLS_CLEARANCE,
-        top: 72,
+        top: TOP_WITH_CHIPS_BELOW,
         bottom:
             Math.round(
                 Math.min(sheetHeight, viewport.height * MAX_SHEET_SHARE),
