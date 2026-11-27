@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.0, 27 November 2026
+
+### Four new share cards
+- **By the numbers:** the 1,881 elected seats below the President, seat by seat, with the three
+  parties that hold the most of each and a thin bar of all of them. Square and story.
+- **Kenya, five ways:** the same map five times, once for each seat, with one key of party
+  colours in order of seats held across all five. Square and story.
+- **Top 10 counties:** where one party, or the independents, hold the most MP or MCA seats, as a
+  ranked bar chart with a small map of those counties. Its headline is fixed, so it stays
+  neutral. Ties are listed by IEBC county code, and the card says so. Square and story.
+- **Who represents this ward:** five ballot papers for one ward, Governor, Senator, Woman Rep,
+  MP and MCA, each with the holder's name, party and when they took the seat, and small maps
+  that place the ward in its constituency and county. Portrait and story. It replaces the ward's
+  "Leaders of" card.
+
+### Where to find them
+- **All of Kenya, any seat view:** "Share this view" now has a "Card" choice with "This view",
+  "Five seats" and "By the numbers". The "County seats" view offers the last two.
+- **Top 10 counties:** shown in that choice on the MP or MCA view when exactly one party, or the
+  independents, is highlighted, and next to the party card on a party's profile.
+- **A ward:** "Share leaders" opens "Who represents", and "Share this view" lists both cards.
+- **Sizes:** each card lists only the sizes it comes in, and the size you last picked is kept
+  for the cards that have it.
+
+### Fixes
+- **Long ward names in headlines:** a name such as Shinoyi-Shikomari-Esumeyia now breaks after
+  a hyphen instead of being cut short.
+- **Share dialog:** switching card or colours while a map is still drawing no longer shows
+  another card's map in the preview, and closing the dialog stops the drawing.
+- **"By the numbers" credits** only the gazette notice its counts come from, as it has no map.
+
 ## 0.3.0, 27 November 2026
 
 ### Who represents a place
