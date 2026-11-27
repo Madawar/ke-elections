@@ -415,3 +415,31 @@ possible and not ugly."
   - "no data" wards show only the ward name.
 - **Playwright:** Mathare focused and Ngei selected, on phone and desktop, light and dark, plus a
   large rural constituency. Look at the shots to judge whether it's tidy.
+
+**Additions to Task 5's export cards (owner, 2026-11-27).** The owner said: "The export card is
+awesome. Maybe make the map a bit bigger, just a bit, at least for MCA level. Also on MCA level,
+wouldn't it be good to show governor and senator."
+- **A bigger map.**
+  - Grow the map area on every card by about 15% of its current height, and on MCA cards (county
+    and constituency scope) by about 25%.
+  - Take the space from padding and the gaps between rows first, then trim the mix rows. A long
+    ward list shows the top rows plus "and N more".
+  - The headline, the footer with its source, "as of" date and link, and the story safe zones
+    (bottom 400 px, right 120 px) must not shrink or move into the safe zones.
+- **A "County leaders" strip on MCA cards.**
+  - Every MCA card scoped to a county or a constituency gets a compact strip under the map.
+  - Each row has a ballot-colour bar, the seat title, the name exactly as the data spells it, and
+    the party abbreviation chip: Governor, Senator, then Woman Rep.
+  - Woman Rep is the controller's call: it's the third county-wide seat, and it keeps the strip
+    consistent with the county leaders card.
+  - **Constituency scope:** the strip starts with that constituency's MP row.
+  - **No duplication:** when the card is already a Governor, Senator or Woman Rep card, the strip
+    leaves that seat out.
+  - **Square size:** if three or four rows don't fit, put them in two columns. If they still don't
+    fit, show Governor and Senator only, with "+1 more at <link>".
+  - Rows with no holder read "No approved data yet". Sources go in the footer.
+- **Tests:**
+  - The map's height ratio grows as specified for MCA and other cards in all four sizes.
+  - The strip's rows and their order for county and constituency scope.
+  - Nothing overlaps and the safe zones hold, in all sizes, including Nairobi City with its 85
+    wards and a single-ward constituency.
