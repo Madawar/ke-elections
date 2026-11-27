@@ -66,6 +66,29 @@ a feature finishes.
      - Turnout.
      - 2013 ward-level presidential results from the data we have.
      - Other seats later, through the admin table.
+   - **"Who does what":** one diagram per seat, built once and used in three places. The owner
+     said "I don't want the UI to get bloated. It's at the sweet spot now."
+     - **The seats:** Governor, **Senator**, Woman Rep, MP and MCA. The owner asked for Senators
+       not to be forgotten.
+     - **Each diagram shows:**
+       - Who does the work, who checks them, and what the seat can't do.
+       - Real holders for the place.
+       - Ballot-colour boxes, and arrows labelled with what they mean ("approves budget",
+         "oversees", "decides removal").
+       - A Constitution-first citation and an "as of" date.
+     - **Place 1, the map:** only a text link, "What this seat does", under each holder in the unit
+       panel. It opens the diagram in the bottom sheet. No new chips, layers or buttons.
+     - **Place 2, the pocketbook:** a "Who does what" page with "pick a problem" and "pick a seat"
+       views, using the same diagrams.
+     - **Place 3, export:** a share card with the same diagram, for example "Your MCA vs your
+       Governor".
+     - **Research:** `docs/research/roles/` (104 facts, 75 verified).
+     - **Before release, check by hand:** the 6 unverified facts, the NG-CDF judgments
+       (Kenya Law blocked automated reading), the Supreme Court ruling of 25 Sep 2026
+       ([2026] KESC 62), and the current editions of the Acts.
+     - **Mzalendo:** links only, through a reviewed `data/sources/links/mzalendo.csv` keyed by
+       codes. That's about 1 day of checking, for 399 of 416 rows matched. There's no licence to
+       reuse its numbers, and no attendance data exists to show.
 5. **Numeric-view infographics:** census and voters, with a top-10 bar chart.
 6. **Animated video export.** Plan: `2026-11-26-social-export.md`, Task 2. The spike proved:
    - **Use WebCodecs `VideoEncoder`** (H.264 `avc1.640028`, 1080×1920, 30 fps, timestamps from
@@ -108,7 +131,9 @@ a feature finishes.
 - None-mode inner borders inside a focused unit are now heavier (plan item (e)). Is that OK, given
   the owner liked "boundaries only"?
 
-## Data fixes found by the by-election research (`docs/research/by-elections/`)
+## Data fixes found by the by-election research
+- **Mathira MP's name:** our data has "Eric Mwangi Kahugu", but Parliament's list has "Meangi". Check
+  the gazette before changing it. (`docs/research/by-elections/`)
 - **Migwani ward 338** is shown as held but has been **vacant since 6 Aug 2026** (GN 15266). Its
   17 Nov poll was suspended by a court, and no new date has been gazetted.
 - **David Ndakwa overlaps two seats:** Malava MP from 2025-11-27 and West Kabras MCA until
