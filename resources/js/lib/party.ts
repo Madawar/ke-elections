@@ -62,7 +62,11 @@ export interface PartyProfile {
     /** The party's data colour: its own, or the neutral grey "Other". */
     colour: string;
     hasOwnColour: boolean;
-    /** The 2022 coalition as the ORPP register gives it; null when the data has none. */
+    /**
+     * The 2022 coalition (ORPP); null when the data has none, or has no ORPP source for the party
+     * (every number shows its source). The coalition has no source column of its own yet, so the
+     * party's ORPP source stands for it until one is added.
+     */
     coalition: string | null;
     /** Former abbreviations from renames, oldest first. */
     formerNames: { abbrev: string; effectiveOn: string | null }[];
@@ -224,7 +228,7 @@ export function partyProfile(
 
     const status = party.status?.trim();
     const sourceUrl = party.source_url || null;
-    const coalition = party.coalition_2022?.trim() || null;
+    const coalition = (sourceUrl && party.coalition_2022?.trim()) || null;
     const held = data.holders.filter((h) => h.party === key);
     const urls = held.map((h) => h.source_url);
 

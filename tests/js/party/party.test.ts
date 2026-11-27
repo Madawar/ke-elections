@@ -124,6 +124,16 @@ describe('partyProfile', () => {
         expect(p.formerNames).toEqual([]);
     });
 
+    it('has no coalition without a source for it: a coalition on a party with no ORPP source is left out', () => {
+        const unsourced = seatsFrom([], {
+            parties: [
+                { abbrev: 'UNS', name: 'Unsourced', coalition_2022: 'Some Coalition', colour: null },
+            ],
+        });
+        expect(partyProfile(unsourced, 'UNS')!.coalition).toBeNull();
+        expect(partyProfile(PARTY_SEATS, 'UDA')!.coalition).toBe('Kenya Kwanza');
+    });
+
     it('shows a recorded "none" coalition as no 2022 coalition', () => {
         expect(partyProfile(PARTY_SEATS, 'DP')!.coalition).toBe('None');
     });

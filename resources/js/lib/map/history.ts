@@ -57,11 +57,14 @@ export interface FocusHistoryPort {
 }
 
 /**
- * The focus an address stands for: null for the home page (and for a party's page, which says
- * nothing about the focus), undefined for a page that is not ours.
+ * The focus an address stands for: null for the home page, undefined for a page that is not ours.
+ * A party's page stands for its scope (`?in=county-47`): a profile's scope is always the focus or
+ * a place above it, so a link to one starts with the map on the scope, and null for all of Kenya.
  */
 export function focusFromPath(path: string): FocusSelection | null | undefined {
-    if (path === '/' || parsePartyPath(path)) return null;
+    if (path === '/') return null;
+    const party = parsePartyPath(path);
+    if (party) return party.scope && { ...party.scope };
     return parseUnitPath(path) ?? undefined;
 }
 

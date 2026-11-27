@@ -311,9 +311,10 @@ async function copyLink() {
             Seats: {{ profile.source
             }}{{ asOf ? `. Data as of ${asOf}` : '' }}.
             <template v-if="profile.registration?.sourceName"
-                >Registration and coalition: ORPP,
+                >Registration: ORPP register,
                 {{ profile.registration.sourceName }}.</template
             >
+            <template v-if="profile.coalition"> Coalition: ORPP (2022).</template>
         </p>
     </div>
     <p v-else class="text-[15px] text-muted-ink">

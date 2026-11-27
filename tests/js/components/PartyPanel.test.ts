@@ -118,6 +118,23 @@ describe('PartyPanel', () => {
         expect(mountParty('DP').get('[data-swatch]').attributes('style')).toContain(OTHER);
     });
 
+    it('renders no coalition line for a party with a coalition but no source, and words the attribution without claiming the register', () => {
+        const w = mountParty('UNS', {
+            ...PARTY_SEATS,
+            parties: [
+                { abbrev: 'UNS', name: 'Unsourced', coalition_2022: 'Some Coalition', colour: null },
+            ],
+            holders: [],
+        });
+        expect(w.text()).not.toContain('2022 coalition');
+        expect(w.text()).not.toContain('Some Coalition');
+        const sourced = mountParty('UDA').text();
+        expect(sourced).toContain('Coalition: ORPP (2022)');
+        // the register is the source of the registration, not of the coalition
+        expect(sourced).not.toContain('Registration and coalition');
+        expect(sourced).toContain('Registration: ORPP register, orpp.or.ke');
+    });
+
     it('shows a recorded "none" coalition and leaves out what the data does not have', () => {
         expect(mountParty('DP').text()).toContain('2022 coalition');
         expect(mountParty('DP').text()).toContain('None');

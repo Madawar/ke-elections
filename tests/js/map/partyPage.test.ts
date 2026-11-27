@@ -440,6 +440,39 @@ describe('scope', () => {
         expect(title(w)).toBe('Nairobi City');
     });
 
+    it('a deep link with a scope focuses the map on it: the scope is always the focus or above it', async () => {
+        const w = await mountPage('/party/uda?in=county-47', null, UDA);
+        expect(profile(w).props('scope')).toEqual({ level: 'county', code: 47 });
+        expect(profile(w).props('focus')).toEqual({ level: 'county', code: 47 });
+        expect(title(w)).toBe('United Democratic Alliance');
+        // Opening is not choosing: nothing is highlighted until "Show on map".
+        expect(JSON.parse(stored('km.only') ?? '[]')).toEqual([]);
+        const m = await mountPage('/party/uda?in=constituency-290', null, UDA);
+        expect(profile(m).props('focus')).toEqual({ level: 'constituency', code: 290 });
+    });
+
+    it('Show on map from a scoped deep link colours that focus', async () => {
+        const w = await mountPage('/party/uda?in=county-47', null, UDA);
+        await w.get('[data-scope="kenya"]').trigger('click');
+        await w.get('[data-show-on-map="mp"]').trigger('click');
+        await flushPromises();
+        expect(stored('km.colour')).toBe('mp');
+        expect(JSON.parse(stored('km.only')!)).toEqual(['UDA']);
+        expect(title(w)).toBe('Nairobi City');
+        expect(w.findComponent(Legend).props('title')).toContain('Nairobi City');
+    });
+
+    it('Back onto a scoped deep link reproduces its focus and its profile', async () => {
+        const w = await mountPage('/party/uda?in=county-47', null, UDA);
+        await pick(w, MATHARE);
+        expect(title(w)).toBe('Mathare');
+        browserGo(0);
+        await flushPromises();
+        expect(title(w)).toBe('United Democratic Alliance');
+        expect(profile(w).props('scope')).toEqual({ level: 'county', code: 47 });
+        expect(profile(w).props('focus')).toEqual({ level: 'county', code: 47 });
+    });
+
     it('a deep link with a scope restores it, and so do Back and Forward', async () => {
         const w = await mountPage('/party/uda?in=county-47', null, UDA);
         expect(profile(w).props('scope')).toEqual({ level: 'county', code: 47 });

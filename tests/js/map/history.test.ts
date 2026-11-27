@@ -82,9 +82,15 @@ describe('focusFromPath', () => {
         expect(focusFromPath('/ward/1')).toEqual({ level: 'ward', code: 1 });
     });
 
-    it('reads a party page as no unit focus, and tells the party apart', () => {
+    it('reads a party page as no focus, or as its scope (a scope is the focus or above it)', () => {
         expect(focusFromPath('/party/uda')).toBeNull();
         expect(focusFromPath('/party/wdm-k/')).toBeNull();
+        expect(focusFromPath('/party/uda?in=county-47')).toEqual({ level: 'county', code: 47 });
+        expect(focusFromPath('/party/uda?in=constituency-290')).toEqual({
+            level: 'constituency',
+            code: 290,
+        });
+        expect(focusFromPath('/party/uda?in=nonsense')).toBeNull();
         expect(partyFromPath('/party/uda')).toBe('uda');
         expect(partyFromPath('/party/wdm-k/')).toBe('wdm-k');
         expect(partyFromPath('/county/47')).toBeNull();
@@ -395,11 +401,26 @@ describe('a party profile is a state of the map page', () => {
         expect(restore).toHaveBeenLastCalledWith(nairobi, { fit: true });
     });
 
+    it('a scoped deep link is its first entry: it remembers the scope as its focus, so Back onto it reproduces it', () => {
+        const county = { level: 'county' as const, code: 47 };
+        f = fakePort('/party/uda?in=county-47');
+        const h = createFocusHistory(f.port, restore);
+        h.record({ level: 'constituency', code: 290 }, 'user');
+        restore.mockClear();
+        f.go(0);
+        expect(restore).toHaveBeenLastCalledWith(county, {
+            fit: true,
+            party: 'uda',
+            partyScope: county,
+        });
+    });
+
     it('a deep link with a scope restores it', () => {
         f = fakePort('/party/uda?in=constituency-290');
         createFocusHistory(f.port, restore);
         f.pop('/party/odm?in=county-1');
-        expect(restore).toHaveBeenLastCalledWith(null, {
+        // an entry we did not make: the scope is the focus
+        expect(restore).toHaveBeenLastCalledWith({ level: 'county', code: 1 }, {
             fit: true,
             party: 'odm',
             partyScope: { level: 'county', code: 1 },

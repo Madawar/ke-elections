@@ -150,13 +150,17 @@ onMounted(async () => {
                 history: 'none',
                 animate: false,
             });
+        // A /party/{abbrev}?in=county-47 link: the scope is the focus (or above it), so the map
+        // starts on it, and the history's first entry remembers that focus.
+        const linked = props.party
+            ? parsePartyPath(location.pathname + location.search)?.scope
+            : null;
+        const scopeUnit = linked && units.get(linked.level, linked.code);
+        if (!props.unit && scopeUnit)
+            selectUnit(scopeUnit, { history: 'none', animate: false });
         focusHistory = createFocusHistory(historyPort, restoreFocus);
-        // A /party/{abbrev} link opens that party's profile (one the data does not have shows the map).
-        if (props.party)
-            showParty(
-                props.party.abbrev,
-                parsePartyPath(location.pathname + location.search)?.scope,
-            );
+        // ... and opens that party's profile (one the data does not have shows the map).
+        if (props.party) showParty(props.party.abbrev, linked);
         fetch(fileUrl(m, 'towns.geojson'))
             .then((r) => r.json())
             .then(
