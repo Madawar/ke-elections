@@ -50,7 +50,63 @@ export type ViewMapSpec = Pick<
     fold?: readonly string[];
     /** False: no ward lines, even on an MCA map (a small map of all 1,450 wards). */
     wardLines?: boolean;
+    /**
+     * A unit marked inside the frame (the focus), as the ward card's locators have it: it is
+     * filled in the ink colour and every other unit of its level in the no-data colour, and it is
+     * outlined in place of the frame. Never a seat's colour, which could be read as a party. `seat`
+     * should be the seat held at the mark's level (`mca` for a ward, `mp` for a constituency).
+     */
+    mark?: { level: 'constituency' | 'ward'; code: number };
+    /** Draw the map on the theme's surface colour (a paper on the card), not its land colour. */
+    onSurface?: boolean;
 };
+
+/** The seat held at a marked unit's level: which fills the mark's colouring colours. */
+const MARK_SEAT = { constituency: 'mp', ward: 'mca' } as const;
+
+/**
+ * The least size, in pixels, a marked unit may be drawn at and still be found. A smaller one gets
+ * a ring around it (see `markRing`).
+ */
+export const MARK_MIN_PX = 10;
+/** The ring's radius and line width, in pixels. */
+const RING_RADIUS = Math.round(MARK_MIN_PX * 0.8);
+const RING_WIDTH = 2;
+
+const mercY = (lat: number) =>
+    Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+const mercSize = ([w, s, e, n]: [number, number, number, number]) => ({
+    dx: ((e - w) * Math.PI) / 180,
+    dy: mercY(n) - mercY(s),
+});
+/** The padding `renderViewMap` leaves around the frame in a box. */
+const mapPadding = (map: Box) => Math.round(Math.min(map.w, map.h) * 0.03);
+
+/**
+ * Where to ring the marked unit, when it is drawn smaller than MARK_MIN_PX across in this box (a
+ * city ward inside its county); null when it is large enough to find, or there is no mark. `drawn`
+ * is its larger side in pixels, `centre` the middle of its bounding box.
+ */
+export function markRing(
+    view: ViewMapSpec,
+    ctx: Pick<ViewMapContext, 'index'>,
+    map: Box,
+): { centre: [number, number]; drawn: number } | null {
+    if (!view.mark || !view.focus) return null;
+    const unit = ctx.index.get(view.mark.level, view.mark.code);
+    if (!unit) return null;
+    const frame = mercSize(view.focus.b);
+    const pad = mapPadding(map);
+    const scale = Math.min(
+        (map.w - 2 * pad) / frame.dx,
+        (map.h - 2 * pad) / frame.dy,
+    );
+    const mark = mercSize(unit.b);
+    const drawn = Math.max(mark.dx, mark.dy) * scale;
+    if (drawn >= MARK_MIN_PX) return null;
+    const [w, s, e, n] = unit.b;
+    return { centre: [(w + e) / 2, (s + n) / 2], drawn };
+}
 
 /** The seats with these parties' colours unset, so everything draws them in the "Other" grey. */
 export const foldParties = (
@@ -67,7 +123,7 @@ export const foldParties = (
         : seats;
 
 /** The halo's width in pixels behind each county line, where a spec asks for one. */
-export const COUNTY_HALO_WIDTH = 3.2;
+export const COUNTY_HALO_WIDTH = 2.2;
 
 export interface ViewMapContext {
     manifest: Record<string, string>;
@@ -83,6 +139,12 @@ export function viewColouring(
     theme: MapTheme,
 ): Colouring {
     if (view.colouring) return view.colouring;
+    if (view.mark)
+        return {
+            mode: { kind: 'seat', seat: MARK_SEAT[view.mark.level] },
+            colours: new Map([[view.mark.code, theme.ink]]),
+            fallback: theme.noData,
+        };
     if (view.fold?.length) seats = foldParties(seats, view.fold);
     const tokens = {
         noData: theme.noData,
@@ -117,6 +179,8 @@ export function viewStyle(
     view: ViewMapSpec,
     ctx: ViewMapContext,
     theme: MapTheme,
+    /** The map's box on the card: with it, a marked unit too small to find is ringed. */
+    map?: Box,
 ): StyleSpecification {
     const colouring = viewColouring(view, ctx.seats, theme);
     const unit = view.focus
@@ -165,7 +229,14 @@ export function viewStyle(
         )
         .map((l): LayerSpecification =>
             l.type === 'background'
-                ? { ...l, paint: { 'background-color': theme.land } }
+                ? {
+                      ...l,
+                      paint: {
+                          'background-color': view.onSurface
+                              ? theme.surface
+                              : theme.land,
+                      },
+                  }
                 : l,
         )
         .flatMap((l): LayerSpecification[] =>
@@ -185,7 +256,36 @@ export function viewStyle(
                   ]
                 : [l],
         );
-    return { ...base, layers };
+    const ring = map ? markRing(view, ctx, map) : null;
+    if (!ring) return { ...base, layers };
+    return {
+        ...base,
+        sources: {
+            ...base.sources,
+            'mark-ring': {
+                type: 'geojson',
+                data: {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: { type: 'Point', coordinates: ring.centre },
+                },
+            },
+        },
+        layers: [
+            ...layers,
+            {
+                id: 'mark-ring',
+                type: 'circle',
+                source: 'mark-ring',
+                paint: {
+                    'circle-radius': RING_RADIUS,
+                    'circle-opacity': 0,
+                    'circle-stroke-color': theme.ink,
+                    'circle-stroke-width': RING_WIDTH,
+                },
+            },
+        ],
+    };
 }
 
 /**
@@ -201,14 +301,16 @@ export function renderViewMap(
     theme: MapTheme,
     map: Box,
 ): Promise<string> {
-    const pad = Math.round(Math.min(map.w, map.h) * 0.03);
+    const pad = mapPadding(map);
+    // A marked unit is outlined in place of the frame.
+    const outlined = view.mark ?? view.focus;
     return renderMapImage({
-        style: viewStyle(view, ctx, theme),
+        style: viewStyle(view, ctx, theme, map),
         bounds: view.focus?.b ?? KENYA_BOUNDS,
         width: map.w,
         height: map.h,
-        highlight: view.focus
-            ? { level: view.focus.level as MapLevel, code: view.focus.code }
+        highlight: outlined
+            ? { level: outlined.level as MapLevel, code: outlined.code }
             : undefined,
         padding: pad,
         maxZoom: VIEW_MAP_MAX_ZOOM,

@@ -1,6 +1,12 @@
 // The text that goes with a shared view: the headline, the numbers behind it, the source with
 // its date, the link and the tags. Instagram and TikTok allow 2,200 characters; X allows 280.
 import {
+    type BallotsCardView,
+    ballotRows,
+    ballotsHeadline,
+    ballotsScopeLines,
+} from './ballotsCard';
+import {
     FIVE_SEATS_HEADLINE,
     type FiveSeatsCardView,
     fiveSeatsScope,
@@ -243,6 +249,37 @@ export function topCountiesCaption(
         `${scope.lead} ${scope.list}`,
         ...card.rows.map(topCountiesRowLine),
         ...(note ? ['', note] : []),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "Who represents this ward": the headline, where the ward is, one line per seat in
+ * ballot order ("Governor (Kakamega County): <name> (ODM, Orange Democratic Movement). Elected in
+ * August 2022."), the source with its date, the link and the tags. On X only the headline, source,
+ * link and tags fit.
+ */
+export function ballotsCaption(
+    card: BallotsCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = ballotsHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    const lines = ballotRows(card).map((r) => {
+        const seat = `${r.label} (${r.place})`;
+        if (r.name === null) return `${seat}: no approved data yet.`;
+        return `${seat}: ${r.name}${r.party ? ` (${r.party.line})` : ''}.${r.since ? ` ${r.since}.` : ''}`;
+    });
+    return [
+        clip(headline, 300),
+        '',
+        `${ballotsScopeLines(card)[0]}.`,
+        ...lines,
         '',
         sourceText(card, 10),
         url,

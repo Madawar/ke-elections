@@ -5,6 +5,13 @@
 // here, so a new kind of card is a new entry, not a new branch in the dialog.
 import type { Component } from 'vue';
 import {
+    type BallotsCardView,
+    ballotsCardView,
+    ballotsHeadline,
+} from './ballotsCard';
+import { type BallotsLayout, ballotsLayout } from './ballotsLayout';
+import {
+    ballotsCaption,
     captionFor,
     fiveSeatsCaption,
     leadersCaption,
@@ -52,6 +59,7 @@ import {
     seatsInTheme,
     withTheme,
 } from './viewState';
+import BallotsCard from '@/components/export/BallotsCard.vue';
 import FiveSeatsCard from '@/components/export/FiveSeatsCard.vue';
 import LeadersCard from '@/components/export/LeadersCard.vue';
 import NumbersCard from '@/components/export/NumbersCard.vue';
@@ -68,14 +76,16 @@ export type ShareableView =
     | LeadersCardView
     | NumbersCardView
     | TopCountiesCardView
-    | FiveSeatsCardView;
+    | FiveSeatsCardView
+    | BallotsCardView;
 export type ShareLayout =
     | ViewLayout
     | PartyLayout
     | LeadersLayout
     | NumbersLayout
     | TopCountiesLayout
-    | FiveSeatsLayout;
+    | FiveSeatsLayout
+    | BallotsLayout;
 export type ShareKind = ShareableView['kind'];
 
 /** What a layout is laid out for besides the card: its headline, link and map shape. */
@@ -339,6 +349,51 @@ const FIVE_SEATS: CardKind<FiveSeatsCardView> = {
     component: FiveSeatsCard,
 };
 
+const BALLOTS: CardKind<BallotsCardView> = {
+    key: 'ballots',
+    // Five papers down the card: portrait for feeds, story for TikTok and Reels.
+    sizes: ['portrait', 'story'],
+    // Editable, as the leaders card it replaces on a ward.
+    editableHeadline: true,
+    label: () => 'Who represents',
+    headline: ballotsHeadline,
+    caption: ballotsCaption,
+    layout: ballotsLayout,
+    // One map per paper, each framed and marked by code, on the paper's surface: the county with
+    // the ward marked, the county with the constituency, the constituency with the ward.
+    maps: (layout: BallotsLayout, view) =>
+        view.papers.map((paper, i) => ({
+            key: paper.key,
+            box: layout.papers[i].map,
+            spec: {
+                seat: paper.map.mark.level === 'ward' ? 'mca' : 'mp',
+                only: [],
+                focus: paper.map.frame,
+                showSurroundings: false,
+                mark: paper.map.mark,
+                wardLines: false,
+                onSurface: true,
+            },
+        })),
+    aspect: (view) => viewMapAspect({ focus: view.papers[0].map.frame } as ViewMapSpec),
+    copy: (view) => ({
+        title: 'Share who represents this ward',
+        description: `The five elected seats of ${view.ward.name} ward and who holds them, with sources, sized for Instagram or stories.`,
+    }),
+    // Taken again from the seats in that theme, so independents follow it.
+    inTheme: (view, theme, ctx) =>
+        ballotsCardView({
+            seats: seatsInTheme(ctx.seats, theme),
+            index: ctx.index,
+            ward: view.ward.code,
+            theme,
+            sample: view.sample,
+        }) ?? { ...view, theme },
+    filename: (view, size) =>
+        `kenya-electoral-map-ward-${view.ward.code}-who-represents-${size}.png`,
+    component: BallotsCard,
+};
+
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
 
 const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
@@ -348,6 +403,7 @@ const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
     numbers: NUMBERS_CARD,
     topCounties: TOP_COUNTIES,
     fiveSeats: FIVE_SEATS,
+    ballots: BALLOTS,
 };
 
 // TypeScript cannot follow a union of views to the matching entry, so this one lookup says it.

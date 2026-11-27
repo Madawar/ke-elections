@@ -50,6 +50,14 @@ export interface LeaderRow {
     holder: LeaderHolder | null;
 }
 
+/** How a holder came to the seat, as the panel and the cards say it: "Elected", "By-election", "Succeeded". */
+export const basisLabel = (basis: string): string =>
+    basis === 'by_election'
+        ? 'By-election'
+        : basis === 'succession'
+          ? 'Succeeded'
+          : 'Elected';
+
 /** The seat's ballot colour; the Deputy President is elected on the President's ballot. */
 export const leaderColour = (seat: LeaderSeat): string =>
     SEAT_COLOURS[seat === 'deputy_president' ? 'president' : seat];

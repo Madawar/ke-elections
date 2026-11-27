@@ -15,7 +15,7 @@ from here.
 | Top-10 fixes | The map in the bars' colour (no count scale, no key), rows that keep their size, the story's map centred under the rows | done | see `git log` (`fix(export): top-10 map…`) |
 | D | "Kenya, five ways" (mock-up 5), square and story, offered as "Five seats" with nothing focused | done | see `git log` (`feat(export): "Kenya, five ways"…`) |
 | Review fixes 2 | Top-10: ties by code tested against an index out of code order, "with any" when the list is complete, singular wordings tested, the name column gives way before the rows shrink. Five seats: the story three across, the key inside its width, one title gap, the caption's key line. National "County seats" shares the national cards; closing the dialog stops its queued maps | done | see `git log` (`fix(export): …` after `1e439f9`) |
-| E | "Who represents this ward" (mock-up 1) | not started | |
+| E | "Who represents this ward" (mock-up 1), portrait and story, three locator maps (a frame with a marked unit, new in the map renderer), replacing the ward's leaders card | done | see `git log` (`feat(export): "Who represents this ward"…`) |
 
 ### Task A: what did not change
 
@@ -69,6 +69,28 @@ cell; its maps are 242 × 294, all five one size and lined up. The story's maps 
 the ruling). The five maps and the PNG were ready about 2.7 seconds after choosing the card, in
 each size (headless Chromium, software GL). The seat view, leaders and party PNGs are still
 byte-identical to the ones taken before this round.
+
+### Review fixes 2 and Task E: how they were checked
+
+Each Part 1 item has a test that fails without its fix: the reversed-index tie test failed with
+`|| a.code - b.code` removed from `topCounties`; the "with any", key-inside-its-width, MP long-names
+row size, County seats share and close-mid-draw tests each failed before their change. The
+five-seats story was downloaded again (light and dark) and looked at: maps 242 × 294, the key in
+four columns under the grid, the titles with one gap.
+
+Task E was downloaded from the running app for Isukha West (`/ward/1046`) and Ngei
+(`/ward/1448`), portrait and story, light and dark ("Share leaders" in the ward's panel), and
+looked at beside mock-up 1, with the three locator maps of each zoomed in both themes. Isukha West
+is found in Kakamega without help; Ngei in Nairobi City is under the least visible size and gets
+its ring; Mathare in Nairobi City and the wards in their constituencies read as ink fills. The
+dialog opens the card on portrait when the stored size is square (a card without square), and the
+stored size is not overwritten. The seat view, leaders and party PNGs (square) are byte-identical
+before the first change of this round and after the last.
+
+The top-10 halo (owner's question G): at 3.2px it ate most of Nairobi City (listed for ODM on MP
+seats); at 2.2px Nairobi's fill shows, and Kitui and Makueni (independents, MCA) still stay apart
+in both themes. Mombasa is about 4px across on the square map: its county line alone covers it,
+with or without the halo, so it shows no fill (see the ruling).
 
 ## Rulings
 
@@ -313,7 +335,74 @@ Each one: what was decided, why, and what it costs if it is wrong.
   so the queued slots are skipped rather than drawn (up to four for "Five seats"), and a quick
   reopen does not wait behind them — cost if wrong: none.
 
+- **Ruling: the ward card's locators are a new, optional `ViewMapSpec.mark`** (`{ level, code }`;
+  the frame stays the spec's `focus`): the marked unit is filled in the theme's ink and every other
+  unit of its level in the no-data colour, it is outlined (the renderer's "selected" line) in place
+  of the frame, and nothing outside the frame is drawn, as on any focused card map. `seat` is the
+  seat held at the mark's level (`mca` for a ward, `mp` for a constituency); ward lines are off
+  (`wardLines: false`), so the county frames show their constituency lines. `onSurface` draws the
+  map on the paper's surface colour. Existing specs are unchanged (byte-identical PNGs, and a test
+  that a spec without a mark gives the same style with or without a box) — cost if wrong: the
+  `mark` branch in `viewColouring` and `renderViewMap`.
+- **Ruling: a marked unit drawn smaller than 10px across (`MARK_MIN_PX`) gets an ink ring** (radius
+  8, 2px) around the middle of its bounding box, as the last layer: Ngei in Nairobi City on the
+  portrait card. The size is worked out from the frame and the box as `renderViewMap` fits them
+  (`markRing`, tested) — cost if wrong: a ring on a unit that would have been found anyway, or none
+  where it is needed.
+- **Ruling: the ward card's headline is editable, as the leaders card it replaces**, default "Who
+  represents <ward> ward"; on two lines the default breaks after "Who represents" so the ward's name
+  stays whole when it fits (an edited headline is laid out as it is) — cost if wrong:
+  `editableHeadline` and `placeWhole`.
+- **Ruling: the scope line is the longest of "<ward> ward is in <constituency> constituency,
+  <county> County", "In <constituency> constituency, <county> County", "In <county> County" that
+  fits at 80% of the scope size** — cost if wrong: strings in `ballotsScopeLines`.
+- **Ruling: "Elected in August 2022" is `basisLabel` (moved from `UnitPanel.vue` to
+  `lib/leaders.ts`, so the panel and the card share it) and the month of `started_on`**; with no date
+  it is the word alone. The leaders card's "In office since …" is a different line and was left as
+  it is — cost if wrong: `holderSince` in `ballotsCard.ts`.
+- **Ruling: the party line is "<ABBREV>, <registered name>" with the abbreviation in ink**
+  ("Independent" alone; the abbreviation alone when the data has no other name); a holder whose
+  record names no party has no chip and no party line — cost if wrong: `rowOf`.
+- **Ruling: one type scale for every seat on the card**, the largest (from 1.12 down to 0.8) at
+  which the three papers fit between the scope line and the footer; no word below the footer's
+  text size. A name steps down to 85% of the name size (`NAME_FLOOR`), then wraps onto more lines,
+  and its seat's block and paper grow; it is never cut. The room left over pads every seat alike,
+  up to 1.5 × the seat-label size, so the papers are evenly padded (tested) — cost if wrong:
+  `SCALES`, `PAD_MAX` in `ballotsLayout.ts`.
+- **Ruling: each paper's map sits in a right-hand column a quarter of the paper wide, in its
+  frame's shape, centred on the paper's height**; a hairline between the county's three seats runs
+  across the words' column only, as in the mock-up — cost if wrong: `MAP_COL`.
+- **Ruling: the strip has no deeper lid** (the card is about all five seats, as "Five seats") —
+  cost if wrong: one argument.
+- **Ruling: dialog copy "Share who represents this ward" / "The five elected seats of <ward> ward
+  and who holds them, with sources, sized for Instagram or stories."; label "Who represents"; file
+  `kenya-electoral-map-ward-<code>-who-represents-<size>.png`; the Instagram caption gives where the
+  ward is and one line per seat, "Governor (Kakamega County): <name> (ODM, Orange Democratic
+  Movement). Elected in August 2022." (a vacancy: "…: no approved data yet."); X is the shared
+  `xCaption`** — cost if wrong: strings.
+- **Ruling: the card's sources are the five rows' sources** (`leaderSources` of `leadersFor(ward)`) —
+  cost if wrong: one line.
+- **Ruling: on a ward, `leadersOf` in `Map.vue` gives the ward card**, so both "Share leaders" and
+  "Share this view" ("This view", "Who represents") reach it from the one place; a county and a
+  constituency still get their leaders card (page tests). Nothing of the leaders card was removed:
+  `leadersCardView` still makes a ward's card when asked directly (its tests stay), it is only no
+  longer offered — cost if wrong: one branch.
+- **Ruling: the top-10 map's county halo is 2.2px, not 3.2px**: at 3.2 it covered most of Nairobi
+  City's fill; Kitui and Makueni stay apart at 2.2 in both themes (looked at, zoomed). Mombasa, about
+  4px across on the square, shows no fill under its own county line at either width; a ring like
+  the ward card's would be the fix if the owner wants it — cost if wrong: `COUNTY_HALO_WIDTH`.
+
 ## Parked minor findings
+
+- Task E: the map-mark tests (`viewMapMark.test.ts`) and the ward card's tests were written first
+  but first run only against missing modules (import errors), not against wrong code; the
+  headline's "keep the ward's name whole" rule was written just before its test (the story PNG had
+  shown "Isukha / West ward"). The page tests for the ward's entry points failed first as they
+  should.
+- The ward card's MP and MCA maps are small on the story (about 120 px tall): the papers' height
+  comes from their words, and the map fits the paper.
+- `leadersCardView` can still make a ward's "Leaders of <ward>" card (its tests use one); nothing
+  offers it any more.
 
 - The dialog tests store the size as `JSON.stringify('square')`, which `useStorage` (a string
   default, stored raw) reads as unknown and replaces with the default, so those tests never
@@ -337,8 +426,6 @@ Each one: what was decided, why, and what it costs if it is wrong.
 
 ## What is next
 
-Task E: "Who represents this ward" (mock-up 1): five ballot papers for one ward, portrait and
-story, three locator map slots, replacing the ward's leaders card; "Share leaders" in a ward's
-panel opens it and "Share this view" lists "This view" and "Who represents". The owner may also
-want to decide on the top-10 story map's size and the five-seats story arrangement (see the
-rulings).
+All five tasks are done: a final review of the branch (the plan's "Review focus"), then the owner's
+look. Open for the owner: the top-10 story map's size, the five-seats story (now three across, maps
+242 × 294), and whether a listed county as small as Mombasa should get a ring on the top-10 map.

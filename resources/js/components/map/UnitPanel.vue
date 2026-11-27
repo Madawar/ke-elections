@@ -13,6 +13,7 @@ import {
     type LeaderRow,
     leaderColour,
     leaderSources,
+    basisLabel,
     leadersFor,
     mcaSummary,
 } from '@/lib/leaders';
@@ -105,12 +106,6 @@ watch(
     () => (wardsOpen.value = false),
 );
 const wardOf = (row: LeaderRow) => props.index.get('ward', row.unit.code);
-const basisLabel = (basis: string) =>
-    basis === 'by_election'
-        ? 'By-election'
-        : basis === 'succession'
-          ? 'Succeeded'
-          : 'Elected';
 const seatList = ref<HTMLElement | null>(null);
 let stopWaiting: (() => void) | null = null;
 async function showHighlight() {

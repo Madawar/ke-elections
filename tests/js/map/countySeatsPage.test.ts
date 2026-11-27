@@ -91,6 +91,7 @@ const NAIROBI = { level: 'county', code: 47, name: 'Nairobi City' };
 const MATHARE = { level: 'constituency', code: 290, name: 'Mathare' };
 const county = { ...NAIROBI, ancestors: [] };
 const constituency = { ...MATHARE, ancestors: [NAIROBI] };
+const ward = { level: 'ward', code: 1448, name: 'Ngei', ancestors: [NAIROBI, MATHARE] };
 
 async function mountPage(search = '', unit: { name: string } | null = null) {
     window.history.replaceState({}, '', `/${search}`);
@@ -337,5 +338,44 @@ describe('sharing the leaders of a unit', () => {
         expect(dialog.attributes('data-share-kind')).toBe('leaders');
         expect(dialog.attributes('data-share-unit')).toBe('Mathare');
         expect(dialog.attributes('data-share-cards')).toBe('Leaders');
+    });
+
+    it('on a ward, "Share leaders" opens "Who represents this ward", and "Share this view" lists "This view" and "Who represents"', async () => {
+        const w = await mountPage('?seat=mca', ward);
+        await w
+            .findComponent(UnitPanel)
+            .get('[data-share-leaders]')
+            .trigger('click');
+        await flushPromises();
+        const dialog = w.get('[data-share-kind]');
+        expect(dialog.attributes('data-share-kind')).toBe('ballots');
+        expect(dialog.attributes('data-share-cards')).toBe('Who represents');
+        w.unmount();
+        document.body.innerHTML = '';
+        const v = await mountPage('?seat=mca', ward);
+        v.findComponent(Legend).vm.$emit('share');
+        await flushPromises();
+        const shared = v.get('[data-share-kind]');
+        expect(shared.attributes('data-share-kind')).toBe('party');
+        expect(shared.attributes('data-share-cards')).toBe('This view|Who represents');
+    });
+
+    it('keeps the leaders card for a county and a constituency from the panel', async () => {
+        for (const [unit, cards] of [
+            [county, 'County leaders'],
+            [constituency, 'Leaders'],
+        ] as const) {
+            const w = await mountPage('?seat=mca', unit);
+            await w
+                .findComponent(UnitPanel)
+                .get('[data-share-leaders]')
+                .trigger('click');
+            await flushPromises();
+            const dialog = w.get('[data-share-kind]');
+            expect(dialog.attributes('data-share-kind')).toBe('leaders');
+            expect(dialog.attributes('data-share-cards')).toBe(cards);
+            w.unmount();
+            document.body.innerHTML = '';
+        }
     });
 });

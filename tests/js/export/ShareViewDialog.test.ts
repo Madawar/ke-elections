@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { leadersCardView } from '@/lib/export/leadersCard';
+import { ballotsCardView } from '@/lib/export/ballotsCard';
 import { fiveSeatsCardView } from '@/lib/export/fiveSeatsCard';
 import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
@@ -463,7 +464,13 @@ describe('ShareViewDialog: "By the numbers" beside the national view', () => {
             index: numbersIndex,
             theme: 'dark',
         });
-        for (const card of [kenya, numbers, leaders, party, top, five]) {
+        const ballots = ballotsCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            ward: 1046,
+            theme: 'dark',
+        })!;
+        for (const card of [kenya, numbers, leaders, party, top, five, ballots]) {
             const w = mount(ShareViewDialog, {
                 props: { open: true, view: card, context: numbersContext },
                 attachTo: document.body,
@@ -531,5 +538,48 @@ describe('ShareViewDialog: "By the numbers" beside the national view', () => {
         expect(spec.colouring).toEqual(topCountiesColouring(dark, THEMES.dark));
         expect(spec.haloCountyLines).toBe(true);
         expect(spec.focus).toBeNull();
+    });
+
+    it('draws the ward card’s three maps, framed and marked by code, before it offers the PNG', async () => {
+        const ballots = ballotsCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            ward: 1046,
+            theme: 'dark',
+        })!;
+        localStorage.setItem('km.viewSize', 'square');
+        mount(ShareViewDialog, {
+            props: { open: true, view: ballots, context: numbersContext },
+            attachTo: document.body,
+        });
+        await settle();
+        // No square: the card opens on its first size, portrait.
+        expect(
+            [...document.querySelectorAll<HTMLInputElement>('input[name="view-size"]')].map(
+                (i) => i.value,
+            ),
+        ).toEqual(['portrait', 'story']);
+        expect(document.querySelector('[data-preview] svg')?.getAttribute('viewBox')).toBe(
+            '0 0 1080 1350',
+        );
+        for (let i = 0; i < 3; i++) {
+            expect(download().disabled).toBe(true);
+            renders[i].resolve(`data:image/png;base64,M${i}`);
+            await settle();
+        }
+        expect(
+            renders.map((r) => {
+                const s = r.spec as { focus: { level: string; code: number }; mark: unknown };
+                return [s.focus.level, s.focus.code, s.mark];
+            }),
+        ).toEqual([
+            ['county', 37, { level: 'ward', code: 1046 }],
+            ['county', 37, { level: 'constituency', code: 209 }],
+            ['constituency', 209, { level: 'ward', code: 1046 }],
+        ]);
+        expect(document.querySelectorAll('[data-preview] image[data-map]')).toHaveLength(3);
+        expect(download().disabled).toBe(false);
+        // The stored size is left as it was.
+        expect(localStorage.getItem('km.viewSize')).toBe('square');
     });
 });

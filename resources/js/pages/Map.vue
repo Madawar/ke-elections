@@ -83,6 +83,7 @@ import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { formatAsOf } from '@/lib/export/format';
 import { leadersCardView } from '@/lib/export/leadersCard';
+import { ballotsCardView } from '@/lib/export/ballotsCard';
 import { fiveSeatsCardView } from '@/lib/export/fiveSeatsCard';
 import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
@@ -1104,15 +1105,23 @@ const canShareView = computed(() => {
 });
 // The cards the share dialog offers, the first being the one it opens on; empty while it is shut.
 const sharedCards = shallowRef<ShareCard[]>([]);
+// A county's or a constituency's leaders card; a ward's is "Who represents this ward".
 const leadersOf = (focus: FocusSelection | null) =>
-    index.value && focus
-        ? leadersCardView({
-              seats: seats.value,
-              index: index.value,
-              focus,
-              theme: theme.value,
-          })
-        : null;
+    !index.value || !focus
+        ? null
+        : focus.level === 'ward'
+          ? ballotsCardView({
+                seats: seats.value,
+                index: index.value,
+                ward: focus.code,
+                theme: theme.value,
+            })
+          : leadersCardView({
+                seats: seats.value,
+                index: index.value,
+                focus,
+                theme: theme.value,
+            });
 /**
  * "Top 10 counties" for all of Kenya: a seat a county has more than one of (MP, MCA) and exactly
  * one group highlighted (a party or the independents) that holds any of it; otherwise null.
@@ -1172,7 +1181,10 @@ function shareView() {
     ]);
 }
 
-/** The leaders card of the focused unit ("County leaders in <county>", "Leaders of <unit>"). */
+/**
+ * The leaders card of the focused unit ("County leaders in <county>", "Leaders of <constituency>"),
+ * or a ward's "Who represents" card.
+ */
 function shareLeaders() {
     sharedCards.value = shareCards([leadersOf(focusOf(selection.value))]);
 }
