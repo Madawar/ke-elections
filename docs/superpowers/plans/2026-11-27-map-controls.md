@@ -368,3 +368,50 @@ and MCA for the wards would be cool."
 - [ ] **Step 4:** Run `npm run test:js`, `types:check` and the Sail build. Expected: PASS.
 - [ ] **Step 5:** Playwright as listed above. Look at the shots.
 - [ ] **Step 6:** Commit: `feat(map): MP outlines over MCA wards, with both in the legend and cards`.
+
+### Additions from the owner on 2026-11-27 (binding on Tasks 5 and 6)
+
+**Task 5 grows into a "who represents it" team, on screen and in exports.** The owner said: "In
+constituency, can you in export and screen show the team leading it? On the side it shows only
+MP."
+- **Panel for a focused constituency:** a section "Who represents <constituency>". It lists:
+  - The MP.
+  - The county-wide Governor, Senator and Woman Rep, labelled "(<county>, county-wide)".
+  - The MCAs: a summary such as "MCAs (6): ODM 3, UDA 3" that expands to the list of wards and
+    their MCAs. Each name is a link that focuses that ward.
+- **Panel for a focused ward:** the MCA first, then the constituency's MP, then the county-wide
+  three.
+- **Row format:** each row has the seat's ballot-lid colour bar, the seat title, the name exactly
+  as the data spells it, the party chip and name, and the source.
+- **Rules:**
+  - Nothing is invented. A seat with no holder shows "No approved data yet".
+  - Order is fixed by seat: MP or MCA first, then Governor, Senator, Woman Rep. Never by party.
+- **Export, "Leaders of <unit>" card,** in all four sizes:
+  - **Constituency card:** the map (wards coloured by MCA), the MP block, the three county-wide
+    rows, and an MCA mix bar with "of N wards".
+  - **Ward card:** the MCA block, the MP, and the three county-wide rows.
+  - The county leaders card from Task 5 is the county version of the same card.
+  - Every card has its sources and "as of" date.
+
+**Task 6 also puts MCA names on the map, without clutter.** The owner said: "For wards can they
+be detailed and colour-code the wards, and if possible show the elected person on the map, if
+possible and not ugly."
+- Inside a focused constituency, wards are filled by their MCA's party. Task 1 makes MCA the
+  default mode there.
+- **Ward labels gain a second, smaller, muted line:** "<MCA name> (<ABBREV>)". For example,
+  "Ngei" on the first line, then the holder's name exactly as in the data, followed by "(ODM)".
+- **When the second line shows:**
+  - Only from about zoom 11.5, or when the ward's constituency is focused.
+  - Only when the ward is large enough on screen.
+  - The MapLibre symbol layer uses `text-optional` or a separate symbol layer. The name line
+    drops before the ward name does, never overlaps, and is never cut mid-word.
+  - Long names wrap to a maximum of two lines; if that doesn't fit, the line isn't shown.
+- **Fallback:** if Playwright shows dense constituencies (for example in Nairobi) cluttered at
+  common zooms, show MCA names only for the selected or hovered ward, and record that in the
+  report.
+- **Tests:**
+  - The label expression includes the name line only above the zoom threshold or when focused.
+  - Names are verbatim from the data.
+  - "no data" wards show only the ward name.
+- **Playwright:** Mathare focused and Ngei selected, on phone and desktop, light and dark, plus a
+  large rural constituency. Look at the shots to judge whether it's tidy.
