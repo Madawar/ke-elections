@@ -38,8 +38,11 @@ const LEGEND_LEFT = SIDE_PANEL_WIDTH + 16;
 const CONTROLS_CLEARANCE = 56;
 /** A fitted unit keeps at least this much map width; below it the legend overlaps the map instead. */
 const MIN_UNIT_WIDTH = 320;
-/** From this width the seat chips sit beside the search bar; below it they sit under it. */
-export const CHIPS_BESIDE_SEARCH = 1280;
+/**
+ * From this width the seat chips sit beside the search bar; below it they sit under it. Seven
+ * chips need about 640px beside the panel and the search bar (864px), so: Tailwind's 2xl.
+ */
+export const CHIPS_BESIDE_SEARCH = 1536;
 /** The top margin: the search bar, plus the chip row under it where the chips do not sit beside it. */
 const TOP_WITH_SEARCH = 72;
 const TOP_WITH_CHIPS_BELOW = 120;

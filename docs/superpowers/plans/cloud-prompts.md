@@ -168,3 +168,107 @@ Task 11:
 
 Stop and tell me if a task needs a decision only I can make.
 ```
+
+---
+
+## Leaders branch (v0.3.0): map-controls plan, Tasks 5 and 6
+
+```
+Repo Madawar/ke-elections, environment "Elections App". Build Tasks 5 and 6 of the map-controls
+plan on the existing branch feature/leaders. Don't merge into develop or main, don't tag, and
+don't release: push the branch only. The release is done afterwards from another session.
+
+Setup
+1. git fetch origin && git checkout feature/leaders && git pull --ff-only.
+   The branch is develop at v0.2.0 plus roadmap notes.
+2. If no [session-start] lines appeared at startup, run
+   CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR=$PWD bash scripts/cloud/session-start.sh
+   in the background and wait for it. Then run php artisan db:seed --force.
+   Check: php artisan test and npm run test:js both pass before you change anything.
+
+Read first. These carry all the state; you have no other memory.
+- CLAUDE.md. Its rules are non-negotiable:
+  - IEBC codes, never names.
+  - Never invent office holders.
+  - Neutral: every number shows its source and "as of" date.
+  - No AI-looking UI.
+  - IEBC ballot colours, Archivo type.
+- docs/superpowers/plans/2026-11-27-map-controls.md. Tasks 1–4 are already shipped (v0.2.0).
+  Your requirements are:
+  - "Global Constraints" and "Review Focus"
+  - "Task 5: County leadership card, and the striped "County seats" map view"
+  - "Task 6: MP outlines over MCA wards"
+  - "Additions from the owner on 2026-11-27 (binding on Tasks 5 and 6)"
+  - "Additions to Task 5's export cards"
+  - "Addition to Task 5: the "Leaders here" strip in the legend box"
+  When two sections disagree, the later owner addition wins.
+- docs/superpowers/plans/roadmap.md, the "Parked minor findings" section. Fix one only if you are
+  already editing that code.
+- Existing code to reuse, not duplicate:
+  - Seat-mode rule: resources/js/lib/map/seatMode.ts, and chooseMode/selectUnit in Map.vue.
+  - Legend counts: lib/legend.ts buildLegend and lib/seats.ts legendScope.
+  - Export system: lib/export/* (viewLayout sizes and story safe zones, ViewCard,
+    ShareViewDialog, shareView.ts, caption.ts).
+  - Party profile: lib/party.ts.
+  - History: lib/map/history.ts.
+
+Order of work, committing and pushing after each step:
+- Task 5a: resources/js/lib/leaders.ts with leadersFor(unit, seats), plus tests. Then use it in
+  three places, so the list is built once:
+  - the panel's "Who represents <unit>" section
+  - the legend box's "Leaders here" strip
+  - the leaders strip on MCA cards
+- Task 5b:
+  - Bigger card maps: about 15% on all cards, about 25% on MCA cards.
+  - The "Leaders of <unit>" and "County leaders in <county>" cards in all four sizes.
+- Task 5c: the striped "County seats" chip and map mode. Use fill-pattern images generated at
+  runtime, in fixed stripe order Governor, Senator, Woman Rep. Add its legend.
+- Task 6:
+  - MP party-colour outlines over MCA ward fills, from constituency zoom down.
+  - "MP: <ABBREV>" badges.
+  - A two-section legend.
+  - The MP block on constituency MCA cards.
+  - MCA names as a second ward-label line, only where they fit. If they look cluttered in
+    Nairobi, fall back to showing names on the selected ward only, and say so.
+
+How to work
+- TDD: write the failing test, see it fail, then make it pass.
+- If the superpowers plugin is available, use superpowers:subagent-driven-development:
+  - An implementer and a task reviewer for each task.
+  - A final whole-branch review on the most capable model.
+  Otherwise, implement each task yourself, then dispatch one fresh review subagent per task. Give
+  it the requirement sections, the diff and the screenshots, and fix its Critical and Important
+  findings.
+- When something is ambiguous, decide and keep going. Log each decision in
+  docs/superpowers/plans/2026-11-27-leaders-progress.md as
+  "Ruling: <what> — <why> — <cost if wrong>".
+- Keep that same file as a running log, so a later session can resume:
+  - which tasks are done, with their commits
+  - parked minor findings
+  - what's next
+- After each task, run the checks: php artisan test, npm run test:js, npm run types:check,
+  npm run build. Run the full JS suite against a fresh build. Known flake: colourSync and
+  partyPage tests can time out under parallel load, so re-run once before investigating.
+
+Visual checks (important, the owner judges by eye)
+- Try npx -y playwright@1.65.1 install --with-deps chromium, then screenshot http://127.0.0.1:8000
+  (run php artisan serve). Check 390×844 and 1440×900, light and dark, at these places:
+  - Mathare focused in MCA view, and the ward Ngei
+  - Nairobi City
+  - Kilifi
+  - the national "County seats" view
+  - county leaders cards (square and story)
+  - a constituency MCA card
+- Look at every screenshot and fix what's wrong. Don't commit screenshots.
+- If the browser download is blocked, skip visuals, say so, and list the exact places to check.
+
+Finish
+- Push feature/leaders.
+- Report:
+  - what was built, per task, with commits
+  - test counts
+  - every Ruling you made, with its cost if wrong
+  - parked minors
+  - whether visuals were checked
+  - what's left
+```

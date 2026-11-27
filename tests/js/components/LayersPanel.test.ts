@@ -68,3 +68,39 @@ describe('LayersPanel', () => {
         );
     });
 });
+
+describe('LayersPanel: "Show MPs as outlines"', () => {
+    const mountPanel = (props = {}) =>
+        mount(LayersPanel, {
+            props: {
+                colour: 'mca',
+                enabled: [],
+                theme: 'system',
+                overlays: [],
+                swatchFor: () => undefined,
+                ...props,
+            } as never,
+        });
+
+    it('is a labelled checkbox that says what it does, on unless switched off', () => {
+        const w = mountPanel();
+        const box = w.get('input[data-mp-outlines]');
+        expect((box.element as HTMLInputElement).checked).toBe(true);
+        expect(box.element.closest('label')?.textContent).toContain(
+            'Show MPs as outlines',
+        );
+        expect(w.get('#mp-outlines-note').text()).toContain(
+            'each constituency is outlined in its MP',
+        );
+        expect(box.attributes('aria-describedby')).toBe('mp-outlines-note');
+        expect(box.element.closest('label')?.classList).toContain('min-h-11');
+    });
+
+    it('follows the setting and reports a change', async () => {
+        const w = mountPanel({ mpOutlines: false });
+        const box = w.get('input[data-mp-outlines]');
+        expect((box.element as HTMLInputElement).checked).toBe(false);
+        await box.setValue(true);
+        expect(w.emitted('update:mpOutlines')).toEqual([[true]]);
+    });
+});

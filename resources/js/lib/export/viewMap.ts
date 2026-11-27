@@ -8,7 +8,12 @@ import { SEAT_LEVEL } from '@/lib/map/colouring';
 import { KENYA_BOUNDS, type MapLevel } from '@/lib/map/levels';
 import { buildStyle } from '@/lib/map/style';
 import type { MapTheme } from '@/lib/map/theme';
-import { type SeatsData, seatColouring } from '@/lib/seats';
+import {
+    type SeatsData,
+    countySeatsColouring,
+    mpOutline,
+    seatColouring,
+} from '@/lib/seats';
 import type { UnitIndex } from '@/lib/units';
 import type { Box } from './layout';
 import { unitStyle } from './locator';
@@ -22,7 +27,14 @@ import type { ViewState } from './viewState';
 export type ViewMapSpec = Pick<
     ViewState,
     'seat' | 'only' | 'focus' | 'showSurroundings'
->;
+> & {
+    /** A county leaders card: stripe the counties by their three seats instead of `seat`. */
+    stripes?: boolean;
+    /** Outline each constituency in its MP's party colour, over the MCA ward fills. */
+    outline?: boolean;
+    /** The highlight of those outlines. */
+    onlyMp?: readonly string[];
+};
 
 export interface ViewMapContext {
     manifest: Record<string, string>;
@@ -37,11 +49,23 @@ export function viewColouring(
     seats: SeatsData,
     theme: MapTheme,
 ): Colouring {
-    return seatColouring(seats, view.seat, {
+    const tokens = {
         noData: theme.noData,
         faded: theme.faded,
         only: new Set(view.only),
-    });
+    };
+    if (view.stripes) return countySeatsColouring(seats, tokens);
+    const colouring = seatColouring(seats, view.seat, tokens);
+    return view.outline
+        ? {
+              ...colouring,
+              outline: mpOutline(seats, {
+                  noData: theme.noData,
+                  faded: theme.faded,
+                  only: new Set(view.onlyMp ?? []),
+              }),
+          }
+        : colouring;
 }
 
 /** Width over height of the area the card's map shows, in Web Mercator. */
@@ -84,7 +108,7 @@ export function viewStyle(
                   theme,
                   colouring,
                   provinceOfCounty: ctx.provinceOfCounty,
-                  wards: SEAT_LEVEL[view.seat] === 'ward',
+                  wards: !view.stripes && SEAT_LEVEL[view.seat] === 'ward',
                   seatFillOpacity: 1,
               });
     // The card's background goes behind the map, so the shape stands on the card. Place names
@@ -92,9 +116,10 @@ export function viewStyle(
     // only kept where they carry the colouring (MCA seats) or the unit is a constituency or
     // smaller, so a county or all of Kenya reads as its seats, not as a mesh.
     const wardLines =
-        SEAT_LEVEL[view.seat] === 'ward' ||
-        view.focus?.level === 'constituency' ||
-        view.focus?.level === 'ward';
+        !view.stripes &&
+        (SEAT_LEVEL[view.seat] === 'ward' ||
+            view.focus?.level === 'constituency' ||
+            view.focus?.level === 'ward');
     const layers = base.layers
         .filter(
             (l) =>
@@ -109,6 +134,12 @@ export function viewStyle(
         );
     return { ...base, layers };
 }
+
+/**
+ * How far the card's map may zoom in to fill its box. A small urban constituency (Mathare is
+ * under 5 km across) needs more than the on-screen map's usual 13 to fill the card.
+ */
+export const VIEW_MAP_MAX_ZOOM = 16;
 
 /** Draw the view's map at the exact pixel size of its box on the card. */
 export function renderViewMap(
@@ -127,5 +158,6 @@ export function renderViewMap(
             ? { level: view.focus.level as MapLevel, code: view.focus.code }
             : undefined,
         padding: pad,
+        maxZoom: VIEW_MAP_MAX_ZOOM,
     });
 }

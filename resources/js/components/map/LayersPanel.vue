@@ -16,6 +16,8 @@ withDefaults(
 // Only the former-province tint is switched here; every seat colouring is a chip on the map.
 const colour = defineModel<ColourKey>('colour', { required: true });
 const enabled = defineModel<string[]>('enabled', { required: true });
+/** In the MCA view, outline each constituency in its MP's party colour. On unless switched off. */
+const mpOutlines = defineModel<boolean>('mpOutlines', { default: true });
 const theme = defineModel<'system' | 'light' | 'dark'>('theme', {
     required: true,
 });
@@ -56,6 +58,23 @@ const toggle = (list: string[], v: string) =>
                                 ? 'Tint each county by its former province'
                                 : 'Available for Kenya and counties'
                         }}</span
+                    ></span
+                >
+            </label>
+            <label class="flex min-h-11 cursor-pointer items-center gap-3">
+                <input
+                    v-model="mpOutlines"
+                    type="checkbox"
+                    data-mp-outlines
+                    class="size-5 accent-current"
+                    aria-describedby="mp-outlines-note"
+                />
+                <span class="text-[14px]"
+                    >Show MPs as outlines<span
+                        id="mp-outlines-note"
+                        class="block text-[12px] text-muted-ink"
+                        >In the MCA view, each constituency is outlined in its
+                        MP's party colour</span
                     ></span
                 >
             </label>

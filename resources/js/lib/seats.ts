@@ -1,6 +1,15 @@
 // Current office holders and parties from /data/seats.json (imported from cited CSVs),
 // turned into party colours, map colouring and per-unit seat rows.
-import { type Colouring, type SeatKey, SEAT_LEVEL } from './map/colouring';
+import {
+    COUNTY_SEATS,
+    COUNTY_SEAT_KEYS,
+    type Colouring,
+    type OutlineColouring,
+    type SeatKey,
+    type SeatMode,
+    SEAT_LEVEL,
+} from './map/colouring';
+import { patternId } from './map/stripes';
 import type { MapLevel } from './map/levels';
 import { OTHER, THEMES } from './map/theme';
 import type { Unit, UnitIndex } from './units';
@@ -165,6 +174,110 @@ export function seatColouring(
 }
 
 /**
+ * The "County seats" colouring: each county striped by the parties of its Governor, Senator and
+ * Woman Rep, always in that order (never by party). A seat with no holder takes the no-data
+ * colour; a holder whose party is not highlighted takes the faded colour, as on the seat views.
+ */
+export function countySeatsColouring(
+    data: SeatsData,
+    opts: { noData: string; faded: string; only?: Set<string> },
+): Colouring {
+    const colours = partyColours(data);
+    const triples = new Map<number, string[]>();
+    COUNTY_SEAT_KEYS.forEach((seat, i) => {
+        for (const h of data.holders) {
+            if (h.seat !== seat || h.level !== 'county') continue;
+            const triple =
+                triples.get(h.code) ??
+                [opts.noData, opts.noData, opts.noData];
+            // A holder whose record names no party is still a holder, not a vacancy: the
+            // "Other" grey, as the panel and the cards draw them.
+            const show =
+                !opts.only ||
+                opts.only.size === 0 ||
+                (!!h.party && opts.only.has(h.party));
+            triple[i] = !show
+                ? opts.faded
+                : h.party
+                  ? (colours.get(h.party) ?? fallback(h.party))
+                  : OTHER;
+            triples.set(h.code, triple);
+        }
+    });
+    return {
+        mode: { kind: COUNTY_SEATS },
+        colours: new Map(),
+        fallback: opts.noData,
+        patterns: new Map(
+            [...triples.entries()].map(([code, triple]) => [
+                code,
+                patternId(triple),
+            ]),
+        ),
+        fallbackPattern: patternId([opts.noData, opts.noData, opts.noData]),
+    };
+}
+
+/** The badge of a constituency with no approved MP. */
+export const MP_NO_DATA = 'MP: no data';
+
+/**
+ * The MP outlines over the MCA wards: each constituency's outline in its MP's party colour, from
+ * the same holder data, keyed by constituency code. `only` is the highlight of the outlines
+ * (their own, apart from the ward fills'): the other parties' outlines take the faded colour.
+ * The badge names the party by its abbreviation ("MP: ODM"; "MP: Independent").
+ */
+export function mpOutline(
+    data: SeatsData,
+    opts: { noData: string; faded: string; only?: Set<string> },
+): OutlineColouring {
+    const colours = partyColours(data);
+    const lines = new Map<number, string>();
+    const badges = new Map<number, string>();
+    for (const h of data.holders) {
+        if (h.seat !== 'mp' || h.level !== 'constituency' || !h.party) continue;
+        const show =
+            !opts.only || opts.only.size === 0 || opts.only.has(h.party);
+        lines.set(
+            h.code,
+            show ? (colours.get(h.party) ?? fallback(h.party)) : opts.faded,
+        );
+        badges.set(
+            h.code,
+            `MP: ${h.party === INDEPENDENT ? 'Independent' : h.party}`,
+        );
+    }
+    return {
+        colours: lines,
+        fallback: opts.noData,
+        badges,
+        fallbackBadge: MP_NO_DATA,
+    };
+}
+
+/**
+ * The second line of each ward's label: the MCA's name exactly as the data spells it, then the
+ * party's abbreviation in brackets. A ward with no approved MCA has no line: it shows its name
+ * alone.
+ */
+export function mcaNameLines(data: SeatsData): Map<number, string> {
+    const out = new Map<number, string>();
+    for (const h of data.holders)
+        if (h.seat === 'mca' && h.level === 'ward')
+            out.set(
+                h.code,
+                h.party
+                    ? `${h.name} (${h.party === INDEPENDENT ? 'Independent' : h.party})`
+                    : h.name,
+            );
+    return out;
+}
+
+/** The seats a mode counts: its own, or the three county seats together. */
+export const seatsOfMode = (mode: SeatMode): readonly SeatKey[] =>
+    mode === COUNTY_SEATS ? COUNTY_SEAT_KEYS : [mode];
+
+/**
  * The seats a legend counts while a unit is focused: the codes of the seat's units that sit inside
  * the focus (the 17 constituencies of Nairobi City, for MPs), or the one unit that holds the seat
  * when the seat is coarser than the focus (the county, for a Governor while a ward is focused).
@@ -172,12 +285,12 @@ export function seatColouring(
  */
 export function legendScope(
     index: UnitIndex,
-    seat: SeatKey,
+    seat: SeatMode,
     focus: { level: MapLevel; code: number } | null,
 ): { codes: Set<number>; unit: Unit } | null {
     const self = focus && index.get(focus.level, focus.code);
     if (!focus || !self) return null;
-    const seatLevel = SEAT_LEVEL[seat];
+    const seatLevel = seat === COUNTY_SEATS ? 'county' : SEAT_LEVEL[seat];
     if (seatLevel === focus.level)
         return { codes: new Set([focus.code]), unit: self };
     const holder = index
@@ -199,13 +312,35 @@ export const legendTitle = (
     seatLabel: string,
     unitName?: string | null,
     showing: string[] = [],
+    /** What is counted: "MP seats" unless given ("County seats"). */
+    subject = `${seatLabel} seats`,
 ) => {
     const base = unitName
-        ? `${seatLabel} seats in ${unitName} by party`
-        : `${seatLabel} seats across Kenya by party`;
+        ? `${subject} in ${unitName} by party`
+        : `${subject} across Kenya by party`;
     if (showing.length === 0) return base;
     return `${base}: showing ${showing.length > 3 ? `${showing.length} parties` : showing.join(', ')}`;
 };
+
+/**
+ * The source links of the holders a legend counts (the same holders as `seatLegend`), so the
+ * legend's source line names where its numbers come from.
+ */
+export function seatSources(
+    data: SeatsData,
+    seat: Holder['seat'] | typeof COUNTY_SEATS,
+    scope?: Set<number> | null,
+): string[] {
+    const counted = (s: Holder['seat']) =>
+        seat === COUNTY_SEATS
+            ? (COUNTY_SEAT_KEYS as readonly string[]).includes(s)
+            : s === seat;
+    return data.holders
+        .filter(
+            (h) => counted(h.seat) && h.party && (!scope || scope.has(h.code)),
+        )
+        .map((h) => h.source_url);
+}
 
 /**
  * Legend rows for a seat: parties holding it, largest first. With `scope`, only the seats whose
@@ -213,14 +348,19 @@ export const legendTitle = (
  */
 export function seatLegend(
     data: SeatsData,
-    seat: Holder['seat'],
+    seat: Holder['seat'] | typeof COUNTY_SEATS,
     scope?: Set<number> | null,
 ): { abbrev: string; name: string; seats: number; colour: string }[] {
     const colours = partyColours(data);
     const names = new Map(data.parties.map((p) => [p.abbrev, p.name]));
     const counts = new Map<string, number>();
+    // "County seats" counts the three county-wide seats together.
+    const counted = (s: Holder['seat']) =>
+        seat === COUNTY_SEATS
+            ? (COUNTY_SEAT_KEYS as readonly string[]).includes(s)
+            : s === seat;
     for (const h of data.holders)
-        if (h.seat === seat && h.party && (!scope || scope.has(h.code)))
+        if (counted(h.seat) && h.party && (!scope || scope.has(h.code)))
             counts.set(h.party, (counts.get(h.party) ?? 0) + 1);
     return [...counts.entries()]
         .map(([abbrev, seats]) => ({

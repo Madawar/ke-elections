@@ -38,14 +38,22 @@ import {
     announcePerson,
     announceSelection,
 } from '@/lib/map/announce';
-import { mapPadding } from '@/lib/map/camera';
+import { CHIPS_BESIDE_SEARCH, mapPadding } from '@/lib/map/camera';
 import {
+    COUNTY_SEATS,
+    COUNTY_SEAT_KEYS,
     type ColourKey,
     type Colouring,
     type SeatKey,
     NO_COLOURING,
+    isSeatMode as isSeatColouring,
 } from '@/lib/map/colouring';
-import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
+import {
+    CONSTITUENCY_MIN_ZOOM,
+    FADE,
+    type MapLevel,
+    zoomOutTarget,
+} from '@/lib/map/levels';
 import {
     type RememberedModes,
     chipStepUp,
@@ -62,12 +70,22 @@ import {
     createFocusHistory,
     gatePopState,
 } from '@/lib/map/history';
+import {
+    type LeaderRow,
+    leaderSources,
+    leadersFor,
+    legendOmits,
+} from '@/lib/leaders';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
 import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { formatAsOf } from '@/lib/export/format';
+import {
+    type LeadersCardView,
+    leadersCardView,
+} from '@/lib/export/leadersCard';
 import { partyCardView } from '@/lib/export/partyCard';
 import type { ShareableView } from '@/lib/export/shareView';
 import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
@@ -76,9 +94,13 @@ import { parsePartyPath } from '@/lib/map/urls';
 import {
     type SeatsData,
     EMPTY_SEATS,
+    countySeatsColouring,
     legendScope,
     loadSeats,
+    mcaNameLines,
+    mpOutline,
     seatColouring,
+    seatSources,
     withIndependentColour,
 } from '@/lib/seats';
 import {
@@ -227,13 +249,17 @@ const overlays = ref<MapOverlay[]>(OVERLAYS);
 const seatCount = (seat: SeatKey) =>
     Object.values(seats.value.totals[seat] ?? {}).reduce((a, b) => a + b, 0);
 // The chips for seats with no approved data yet cannot be chosen (all stay open until it loads).
-const unavailableSeats = computed(() =>
-    loadedSeats.value === EMPTY_SEATS
-        ? []
-        : (Object.keys(SEAT_LABEL) as SeatKey[]).filter(
-              (seat) => seatCount(seat) === 0,
-          ),
-);
+type ChipKey = Exclude<ColourKey, 'province'>;
+const unavailableSeats = computed<ChipKey[]>(() => {
+    if (loadedSeats.value === EMPTY_SEATS) return [];
+    const off: ChipKey[] = (Object.keys(SEAT_LABEL) as SeatKey[]).filter(
+        (seat) => seatCount(seat) === 0,
+    );
+    // "County seats" needs at least one of the three county seats.
+    if (COUNTY_SEAT_KEYS.every((seat) => off.includes(seat)))
+        off.push(COUNTY_SEATS);
+    return off;
+});
 watch(unavailableSeats, (off) => {
     if ((off as ColourKey[]).includes(colourKey.value))
         colourKey.value = 'none';
@@ -273,12 +299,96 @@ const colouring = computed<Colouring>(() => {
     if (k === 'province')
         return { ...NO_COLOURING, mode: { kind: 'province' } };
     const t = THEMES[theme.value];
-    return seatColouring(seats.value, k, {
+    const tokens = {
         noData: t.noData,
         faded: t.faded,
         only: new Set(onlyParties.value),
-    });
+    };
+    if (k === COUNTY_SEATS) return countySeatsColouring(seats.value, tokens);
+    const fills = seatColouring(seats.value, k, tokens);
+    if (k !== 'mca') return fills;
+    // The MCA view: each ward label may carry its MCA's name, and each constituency is outlined
+    // in its MP's party colour (with its own highlight), unless that is switched off.
+    return {
+        ...fills,
+        names: mcaNameLines(seats.value),
+        ...(outlinesOn.value
+            ? {
+                  outline: mpOutline(seats.value, {
+                      noData: t.noData,
+                      faded: t.faded,
+                      only: new Set(onlyMpParties.value),
+                  }),
+              }
+            : {}),
+    };
 });
+
+// ---- MP outlines over the MCA wards ----------------------------------------------------------
+// "Show MPs as outlines" (map settings): on by default, and remembered.
+const MP_OUTLINES_KEY = 'kem.mpOutlines';
+function readMpOutlines() {
+    try {
+        return localStorage.getItem(MP_OUTLINES_KEY) !== 'false';
+    } catch {
+        return true;
+    }
+}
+const mpOutlines = ref(readMpOutlines());
+watch(mpOutlines, (on) => {
+    try {
+        localStorage.setItem(MP_OUTLINES_KEY, String(on));
+    } catch {
+        // Storage can be blocked; the choice then lasts until the page closes.
+    }
+});
+// The outlines are drawn in the MCA view, over the wards of whatever is in view. A focused ward
+// has no constituency outline around it to draw.
+const outlinesOn = computed(
+    () =>
+        colourKey.value === 'mca' &&
+        mpOutlines.value &&
+        focusOf(selection.value)?.level !== 'ward',
+);
+// The outlines have their own highlight, apart from the ward fills'. It lasts while the MCA view
+// does: it is not remembered across visits (a later visit would open with outlines faded and no
+// sign of why), and leaving the MCA view clears it.
+const onlyMpParties = ref<string[]>([]);
+watch(colourKey, (k) => {
+    if (k !== 'mca') onlyMpParties.value = [];
+});
+// With nothing focused the outlines only show from the constituency zoom band down (the style
+// fades them in over 6.4 to 7.2); the legend lists them only when they can be on screen.
+const outlinesInView = computed(
+    () =>
+        focusOf(selection.value) !== null ||
+        (mapRef.value?.zoom ?? 0) >= CONSTITUENCY_MIN_ZOOM - FADE,
+);
+/** The outlines' own legend: MP seats in the same scope, from the same function as every legend. */
+const mpLegend = computed(() => {
+    if (!outlinesOn.value || !outlinesInView.value || !index.value) return null;
+    const scope = legendScope(index.value, 'mp', focusOf(selection.value));
+    return buildLegend(
+        seats.value,
+        'mp',
+        scope && { codes: scope.codes, unitName: scope.unit.n },
+        onlyMpParties.value,
+        asOfText.value,
+    );
+});
+function toggleMpParty(key: string) {
+    if (!mpLegend.value) return;
+    onlyMpParties.value = toggledParties(
+        mpLegend.value.members,
+        onlyMpParties.value,
+        key,
+    );
+}
+/** "Show all": every highlight goes, the fills' and the outlines'. */
+function clearHighlights() {
+    onlyParties.value = [];
+    onlyMpParties.value = [];
+}
 
 const asOfText = computed(() =>
     formatAsOf(seats.value.data_as_of ?? seats.value.as_of),
@@ -294,12 +404,23 @@ const legend = computed(() => {
     const scope = index.value
         ? legendScope(index.value, k, focusOf(selection.value))
         : null;
+    // The box's one source line also covers the leaders strip and the MP outlines' list.
+    const mpScope =
+        outlinesOn.value && index.value
+            ? legendScope(index.value, 'mp', focusOf(selection.value))
+            : null;
     return buildLegend(
         seats.value,
         k,
         scope && { codes: scope.codes, unitName: scope.unit.n },
         onlyParties.value,
         asOfText.value,
+        [
+            ...leaderSources(leadersHere.value),
+            ...(outlinesOn.value && outlinesInView.value
+                ? seatSources(seats.value, 'mp', mpScope?.codes)
+                : []),
+        ],
     );
 });
 /** A legend row was pressed: switch the parties it stands for on or off, each independently. */
@@ -345,8 +466,11 @@ function applySharedView(data: SeatsData) {
     }
 }
 // What the person set: a colouring, plus each legend row they pressed ("Other" counts once).
-const activeSettings = computed(() =>
-    settingsCount(colourKey.value, legend.value),
+const activeSettings = computed(
+    () =>
+        settingsCount(colourKey.value, legend.value) +
+        // ... and each row pressed in the outlines' own list.
+        (mpLegend.value?.showing.length ?? 0),
 );
 
 // ---- selection and camera ---------------------------------------------------------------
@@ -363,11 +487,16 @@ const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
 // of it); the person can collapse it to its chip. On a phone it starts as the chip.
 const legendOpen = ref(isDesktop.value);
 watch(isDesktop, (d) => (legendOpen.value = d));
-// The open legend is capped to the room between the search bar and its own bottom edge, so its
-// heading is never pushed under the search bar.
+// The open legend is capped to the room under the controls at the top (the search bar, the seat
+// chips, and the back button while a unit is focused), so it is never pushed under them. The
+// chips sit beside the search bar on wide desktops, and under it everywhere else.
+const isWide = useMediaQuery(`(min-width: ${CHIPS_BESIDE_SEARCH}px)`);
+const legendTopClearance = computed(
+    () => (isWide.value ? 64 : 116) + (selection.value ? 52 : 0),
+);
 const legendMaxHeight = computed(
     () =>
-        `calc(100dvh - ${(isDesktop.value ? 24 : sheetHeight.value + 12) + 68}px)`,
+        `calc(100dvh - ${(isDesktop.value ? 24 : sheetHeight.value + 12) + legendTopClearance.value}px)`,
 );
 // Only an open legend beside a focused unit takes room from the fit.
 const legendBoxOpen = computed(
@@ -544,6 +673,7 @@ function showPartyOnMap(seat: SeatKey) {
 function shareParty() {
     const abbrev = partyAbbrev.value;
     if (!abbrev) return;
+    sharedLeaders.value = null;
     sharedView.value = partyCardView({
         seats: seats.value,
         abbrev,
@@ -571,6 +701,32 @@ function onPickPerson({ holder, unit }: PersonResult) {
         { name: holder.name, title: SEAT_TITLE[holder.seat] },
         unit ?? null,
     );
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+// ---- leaders here -----------------------------------------------------------------------
+// Who holds each seat that covers the focused unit, at the top of the legend box. The same rows as
+// the panel's "Who represents" (lib/leaders.ts), less the one seat the legend's single bar counts.
+const leadersHere = computed(() =>
+    index.value
+        ? leadersFor(selection.value, seats.value, index.value, {
+              omit: legendOmits(
+                  index.value,
+                  colourKey.value,
+                  focusOf(selection.value),
+              ),
+          })
+        : [],
+);
+/** A name in "Leaders here" was pressed: point at that person's row in the panel. The focus stays. */
+function onPickLeader(row: LeaderRow) {
+    if (!row.holder) return;
+    partyAbbrev.value = null;
+    view.value = 'unit';
+    // Set again even for the same seat, so the row scrolls back into view.
+    highlightSeat.value = undefined;
+    void nextTick(() => (highlightSeat.value = row.seat));
+    announce.value = `${row.holder.name}, ${row.title}${row.where ? ` (${row.where})` : ''}: shown in the panel.`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
 
@@ -623,7 +779,7 @@ const mapInset = computed(() =>
 /** The share step points inside the sheet: on a phone, open it so the button shows. */
 async function prepareStep(id: string) {
     if (id !== 'share' || isDesktop.value || snap.value !== 'peek') return;
-    if (!isSeatMode.value) return;
+    if (!canShareView.value) return;
     snap.value = 'half';
     await new Promise((r) => setTimeout(r, 300));
 }
@@ -883,8 +1039,17 @@ async function locate() {
 const tip = ref<{ text: string; x: number; y: number } | null>(null);
 function onHover(p: Picked | null, point: { x: number; y: number }) {
     const u = p && index.value?.get(p.level, p.code);
+    // In the MCA view a ward's tooltip names its MCA: on the map itself only the selected ward does.
+    const mca =
+        u?.l === 'ward' && colourKey.value === 'mca'
+            ? colouring.value.names?.get(u.c)
+            : undefined;
     tip.value = u
-        ? { text: `${u.n} ${LEVEL_NAME[u.l]}`, x: point.x, y: point.y }
+        ? {
+              text: `${u.n} ${LEVEL_NAME[u.l]}${mca ? `. MCA: ${mca}` : ''}`,
+              x: point.x,
+              y: point.y,
+          }
         : null;
 }
 
@@ -925,13 +1090,31 @@ function shareUnit() {
 
 // ---- share this view --------------------------------------------------------------------
 // The view is fixed when the dialog opens, so the card doesn't change under the person.
-const isSeatMode = computed(
-    () => colourKey.value !== 'none' && colourKey.value !== 'province',
+const isSeatMode = computed(() => isSeatColouring(colourKey.value));
+// A seat view can be shared as it is. "County seats" has a card only for a county (its leaders).
+const canShareView = computed(
+    () =>
+        isSeatMode.value &&
+        (colourKey.value !== COUNTY_SEATS ||
+            focusOf(selection.value)?.level === 'county'),
 );
 const sharedView = shallowRef<ShareableView | null>(null);
+// The focused unit's leaders card, offered in the dialog beside the view being shared.
+const sharedLeaders = shallowRef<LeadersCardView | null>(null);
+const leadersOf = (focus: FocusSelection | null) =>
+    index.value && focus
+        ? leadersCardView({
+              seats: seats.value,
+              index: index.value,
+              focus,
+              theme: theme.value,
+          })
+        : null;
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
+    if (k === COUNTY_SEATS) return shareLeaders();
+    sharedLeaders.value = leadersOf(focusOf(selection.value));
     sharedView.value = snapshotView({
         seats: seats.value,
         index: index.value,
@@ -940,7 +1123,15 @@ function shareView() {
         only: onlyParties.value,
         showSurroundings: showSurroundings.value,
         theme: theme.value,
+        mpOutlines: mpOutlines.value,
+        onlyMp: onlyMpParties.value,
     });
+}
+
+/** The leaders card of the focused unit ("County leaders in <county>", "Leaders of <unit>"). */
+function shareLeaders() {
+    sharedLeaders.value = null;
+    sharedView.value = leadersOf(focusOf(selection.value));
 }
 
 const showView = (v: typeof view.value) => {
@@ -1017,11 +1208,11 @@ const showView = (v: typeof view.value) => {
             </button>
         </div>
 
-        <!-- Seat chips: under the search bar on phones, beside it on wide desktops. Hidden while the
+        <!-- Seat chips: under the search bar on phones, beside it on wide desktops (2xl: seven chips). Hidden while the
              sheet is at full height, as the legend is. -->
         <div
             v-if="!(snap === 'full' && !isDesktop)"
-            class="pointer-events-none absolute top-[64px] right-3 left-3 z-20 md:left-[400px] xl:top-3 xl:left-[864px]"
+            class="pointer-events-none absolute top-[64px] right-3 left-3 z-20 md:left-[400px] 2xl:top-3 2xl:left-[864px]"
         >
             <SeatChips
                 :model-value="colourKey"
@@ -1036,7 +1227,7 @@ const showView = (v: typeof view.value) => {
         <!-- Back button: under the search bar and the chips (beside them on wide desktops). -->
         <div
             v-if="!(snap === 'full' && !isDesktop)"
-            class="pointer-events-none absolute top-[116px] left-3 z-20 flex flex-col items-start gap-2 md:left-[400px] xl:top-[64px]"
+            class="pointer-events-none absolute top-[116px] left-3 z-20 flex flex-col items-start gap-2 md:left-[400px] 2xl:top-[64px]"
         >
             <BackButton :parent="parentName" @step-up="stepBack" />
         </div>
@@ -1046,7 +1237,7 @@ const showView = (v: typeof view.value) => {
         <div
             v-if="!(snap === 'full' && !isDesktop)"
             data-testid="outside-hint-slot"
-            class="pointer-events-none absolute right-[72px] left-3 z-20 md:top-[168px] md:right-auto md:left-[400px] xl:top-[116px]"
+            class="pointer-events-none absolute right-[72px] left-3 z-20 md:top-[168px] md:right-auto md:left-[400px] 2xl:top-[116px]"
             :style="isDesktop ? undefined : { bottom: `${sheetHeight + 12}px` }"
         >
             <OutsideHint
@@ -1095,16 +1286,29 @@ const showView = (v: typeof view.value) => {
                 :rows="legend.rows"
                 :note="legend.note"
                 :highlighted="legend.highlighted"
-                :filtered="legend.filtered"
-                :shareable="isSeatMode"
+                :filtered="
+                    legend.filtered || (!!mpLegend && mpLegend.filtered)
+                "
+                :outline="
+                    mpLegend && {
+                        title: 'MPs (outline)',
+                        rows: mpLegend.rows,
+                        highlighted: mpLegend.highlighted,
+                    }
+                "
+                fill-title="MCAs (fill)"
+                :shareable="canShareView"
                 :share-emphasis="
-                    isSeatMode &&
+                    canShareView &&
                     (onlyParties.length > 0 || !!focusOf(selection))
                 "
                 @toggle="toggleParty"
-                @clear="onlyParties = []"
+                @toggle-outline="toggleMpParty"
+                :leaders="leadersHere"
+                @clear="clearHighlights"
                 @share="shareView"
                 @party="openParty"
+                @leader="onPickLeader"
             />
         </div>
 
@@ -1212,6 +1416,7 @@ const showView = (v: typeof view.value) => {
                     )
                 "
                 @update:colour="chooseMode"
+                v-model:mp-outlines="mpOutlines"
                 v-model:enabled="enabledOverlays"
                 v-model:theme="themePref"
                 :overlays="overlays"
@@ -1243,17 +1448,18 @@ const showView = (v: typeof view.value) => {
                     :towns="townsIn"
                     :highlight-seat="highlightSeat"
                     v-model:show-surroundings="showSurroundings"
-                    :can-share-view="isSeatMode"
+                    :can-share-view="canShareView"
                     @go="(u) => selectUnit(u)"
                     @party="openParty"
                     @share="shareUnit"
                     @share-view="shareView"
+                    @share-leaders="shareLeaders"
                 />
                 <NationalOverview
                     v-else
                     :seats="seats"
                     :highlight-party="highlightParty"
-                    :can-share-view="isSeatMode"
+                    :can-share-view="canShareView"
                     @colour-by="chooseMode"
                     @party="openParty"
                     @share="exportNational = true"
@@ -1279,6 +1485,7 @@ const showView = (v: typeof view.value) => {
             v-if="sharedView && index && manifest"
             :open="true"
             :view="sharedView"
+            :leaders="sharedLeaders"
             :context="{
                 manifest,
                 provinceOfCounty,

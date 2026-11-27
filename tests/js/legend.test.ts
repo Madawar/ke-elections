@@ -169,8 +169,9 @@ describe('buildLegend', () => {
     });
 
     it('cites the source and the as-of date, and says when a seat has no holder yet', () => {
+        // The source is where the counted holders' records come from (this fixture: example.org).
         expect(buildLegend(seats, 'mp', null, [], '9 August 2022').note).toBe(
-            'Elected 2022, with changes since. Source: IEBC gazette notices, as of 9 August 2022',
+            'Elected 2022, with changes since. Source: example.org, as of 9 August 2022',
         );
         expect(buildLegend(seats, 'mp', null, []).note).not.toContain('as of');
         expect(buildLegend(seats, 'senator', null, []).note).toMatch(
@@ -290,5 +291,65 @@ describe('legendOpenAfterSelect', () => {
     it('opens it on desktop, and keeps it collapsed on a phone, back at all of Kenya', () => {
         expect(from(false, true, true, false)).toBe(true);
         expect(from(false, false, true, false)).toBe(false);
+    });
+});
+
+describe('the legend’s source line', () => {
+    const holder = (code: number, source_url: string) => ({
+        seat: 'governor' as const,
+        level: 'county' as const,
+        code,
+        name: 'X',
+        party: 'AAA',
+        basis: 'elected',
+        started_on: '2022-08-09',
+        source_url,
+    });
+    const data = {
+        ...EMPTY_SEATS,
+        parties: [{ abbrev: 'AAA', name: 'Alpha', coalition_2022: null, colour: '#111111' }],
+        holders: [
+            holder(1, 'https://www.iebc.or.ke/uploads/a.pdf'),
+            holder(2, 'https://archive.gazettes.africa/b.pdf'),
+            holder(12, 'https://www.the-star.co.ke/news/c'),
+        ],
+    };
+    const note = (...args: Parameters<typeof buildLegend>) =>
+        buildLegend(...args).note;
+
+    it('names where the counted holders’ records come from: gazette notices, then any other site', () => {
+        expect(note(data, 'governor', null, [])).toBe(
+            'Elected 2022, with changes since. Source: IEBC gazette notices and the-star.co.ke',
+        );
+    });
+
+    it('covers only the holders in scope', () => {
+        expect(
+            note(data, 'governor', { codes: new Set([1, 2]), unitName: 'X' }, []),
+        ).toBe('Elected 2022, with changes since. Source: IEBC gazette notices');
+        expect(
+            note(data, 'governor', { codes: new Set([12]), unitName: 'Meru' }, []),
+        ).toBe('Elected 2022, with changes since. Source: the-star.co.ke');
+    });
+
+    it('also names the sources of what else the box shows: the leaders strip, the MP outlines', () => {
+        expect(
+            note(
+                data,
+                'governor',
+                { codes: new Set([1]), unitName: 'X' },
+                [],
+                '16 July 2026',
+                ['https://www.parliament.go.ke/x'],
+            ),
+        ).toBe(
+            'Elected 2022, with changes since. Source: IEBC gazette notices and parliament.go.ke, as of 16 July 2026',
+        );
+    });
+
+    it('still rests on the gazetted codes when nothing is counted', () => {
+        expect(note(data, 'senator', null, [])).toContain(
+            'Source: IEBC gazette notices',
+        );
     });
 });

@@ -3,6 +3,7 @@
 import type { PaddingOptions, StyleSpecification } from 'maplibre-gl';
 import { loadMapLibre } from '@/composables/useMap';
 import type { MapLevel } from '@/lib/map/levels';
+import { addStripeImage, stripeIdsIn } from '@/lib/map/stripes';
 import { SOURCE_OF } from '@/lib/map/style';
 
 export interface RenderMapImageOptions {
@@ -98,6 +99,14 @@ export async function renderMapImage({
                     fail(e.error ?? new Error('The map could not be drawn.'));
                 else console.warn('[export map]', e.error?.message ?? e);
             });
+            // "County seats": the stripe images go in as soon as the style is there, before
+            // any tile is laid out (a tile laid out without its pattern stays empty), and
+            // `styleimagemissing` covers any the style asks for all the same.
+            const stripes = stripeIdsIn(style as never);
+            map.once('styledata', () => {
+                for (const id of stripes) addStripeImage(map, id);
+            });
+            map.on('styleimagemissing', (e) => addStripeImage(map, e.id));
             map.getCanvas().addEventListener('webglcontextlost', () =>
                 fail(new Error('The map lost its drawing context.')),
             );

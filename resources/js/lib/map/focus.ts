@@ -30,10 +30,14 @@ const GEOMETRY_LAYERS = [
     'counties-selected',
     'constituencies-selected',
     'wards-selected',
+    'mp-outline-edge',
+    'mp-outline',
 ] as const;
 const LABEL_LAYERS = [
     'labels-ward',
+    'labels-ward-mca',
     'labels-constituency',
+    'labels-mp',
     'labels-county',
     'labels-province',
 ] as const;
@@ -64,6 +68,8 @@ const SOURCE_OF_LAYER: Record<string, FocusSource> = {
     'wards-line': 'wards',
     'wards-line-casing': 'wards',
     'wards-selected': 'wards',
+    'mp-outline-edge': 'constituencies',
+    'mp-outline': 'constituencies',
 };
 
 const get = (property: string) => ['get', property] as ExpressionSpecification;
@@ -139,7 +145,9 @@ export function focusFilters(
     out['labels-province'] = HIDDEN;
     out['labels-county'] = level === 'county' ? inCodes([code]) : HIDDEN;
     out['labels-constituency'] = inCodes(below.constituencies);
+    out['labels-mp'] = out['labels-constituency'];
     out['labels-ward'] = inCodes(below.wards);
+    out['labels-ward-mca'] = out['labels-ward'];
 
     const town =
         level === 'county'

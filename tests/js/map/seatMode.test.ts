@@ -97,3 +97,27 @@ describe('chipStepUp', () => {
         expect(chipStepUp('ward', 'mp')).toBe('constituency');
     });
 });
+
+describe('the "County seats" mode', () => {
+    it('shows with nothing focused or a county focused, and nowhere below', () => {
+        expect(validSeatModes(null)).toContain('county_seats');
+        expect(validSeatModes('county')).toContain('county_seats');
+        expect(validSeatModes('constituency')).not.toContain('county_seats');
+        expect(validSeatModes('ward')).not.toContain('county_seats');
+    });
+
+    it('gives way to MCA inside a constituency or a ward, and comes back at the county', () => {
+        expect(modeForFocus('constituency', 'county_seats', {})).toBe('mca');
+        expect(modeForFocus('ward', 'county_seats', {})).toBe('mca');
+        const remembered: RememberedModes = { county: 'county_seats' };
+        expect(modeForFocus('county', 'mca', remembered)).toBe('county_seats');
+        expect(modeForFocus(null, 'mca', remembered)).toBe('county_seats');
+    });
+
+    it('steps up to the county from below, like the three seats it shows', () => {
+        expect(chipStepUp('constituency', 'county_seats')).toBe('county');
+        expect(chipStepUp('ward', 'county_seats')).toBe('county');
+        expect(chipStepUp('county', 'county_seats')).toBeNull();
+        expect(chipStepUp(null, 'county_seats')).toBeNull();
+    });
+});

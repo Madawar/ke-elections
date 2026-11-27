@@ -251,6 +251,65 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 </text>
             </g>
 
+            <!-- Leaders strip: who holds the seats above this one, in seat order -->
+            <g v-if="layout.leaders" data-leaders>
+                <g
+                    v-for="row in layout.leaders.rows"
+                    :key="row.seat"
+                    :data-leader="row.seat"
+                >
+                    <rect
+                        :x="row.lid.x"
+                        :y="row.lid.y"
+                        :width="row.lid.w"
+                        :height="row.lid.h"
+                        rx="1"
+                        :fill="row.lid.colour"
+                    />
+                    <rect
+                        v-if="row.chip"
+                        :x="row.chip.x"
+                        :y="row.chip.y"
+                        :width="row.chip.w"
+                        :height="row.chip.h"
+                        rx="2"
+                        :fill="row.chip.colour"
+                    />
+                    <text
+                        v-for="(t, i) in row.texts"
+                        :key="i"
+                        :x="t.x"
+                        :y="t.y"
+                        :font-size="t.size"
+                        :font-weight="t.weight ?? 400"
+                        :fill="tone(t.tone)"
+                    >
+                        {{ t.text }}
+                    </text>
+                </g>
+                <text
+                    v-for="(line, i) in layout.leaders.note"
+                    :key="`n${i}`"
+                    data-leaders-note
+                    :x="line.x"
+                    :y="line.y"
+                    :font-size="line.size"
+                    :fill="tone(line.tone)"
+                >
+                    {{ line.text }}
+                </text>
+                <text
+                    v-if="layout.leaders.more"
+                    data-leaders-more
+                    :x="layout.leaders.more.x"
+                    :y="layout.leaders.more.y"
+                    :font-size="layout.leaders.more.size"
+                    :fill="tone(layout.leaders.more.tone)"
+                >
+                    {{ layout.leaders.more.text }}
+                </text>
+            </g>
+
             <!-- Seat mix: one 100% bar, its legend, and the rows inside the unit in code order -->
             <g v-if="layout.mixBar" data-mix-bar>
                 <g

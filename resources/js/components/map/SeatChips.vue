@@ -44,7 +44,11 @@ const CHIPS: { key: ChipKey; label: string; face: string }[] = [
     },
     { key: 'mp', label: 'MP', face: 'bg-seat-mp-chip text-seat-paper' },
     { key: 'mca', label: 'MCA', face: 'bg-seat-mca text-seat-ink' },
+    // The three county seats together: no ballot colour of its own, so it carries all three.
+    { key: 'county_seats', label: 'County seats', face: 'bg-ink text-surface' },
 ];
+/** The ballot colours on the "County seats" chip, in the order of its stripes. */
+const COUNTY_LIDS = ['bg-seat-governor', 'bg-seat-senator', 'bg-seat-woman-rep'];
 
 const buttons = ref<HTMLButtonElement[]>([]);
 const isOff = (key: ChipKey) => props.unavailable?.includes(key) ?? false;
@@ -147,6 +151,19 @@ async function onKey(e: KeyboardEvent, from: number) {
                     'in-focus-visible:ring-2 in-focus-visible:ring-ink in-focus-visible:ring-offset-2 in-focus-visible:ring-offset-surface',
                 ]"
             >
+                <span
+                    v-if="chip.key === 'county_seats'"
+                    data-chip-lids
+                    class="mr-1.5 flex h-4 overflow-hidden rounded-[2px] border border-hairline"
+                    aria-hidden="true"
+                >
+                    <span
+                        v-for="lid in COUNTY_LIDS"
+                        :key="lid"
+                        class="w-1.5"
+                        :class="lid"
+                    />
+                </span>
                 <span class="flex flex-col items-center leading-none">
                     <span data-chip-label>{{ chip.label }}</span>
                     <span

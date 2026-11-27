@@ -4,8 +4,14 @@
 //
 // Only party (seat) views exist today. A numeric view (registered voters, census) joins the
 // `ViewState` union later with its own `kind`; the card and caption switch on `kind`.
+import { type LeaderRow, leaderSources, leadersFor } from '@/lib/leaders';
 import { SEAT_LABEL, buildLegend, shareOf } from '@/lib/legend';
-import { type SeatKey, SEAT_LEVEL } from '@/lib/map/colouring';
+import {
+    COUNTY_SEATS,
+    type SeatKey,
+    type SeatMode,
+    SEAT_LEVEL,
+} from '@/lib/map/colouring';
 import type { FocusSelection } from '@/lib/map/focus';
 import { OTHER, THEMES, type ThemeName } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
@@ -17,6 +23,7 @@ import {
     hasOwnColour,
     partyColours,
     seatLegend,
+    seatSources,
     withIndependentColour,
 } from '@/lib/seats';
 import { SEAT_TITLE } from '@/lib/search';
@@ -61,12 +68,26 @@ export interface PartyView {
     /** The seat mix bar and the rows inside the focused unit. */
     mix: SeatMix;
     /**
+     * The leaders strip under the map: on an MCA card for a county, its Governor, Senator and
+     * Woman Rep; for a constituency, its MP first. Empty on every other card.
+     */
+    leaders: LeaderRow[];
+    /**
      * Set when the counts cover one seat (a Governor in a county, an MP in a constituency): the
      * card then shows who holds it instead of a bar, a callout and a chart.
      */
     single: SingleSeat | null;
     /** The highlighted party abbreviations, in the order they were picked. */
     only: string[];
+    /**
+     * An MCA card for a county or a constituency: its map outlines each constituency in its
+     * MP's party colour, as on screen.
+     */
+    outline: boolean;
+    /** The parties whose MP outlines are highlighted (apart from the ward fills' highlight). */
+    onlyMp: string[];
+    /** A county's MCA card: "MPs (outlines): ODM 8, UDA 4", from the MP legend of the county. */
+    mpLine: string | null;
     showSurroundings: boolean;
     theme: ThemeName;
     /** The legend heading without the highlight ("MCA seats across Kenya by party"). */
@@ -126,6 +147,10 @@ export interface SnapshotInput {
     theme: ThemeName;
     /** Set when the view shows sample records. */
     sample?: boolean;
+    /** "Show MPs as outlines" is on (the default). */
+    mpOutlines?: boolean;
+    /** The highlight of the MP outlines. */
+    onlyMp?: readonly string[];
 }
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
@@ -168,10 +193,16 @@ export function viewPath(
 export function parseViewQuery(
     search: string,
     seats: SeatsData,
-): { seat: SeatKey | null; parties: string[] } {
+): { seat: SeatMode | null; parties: string[] } {
     const q = new URLSearchParams(search);
     const raw = q.get('seat');
-    const seat = SEAT_KEYS.includes(raw as SeatKey) ? (raw as SeatKey) : null;
+    // `seat=county_seats` is the striped view of the three county seats.
+    const seat: SeatMode | null =
+        raw === COUNTY_SEATS
+            ? COUNTY_SEATS
+            : SEAT_KEYS.includes(raw as SeatKey)
+              ? (raw as SeatKey)
+              : null;
     const known = new Map<string, string>();
     for (const p of seats.parties) known.set(p.abbrev.toLowerCase(), p.abbrev);
     for (const h of seats.holders)
@@ -191,6 +222,22 @@ export function parseViewQuery(
     return { seat, parties: seat ? [...new Set(parties)] : [] };
 }
 
+/**
+ * The rows of a card's leaders strip (lib/leaders.ts). Only an MCA card scoped to a county or a
+ * constituency has one; the card's own seat is never repeated in it.
+ */
+export function cardLeaders(
+    seats: SeatsData,
+    index: UnitIndex,
+    seat: SeatKey,
+    focus: FocusSelection | null,
+): LeaderRow[] {
+    if (seat !== 'mca' || !focus || focus.level === 'ward') return [];
+    return leadersFor({ l: focus.level, c: focus.code }, seats, index, {
+        omit: [seat],
+    });
+}
+
 export function snapshotView({
     seats,
     index,
@@ -200,6 +247,8 @@ export function snapshotView({
     showSurroundings,
     theme,
     sample = false,
+    mpOutlines = true,
+    onlyMp = [],
 }: SnapshotInput): PartyView {
     const scope = legendScope(index, seat, focus);
     const legend = buildLegend(
@@ -275,6 +324,39 @@ export function snapshotView({
         (h) =>
             h.seat === seat && h.party && (!scope || scope.codes.has(h.code)),
     );
+    const leaders = cardLeaders(seats, index, seat, focusUnit ? focus : null);
+    // The MP outlines are drawn inside a county or a constituency, over its wards.
+    const outline =
+        mpOutlines &&
+        seat === 'mca' &&
+        !!focusUnit &&
+        !!focus &&
+        focus.level !== 'ward';
+    // A county's card has no MP row (17 MPs would not fit): one line counts them by party.
+    const mpScope =
+        outline && focus?.level === 'county'
+            ? legendScope(index, 'mp', focus)
+            : null;
+    const mpRows = mpScope
+        ? buildLegend(
+              seats,
+              'mp',
+              { codes: mpScope.codes, unitName: mpScope.unit.n },
+              [],
+          ).rows
+        : [];
+    const mpLine = mpRows.length
+        ? `MPs (outlines): ${mpRows.map((r) => `${r.label} ${r.count}`).join(', ')}`
+        : null;
+    // The strip's holders are on the card too, and so are the MPs behind the outlines: their
+    // sources join the footer's.
+    const outlineScope = outline && focus ? legendScope(index, 'mp', focus) : null;
+    const sourceUrls = [
+        ...holdersInView.map((h) => h.source_url),
+        ...leaderSources(leaders),
+        ...(outlineScope ? seatSources(seats, 'mp', outlineScope.codes) : []),
+    ];
+
     return {
         kind: 'party',
         seat,
@@ -295,6 +377,10 @@ export function snapshotView({
             index,
             only,
         ),
+        leaders,
+        outline,
+        onlyMp: outline ? [...new Set(onlyMp)] : [],
+        mpLine,
         only: [...new Set(only)],
         showSurroundings,
         theme,
@@ -304,8 +390,8 @@ export function snapshotView({
         highlights,
         parties: perParty.map((r) => party(r.abbrev)),
         asOf: seats.data_as_of ?? seats.as_of ?? null,
-        source: sourceLine(holdersInView.map((h) => h.source_url)),
-        sources: sourceParts(holdersInView.map((h) => h.source_url)),
+        source: sourceLine(sourceUrls),
+        sources: sourceParts(sourceUrls),
         sample,
         path: viewPath(seat, focus && focusUnit ? focus : null, only, {
             members: legend.members.other ?? [],
@@ -389,6 +475,8 @@ export function withTheme(
         showSurroundings: view.showSurroundings,
         theme,
         sample: view.sample,
+        mpOutlines: view.outline,
+        onlyMp: view.onlyMp,
     });
 }
 
