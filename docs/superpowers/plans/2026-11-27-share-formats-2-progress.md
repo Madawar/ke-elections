@@ -8,9 +8,9 @@ resume from here.
 
 | Task | What | State | Commit |
 |---|---|---|---|
-| F | "Every county the same size" (county tiles, mock-up 4), portrait and story, from the national Governor, Senator and Woman Rep views | done | `0c28c80` (grid), `9f9be59` (card), `ce9535b` (entry point, sweep), `37f241b` (key columns), then the commit that updates this row (log) |
+| F | "Every county the same size" (county tiles, mock-up 4), portrait and story, from the national Governor, Senator and Woman Rep views | done | `0c28c80` (grid), `9f9be59` (card), `ce9535b` (entry point, sweep), `37f241b` (key columns), `df5cb78` (log), `4e51799` (Mount Kenya tiles back), `7beca8d` (review fixes: vacant tiles outlined, link test, notes) |
 | G1 | The dialog's general ability: a card may carry one choice of its own | done | `ec2037e` |
-| G2 | "Side by side" (mock-up 7), X and story, from a county on the MP or MCA view | done | the `feat(export): "Side by side"…` commit; tiles review fixes `7beca8d`; Mount Kenya tiles `4e51799` |
+| G2 | "Side by side" (mock-up 7), X and story, from a county on the MP or MCA view | done | `7cb9db1` |
 | H1 | The dialog's general ability: a card may be a series | not started | |
 | H2 | The county carousel (mock-up 3), portrait and story | not started | |
 
