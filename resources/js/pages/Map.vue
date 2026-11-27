@@ -88,6 +88,7 @@ import { fiveSeatsCardView } from '@/lib/export/fiveSeatsCard';
 import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
 import { type ShareCard, shareCards } from '@/lib/export/shareView';
+import { TILE_SEATS, type TileSeat, tilesCardView } from '@/lib/export/tilesCard';
 import { topCountiesCardView } from '@/lib/export/topCountiesCard';
 import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
 import { type PartyScope, findParty, scopeFor } from '@/lib/party';
@@ -1165,6 +1166,15 @@ function shareView() {
             onlyMp: onlyMpParties.value,
         }),
         leadersOf(focus),
+        // A seat a county has one of, all of Kenya: every county as a tile (highlights ignored).
+        !focus &&
+            TILE_SEATS.includes(k as TileSeat) &&
+            tilesCardView({
+                seats: seats.value,
+                index: index.value,
+                seat: k as TileSeat,
+                theme: theme.value,
+            }),
         !focus &&
             fiveSeatsCardView({
                 seats: seats.value,

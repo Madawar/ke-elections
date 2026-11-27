@@ -44,12 +44,16 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
             const top = cards.find((c) => c.key === 'topCounties')?.view as
                 | { group: string; seat: string }
                 | undefined;
+            const tiles = cards.find((c) => c.key === 'tiles')?.view as
+                | { seat: string; tiles: { colour: string }[] }
+                | undefined;
             return h('div', {
                 'data-share-kind': v.kind,
                 'data-share-unit': v.unit?.name,
                 'data-share-offers': alt?.view.unit?.name,
                 'data-share-cards': cards.map((c) => c.label).join('|'),
                 'data-share-top': top && `${top.group} ${top.seat}`,
+                'data-share-tiles': tiles && `${tiles.seat} ${tiles.tiles.length}`,
             });
         },
     }),
@@ -309,7 +313,7 @@ describe('sharing the leaders of a unit', () => {
         ]);
         // Not for a seat a county has one of, more than one group, none, or a place.
         expect(await offered('?seat=governor&parties=uda')).toEqual([
-            'This view|Five seats|By the numbers',
+            'This view|County tiles|Five seats|By the numbers',
             undefined,
         ]);
         expect(await offered('?seat=mca&parties=odm,uda')).toEqual([
@@ -324,6 +328,35 @@ describe('sharing the leaders of a unit', () => {
             'This view|County leaders',
             undefined,
         ]);
+    });
+
+    it('offers "County tiles" for all of Kenya on the Governor, Senator and Woman Rep views only, second in the list', async () => {
+        const offered = async (search: string, unit: { name: string } | null = null) => {
+            const w = await mountPage(search, unit);
+            w.findComponent(Legend).vm.$emit('share');
+            await flushPromises();
+            const d = w.get('[data-share-kind]');
+            const out = [d.attributes('data-share-cards'), d.attributes('data-share-tiles')];
+            w.unmount();
+            document.body.innerHTML = '';
+            return out;
+        };
+        for (const seat of ['governor', 'senator', 'woman_rep'])
+            expect(await offered(`?seat=${seat}`), seat).toEqual([
+                'This view|County tiles|Five seats|By the numbers',
+                `${seat} 47`,
+            ]);
+        // Whatever is highlighted on screen, the card is the seat's tiles (it ignores highlights).
+        expect(await offered('?seat=senator&parties=odm')).toEqual([
+            'This view|County tiles|Five seats|By the numbers',
+            'senator 47',
+        ]);
+        // Not on MP or MCA, not on County seats, and not with a unit focused.
+        for (const seat of ['mp', 'mca'])
+            expect((await offered(`?seat=${seat}`))[1], seat).toBeUndefined();
+        expect(await offered('?seat=county_seats')).toEqual(['Five seats|By the numbers', undefined]);
+        expect(await offered('?seat=governor', county)).toEqual(['This view|County leaders', undefined]);
+        expect(await offered('?seat=woman_rep', constituency)).toEqual(['This view|Leaders', undefined]);
     });
 
     it('opens the leaders card straight from the panel, with no seat colouring at all', async () => {
