@@ -31,55 +31,60 @@ import {
     VIEW_SIZES,
     VIEW_SIZE_LABELS,
     type ViewSize,
-    viewFilename,
 } from '@/lib/export/sizes';
 import {
+    type MapSlot,
+    type ShareCard,
     type ShareableView,
+    aspectOf,
     captionOf,
     dialogCopy,
+    filenameOf,
+    headlineEditable,
     headlineOf,
     inTheme,
     isLeadersCard,
     isPartyCard,
     layoutOf,
-    leadersLabel,
-    mapBoxOf,
+    mapSlotsOf,
+    shareCards,
+    sizesOf,
 } from '@/lib/export/shareView';
-import type { LeadersCardView } from '@/lib/export/leadersCard';
-import {
-    type ViewMapContext,
-    renderViewMap,
-    viewMapAspect,
-} from '@/lib/export/viewMap';
+import { type ViewMapContext, renderViewMap } from '@/lib/export/viewMap';
 import { seatsInTheme } from '@/lib/export/viewState';
 import { THEMES, type ThemeName } from '@/lib/map/theme';
 import { TIPS, claimTip } from '@/lib/onboarding';
 
 const props = defineProps<{
-    /** A seat view ("Share this view"), a party card or a leaders card. */
+    /** The card the dialog opens on: a seat view, a party card or a leaders card. */
     view: ShareableView;
     /**
-     * The focused unit's leaders card, offered beside the view: "County leaders" whenever a
-     * county is focused, whatever the seat mode.
+     * The "Card" choice: the cards on offer for what is in view, the first being `view` itself
+     * ("This view", then "County leaders", "By the numbers", ...). Absent or one card: no choice.
      */
-    leaders?: LeadersCardView | null;
+    cards?: readonly ShareCard[];
     context: ViewMapContext;
 }>();
 const open = defineModel<boolean>('open', { default: false });
 
-/** Which card is being made: the view the dialog was opened for, or the leaders card. */
-const which = ref<'view' | 'leaders'>('view');
-const offersLeaders = computed(
-    () => !!props.leaders && !isLeadersCard(props.view),
+const options = computed<readonly ShareCard[]>(() =>
+    props.cards?.length ? props.cards : shareCards([props.view]),
 );
-const base = computed<ShareableView>(() =>
-    which.value === 'leaders' && props.leaders ? props.leaders : props.view,
+/** Which card is being made, by its key in `options`. */
+const which = ref(options.value[0].key);
+const base = computed<ShareableView>(
+    () => options.value.find((o) => o.key === which.value)?.view ?? props.view,
 );
 
-const SIZES = Object.keys(VIEW_SIZES) as ViewSize[];
+/**
+ * The card's sizes. The person's stored size is shown when the card has it; otherwise the card's
+ * first size is, and the stored choice stays for the next card that has it.
+ */
+const sizes = computed(() => sizesOf(base.value));
 const stored = useStorage<ViewSize>('km.viewSize', 'square');
 const size = computed<ViewSize>({
-    get: () => (SIZES.includes(stored.value) ? stored.value : 'square'),
+    get: () =>
+        sizes.value.includes(stored.value) ? stored.value : sizes.value[0],
     set: (v) => (stored.value = v),
 });
 const themeName = ref<ThemeName>(base.value.theme);
@@ -87,7 +92,7 @@ const theme = computed(() => THEMES[themeName.value]);
 const shown = computed(() =>
     inTheme(base.value, themeName.value, props.context),
 );
-/** The two kinds of card each have their own component; these narrow `shown` for the template. */
+/** Each kind of card has its own component; these narrow `shown` for the template. */
 const seatView = computed(() => {
     const v = shown.value;
     return isPartyCard(v) || isLeadersCard(v) ? null : v;
@@ -104,6 +109,8 @@ const copy = computed(() => dialogCopy(base.value));
 
 const HEADLINE_MAX = 120;
 const generated = computed(() => headlineOf(base.value));
+/** False for a card whose headline is a fixed template: it is shown, not edited. */
+const editable = computed(() => headlineEditable(base.value));
 const headlineInput = ref(generated.value);
 /**
  * The headline on the card. It follows the typing after a short pause, so the map is not redrawn
@@ -118,8 +125,10 @@ function setHeadline(text: string) {
     headlineInput.value = text;
     headlineTyped.value = text;
 }
-const headline = computed(
-    () => headlineTyped.value.trim().slice(0, HEADLINE_MAX) || generated.value,
+const headline = computed(() =>
+    editable.value
+        ? headlineTyped.value.trim().slice(0, HEADLINE_MAX) || generated.value
+        : generated.value,
 );
 const edited = computed(() => headlineInput.value.trim() !== generated.value);
 
@@ -132,7 +141,7 @@ const caption = computed(() =>
         headline.value,
     ),
 );
-const mapAspect = computed(() => viewMapAspect(base.value));
+const mapAspect = computed(() => aspectOf(base.value));
 /** When this size has no room for every row, say how many it lists and which size lists all. */
 const rowsHint = computed(() => {
     const v = seatView.value;
@@ -146,14 +155,16 @@ const rowsHint = computed(() => {
     const here = at(size.value);
     if (!here.rowsMore) return '';
     const all = v.mix.rows.length;
-    const fits = SIZES.filter((s) => !at(s).rowsMore).map(
-        (s) => VIEW_SIZE_LABELS[s],
-    );
+    const fits = sizes.value
+        .filter((s) => !at(s).rowsMore)
+        .map((s) => VIEW_SIZE_LABELS[s]);
     return `This size lists ${here.mixRows.length} of the ${all} ${v.mix.rowWord}.${fits.length ? ` ${fits.join(' and ')} ${fits.length === 1 ? 'lists' : 'list'} them all.` : ''}`;
 });
-const filename = computed(() => viewFilename(base.value, size.value));
+const filename = computed(() => filenameOf(base.value, size.value));
 
-const mapImage = ref<string | null>(null);
+/** The card's map images by slot key; `mapImage` is the one-map cards' "map". */
+const mapImages = shallowRef<Record<string, string>>({});
+const mapImage = computed(() => mapImages.value.map ?? null);
 const mapStatus = ref('Drawing the map…');
 const blob = shallowRef<Blob | null>(null);
 const status = ref<'drawing' | 'ready' | 'error'>('drawing');
@@ -162,11 +173,12 @@ const card = ref<HTMLElement | null>(null);
 const captionBox = ref<HTMLTextAreaElement | null>(null);
 const canShare = ref(false);
 
-// Map images by size, theme and box: a changed headline only redraws the map when it moves the box.
+// Map images by card, size, theme, slot and box: a changed headline only redraws a map when it
+// moves its box, and each card's maps are kept apart.
 const images = new Map<string, Promise<string>>();
 let token = 0;
-/** The map the latest build is waiting for; a queued drawing of any other map is skipped. */
-let wantedKey = '';
+/** The maps the latest build is waiting for; a queued drawing of any other map is skipped. */
+let wanted = new Set<string>();
 // Off-screen maps are drawn one at a time, however fast the person switches.
 let queue: Promise<unknown> = Promise.resolve();
 class Superseded extends Error {}
@@ -181,6 +193,29 @@ async function cardSvg(): Promise<SVGSVGElement | null> {
     return null;
 }
 
+/** The drawing of one slot's map: the cached one, or a new one queued behind the others. */
+function mapOf(slot: MapSlot, key: string, name: ThemeName): Promise<string> {
+    let pending = images.get(key);
+    if (pending) return pending;
+    pending = queue.then(() => {
+        // Skip a map nobody waits for any more; a later build may still want this one,
+        // even after the build that queued it has moved on.
+        if (!wanted.has(key)) throw new Superseded();
+        return renderViewMap(
+            slot.spec,
+            {
+                ...props.context,
+                seats: seatsInTheme(props.context.seats, name),
+            },
+            THEMES[name],
+            slot.box,
+        );
+    });
+    queue = pending.catch(() => {});
+    images.set(key, pending);
+    return pending;
+}
+
 async function build() {
     const t = ++token;
     const s = size.value;
@@ -188,52 +223,42 @@ async function build() {
     status.value = 'drawing';
     message.value = 'Drawing the card…';
     blob.value = null;
-    const box = mapBoxOf(s, shown.value, {
+    const slots = mapSlotsOf(s, shown.value, {
         headline: headline.value,
         url: url.value,
         mapAspect: mapAspect.value,
     });
-    const key = `${which.value}|${s}|${name}|${box.w}x${box.h}`;
-    wantedKey = key;
-    let pending = images.get(key);
-    if (!pending) {
-        mapImage.value = null;
+    const keys = slots.map(
+        (slot) =>
+            `${which.value}|${s}|${name}|${slot.key}|${slot.box.w}x${slot.box.h}`,
+    );
+    wanted = new Set(keys);
+    if (keys.some((k) => !images.has(k))) {
+        mapImages.value = {};
         mapStatus.value = 'Drawing the map…';
-        const view = shown.value;
-        pending = queue.then(() => {
-            // Skip a map nobody waits for any more; a later build may still want this one,
-            // even after the build that queued it has moved on.
-            if (key !== wantedKey) throw new Superseded();
-            return renderViewMap(
-                view,
-                {
-                    ...props.context,
-                    seats: seatsInTheme(props.context.seats, name),
-                },
-                THEMES[name],
-                box,
-            );
-        });
-        queue = pending.catch(() => {});
-        images.set(key, pending);
     }
-    try {
-        const image = await pending;
-        if (t !== token) return;
-        mapImage.value = image;
-    } catch (error) {
-        images.delete(key);
-        if (t !== token) return;
-        // Skipped while another size was wanted, and wanted again now: draw it.
-        if (error instanceof Superseded) return void build();
-        console.error(error);
-        // Say so in the dialog, never on the card: no image is made without its map.
-        mapImage.value = null;
-        mapStatus.value = '';
-        status.value = 'error';
-        message.value =
-            'The map could not be drawn on this device, so no image was made. Try again, or try another browser.';
-        return;
+    // Every slot is queued now, in the layout's order, and the card waits for all of them.
+    const pending = slots.map((slot, i) => mapOf(slot, keys[i], name));
+    const drawn: Record<string, string> = {};
+    for (let i = 0; i < slots.length; i++) {
+        try {
+            drawn[slots[i].key] = await pending[i];
+            if (t !== token) return;
+            mapImages.value = { ...drawn };
+        } catch (error) {
+            images.delete(keys[i]);
+            if (t !== token) return;
+            // Skipped while another card or size was wanted, and wanted again now: draw it.
+            if (error instanceof Superseded) return void build();
+            console.error(error);
+            // Say so in the dialog, never on the card: no image is made without its maps.
+            mapImages.value = {};
+            mapStatus.value = '';
+            status.value = 'error';
+            message.value =
+                'The map could not be drawn on this device, so no image was made. Try again, or try another browser.';
+            return;
+        }
     }
     const svg = await cardSvg();
     if (t !== token) return;
@@ -283,14 +308,15 @@ watch(
     },
     { immediate: true },
 );
-// A new view (opened again from another state) starts from its own headline and theme.
+// A new view (opened again from another state) starts on its first card, with that card's own
+// headline and theme.
 watch(
-    () => props.view,
-    (view) => {
+    () => [props.view, props.cards],
+    () => {
         images.clear();
-        which.value = 'view';
-        themeName.value = view.theme;
-        setHeadline(headlineOf(view));
+        which.value = options.value[0].key;
+        themeName.value = base.value.theme;
+        setHeadline(headlineOf(base.value));
     },
 );
 // The other card has its own headline. This runs as the choice changes, before the card is
@@ -359,19 +385,13 @@ async function copyCaption() {
                 </div>
 
                 <div class="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-2">
-                    <fieldset v-if="offersLeaders && leaders" class="mb-3">
+                    <fieldset v-if="options.length > 1" class="mb-3">
                         <legend class="mb-2 text-[15px] font-semibold">
                             Card
                         </legend>
                         <div class="grid grid-cols-2 gap-1.5">
                             <label
-                                v-for="option in [
-                                    { key: 'view', label: 'This view' },
-                                    {
-                                        key: 'leaders',
-                                        label: leadersLabel(leaders),
-                                    },
-                                ] as const"
+                                v-for="option in options"
                                 :key="option.key"
                                 class="flex min-h-11 cursor-pointer items-center justify-center rounded-md border px-2 text-center text-[14px] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ink"
                                 :class="
@@ -395,9 +415,14 @@ async function copyCaption() {
                         <legend class="mb-2 text-[15px] font-semibold">
                             Size
                         </legend>
-                        <div class="grid grid-cols-4 gap-1.5">
+                        <div
+                            class="grid gap-1.5"
+                            :class="
+                                sizes.length === 4 ? 'grid-cols-4' : 'grid-cols-2'
+                            "
+                        >
                             <label
-                                v-for="s in SIZES"
+                                v-for="s in sizes"
                                 :key="s"
                                 class="flex min-h-11 cursor-pointer flex-col items-center justify-center rounded-md border px-1 py-1 text-center text-[14px] leading-tight has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ink"
                                 :class="
@@ -468,7 +493,7 @@ async function copyCaption() {
                         </div>
                     </fieldset>
 
-                    <div class="mt-3">
+                    <div v-if="editable" class="mt-3">
                         <div class="flex items-baseline justify-between gap-2">
                             <label
                                 for="view-headline"
@@ -493,6 +518,15 @@ async function copyCaption() {
                         />
                         <p class="mt-1 text-[13px] text-muted-ink">
                             Keep it to the numbers, so the image stays neutral.
+                        </p>
+                    </div>
+                    <div v-else class="mt-3">
+                        <h3 class="text-[15px] font-semibold">Headline</h3>
+                        <p data-fixed-headline class="mt-1 text-[15px]">
+                            {{ headline }}
+                        </p>
+                        <p class="mt-1 text-[13px] text-muted-ink">
+                            This card’s headline is fixed, so it stays neutral.
                         </p>
                     </div>
 

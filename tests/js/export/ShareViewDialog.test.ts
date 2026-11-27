@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { leadersCardView } from '@/lib/export/leadersCard';
 import { partyCardView } from '@/lib/export/partyCard';
+import { shareCards } from '@/lib/export/shareView';
 import { seatsInTheme, snapshotView } from '@/lib/export/viewState';
 import { PARTY_SEATS } from '../party/partyFixtures';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
@@ -245,6 +246,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         focus: { level: 'county', code: 47 },
         theme: 'dark',
     })!;
+    const cards = shareCards([county, leaders]);
     const cardOption = (value: string) =>
         document.querySelector<HTMLInputElement>(
             `input[name="view-card"][value="${value}"]`,
@@ -261,7 +263,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('offers "This view" and "County leaders", and starts on the view', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -275,7 +277,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('switches to the leaders card, with its own headline, caption and file', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -299,7 +301,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('puts the new card’s own headline on it at once, never the other card’s for a moment', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -316,7 +318,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('keeps the new card’s headline even when the person had just been typing on the other', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -349,7 +351,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         plain.unmount();
         document.body.innerHTML = '';
         mount(ShareViewDialog, {
-            props: { open: true, view: leaders, leaders, context },
+            props: { open: true, view: leaders, cards: shareCards([leaders]), context },
             attachTo: document.body,
         });
         await settle();

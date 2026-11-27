@@ -31,15 +31,21 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
     default: defineComponent({
         props: {
             view: { type: Object, required: true },
-            leaders: { type: Object, default: null },
+            cards: { type: Array, default: () => [] },
         },
         render() {
             const v = this.view as { kind: string; unit?: { name: string } };
-            const alt = this.leaders as { unit: { name: string } } | null;
+            const cards = this.cards as {
+                key: string;
+                label: string;
+                view: { unit?: { name: string } };
+            }[];
+            const alt = cards.find((c) => c.key === 'leaders' && c.view !== v);
             return h('div', {
                 'data-share-kind': v.kind,
                 'data-share-unit': v.unit?.name,
-                'data-share-offers': alt?.unit.name,
+                'data-share-offers': alt?.view.unit?.name,
+                'data-share-cards': cards.map((c) => c.label).join('|'),
             });
         },
     }),
@@ -205,6 +211,7 @@ describe('the "County seats" view on the page', () => {
         expect(dialog.attributes('data-share-kind')).toBe('leaders');
         expect(dialog.attributes('data-share-unit')).toBe('Nairobi City');
         expect(dialog.attributes('data-share-offers')).toBeUndefined();
+        expect(dialog.attributes('data-share-cards')).toBe('County leaders');
     });
 });
 
@@ -236,6 +243,9 @@ describe('sharing the leaders of a unit', () => {
             expect(dialog.attributes('data-share-offers'), seat).toBe(
                 'Nairobi City',
             );
+            expect(dialog.attributes('data-share-cards'), seat).toBe(
+                'This view|County leaders',
+            );
             w.unmount();
         }
     });
@@ -247,12 +257,18 @@ describe('sharing the leaders of a unit', () => {
         expect(w.get('[data-share-kind]').attributes('data-share-offers')).toBe(
             'Mathare',
         );
+        expect(w.get('[data-share-kind]').attributes('data-share-cards')).toBe(
+            'This view|Leaders',
+        );
         const kenya = await mountPage('?seat=mca');
         kenya.findComponent(Legend).vm.$emit('share');
         await flushPromises();
         expect(
             kenya.get('[data-share-kind]').attributes('data-share-offers'),
         ).toBeUndefined();
+        expect(
+            kenya.get('[data-share-kind]').attributes('data-share-cards'),
+        ).toBe('This view');
     });
 
     it('opens the leaders card straight from the panel, with no seat colouring at all', async () => {
@@ -266,5 +282,6 @@ describe('sharing the leaders of a unit', () => {
         const dialog = w.get('[data-share-kind]');
         expect(dialog.attributes('data-share-kind')).toBe('leaders');
         expect(dialog.attributes('data-share-unit')).toBe('Mathare');
+        expect(dialog.attributes('data-share-cards')).toBe('Leaders');
     });
 });

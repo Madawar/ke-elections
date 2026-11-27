@@ -34,6 +34,11 @@ export type ViewMapSpec = Pick<
     outline?: boolean;
     /** The highlight of those outlines. */
     onlyMp?: readonly string[];
+    /**
+     * A colouring made by the card itself (a locator, the top-10 map), drawn as it is in place of
+     * the seat colouring. `seat` still says which level's fills it colours.
+     */
+    colouring?: Colouring;
 };
 
 export interface ViewMapContext {
@@ -49,6 +54,7 @@ export function viewColouring(
     seats: SeatsData,
     theme: MapTheme,
 ): Colouring {
+    if (view.colouring) return view.colouring;
     const tokens = {
         noData: theme.noData,
         faded: theme.faded,
