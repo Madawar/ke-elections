@@ -312,16 +312,41 @@ describe('ViewCard seat mix', () => {
         expect(w.text()).toContain('KANU 2');
     });
 
-    it('lists every constituency on a story and the first ones plus "and N more" on a square', () => {
-        expect(card('story').findAll('[data-mix-row]')).toHaveLength(17);
-        const square = card('square');
-        const shown = square.findAll('[data-mix-row]').length;
-        expect(shown).toBeLessThan(17);
-        expect(square.text()).toContain(
-            `and ${17 - shown} more constituencies`,
+    it('lists the first constituencies plus "and N more", the most of them on a story', () => {
+        // The map grew and the leaders strip joined the card (owner, 2026-11-27): the room came
+        // from the rows, so 17 constituencies no longer all fit, even on a story.
+        const rows = (size: ViewSize) =>
+            card(size).findAll('[data-mix-row]').length;
+        expect(rows('story')).toBeGreaterThanOrEqual(13);
+        expect(rows('story')).toBeGreaterThanOrEqual(rows('square'));
+        for (const size of ['story', 'square'] as const) {
+            const w = card(size);
+            const shown = w.findAll('[data-mix-row]').length;
+            expect(shown).toBeLessThan(17);
+            expect(w.text()).toContain(`and ${17 - shown} more constituencies`);
+            expect(w.findAll('[data-mix-row]')[0].text()).toContain(
+                'Constituency 274',
+            );
+        }
+    });
+
+    it('draws the leaders strip of an MCA county card: Governor, Senator and Woman Rep, above the mix', () => {
+        const w = card('portrait');
+        const strip = w.get('[data-leaders]');
+        expect(
+            strip.findAll('[data-leader]').map((r) => r.attributes('data-leader')),
+        ).toEqual(['governor', 'senator', 'woman_rep']);
+        expect(strip.get('[data-leader="governor"]').text()).toContain(
+            'Placeholder governor 47',
         );
-        expect(square.findAll('[data-mix-row]')[0].text()).toContain(
-            'Constituency 274',
+        expect(strip.get('[data-leader="governor"]').text()).toContain('UDA');
+        // The fixture has no Senator or Woman Rep: their rows say so, and nothing is invented.
+        expect(strip.get('[data-leader="senator"]').text()).toContain(
+            'No approved data yet',
+        );
+        // A national card, or one for another seat, has no strip.
+        expect(mount(ViewCard, { props: props() }).find('[data-leaders]').exists()).toBe(
+            false,
         );
     });
 });

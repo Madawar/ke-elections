@@ -4,6 +4,7 @@
 //
 // Only party (seat) views exist today. A numeric view (registered voters, census) joins the
 // `ViewState` union later with its own `kind`; the card and caption switch on `kind`.
+import { type LeaderRow, leaderSources, leadersFor } from '@/lib/leaders';
 import { SEAT_LABEL, buildLegend, shareOf } from '@/lib/legend';
 import { type SeatKey, SEAT_LEVEL } from '@/lib/map/colouring';
 import type { FocusSelection } from '@/lib/map/focus';
@@ -60,6 +61,11 @@ export interface PartyView {
     units: { count: number; word: string } | null;
     /** The seat mix bar and the rows inside the focused unit. */
     mix: SeatMix;
+    /**
+     * The leaders strip under the map: on an MCA card for a county, its Governor, Senator and
+     * Woman Rep; for a constituency, its MP first. Empty on every other card.
+     */
+    leaders: LeaderRow[];
     /**
      * Set when the counts cover one seat (a Governor in a county, an MP in a constituency): the
      * card then shows who holds it instead of a bar, a callout and a chart.
@@ -191,6 +197,22 @@ export function parseViewQuery(
     return { seat, parties: seat ? [...new Set(parties)] : [] };
 }
 
+/**
+ * The rows of a card's leaders strip (lib/leaders.ts). Only an MCA card scoped to a county or a
+ * constituency has one; the card's own seat is never repeated in it.
+ */
+export function cardLeaders(
+    seats: SeatsData,
+    index: UnitIndex,
+    seat: SeatKey,
+    focus: FocusSelection | null,
+): LeaderRow[] {
+    if (seat !== 'mca' || !focus || focus.level === 'ward') return [];
+    return leadersFor({ l: focus.level, c: focus.code }, seats, index, {
+        omit: [seat],
+    });
+}
+
 export function snapshotView({
     seats,
     index,
@@ -275,6 +297,12 @@ export function snapshotView({
         (h) =>
             h.seat === seat && h.party && (!scope || scope.codes.has(h.code)),
     );
+    const leaders = cardLeaders(seats, index, seat, focusUnit ? focus : null);
+    // The strip's holders are on the card too, so their sources join the footer's.
+    const sourceUrls = [
+        ...holdersInView.map((h) => h.source_url),
+        ...leaderSources(leaders),
+    ];
     return {
         kind: 'party',
         seat,
@@ -295,6 +323,7 @@ export function snapshotView({
             index,
             only,
         ),
+        leaders,
         only: [...new Set(only)],
         showSurroundings,
         theme,
@@ -304,8 +333,8 @@ export function snapshotView({
         highlights,
         parties: perParty.map((r) => party(r.abbrev)),
         asOf: seats.data_as_of ?? seats.as_of ?? null,
-        source: sourceLine(holdersInView.map((h) => h.source_url)),
-        sources: sourceParts(holdersInView.map((h) => h.source_url)),
+        source: sourceLine(sourceUrls),
+        sources: sourceParts(sourceUrls),
         sample,
         path: viewPath(seat, focus && focusUnit ? focus : null, only, {
             members: legend.members.other ?? [],

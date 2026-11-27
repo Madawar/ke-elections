@@ -9,6 +9,7 @@
 import { ATTRIBUTION, SEAT_COLOURS } from '@/lib/map/theme';
 import type { Box, FooterFonts, TextItem } from './layout';
 import { footerBlock } from './layout';
+import { type LeadersStripLayout, leadersStrip } from './leadersStrip';
 import { VIEW_SIZES, type ViewSize } from './sizes';
 import { fitFontSize, textWidth, wrapText } from './text';
 import {
@@ -80,6 +81,8 @@ export interface ViewLayout {
     moreLine: TextItem | null;
     /** A single seat: who holds it, in place of the bar, callouts and chart. */
     holder: HolderBlockLayout | null;
+    /** The leaders strip of an MCA card for a county or a constituency, above the seat mix. */
+    leaders: LeadersStripLayout | null;
     footerBox: Box;
     footerFonts: FooterFonts;
 }
@@ -115,6 +118,16 @@ export interface Spec {
     mix: MixFonts;
     /** On cards with rows, the map's width beside the headline, as a share of the width. */
     insetMap: number;
+    /**
+     * The fewest rows a list keeps when the map grows (a shorter list stays whole): the rest
+     * become "and N more". The taller cards keep more, so a constituency's wards stay listed.
+     */
+    minRows: number;
+    /**
+     * The leaders strip: its type size, one column or two, and whether a constituency's MP keeps
+     * a line of its own above the two columns (not on the square card, the shortest of room).
+     */
+    leaders: { font: number; columns: 1 | 2; lead?: boolean };
 }
 
 /**
@@ -144,6 +157,8 @@ export const SPECS: Record<ViewSize, Spec> = {
         arrangements: ['side', 'stack'],
         mix: { bar: 44, legend: 21, row: 24, rowMin: 34, rowMax: 44 },
         insetMap: 0.3,
+        minRows: 3,
+        leaders: { font: 22, columns: 2, lead: false },
     },
     portrait: {
         pad: 64,
@@ -163,6 +178,8 @@ export const SPECS: Record<ViewSize, Spec> = {
         arrangements: ['side', 'stack', 'mapCallouts'],
         mix: { bar: 46, legend: 22, row: 24, rowMin: 34, rowMax: 48 },
         insetMap: 0.32,
+        minRows: 6,
+        leaders: { font: 23, columns: 2 },
     },
     story: {
         pad: 72,
@@ -183,6 +200,8 @@ export const SPECS: Record<ViewSize, Spec> = {
         arrangements: ['mapCallouts', 'tall'],
         mix: { bar: 46, legend: 24, row: 27, rowMin: 38, rowMax: 54 },
         insetMap: 0.34,
+        minRows: 8,
+        leaders: { font: 27, columns: 1 },
     },
     x: {
         pad: 56,
@@ -202,8 +221,24 @@ export const SPECS: Record<ViewSize, Spec> = {
         arrangements: [],
         mix: { bar: 38, legend: 20, row: 23, rowMin: 32, rowMax: 42 },
         insetMap: 0,
+        minRows: 3,
+        leaders: { font: 21, columns: 1 },
     },
 };
+
+/** The map on every card is about this much bigger than on the first cards. */
+export const MAP_GROWTH = 1.15;
+/** ... and on an MCA card for a county or a constituency, about this much. */
+export const MCA_MAP_GROWTH = 1.25;
+/**
+ * The padding and gaps the map's extra room comes from, as shares of the spec's `pad` and `gap`:
+ * above the headline, under the footer, and between the blocks.
+ */
+const TIGHT = { top: 0.5, foot: 0.55, gap: 0.62 };
+/** How close a chart's rows under the map may come to make that room. */
+const CHART_TIGHT = 0.87;
+/** How narrow the chart's column beside the map may get (its big numbers must still fit). */
+const SIDE_TIGHT = 0.93;
 
 export const box = (x: number, y: number, w: number, h: number): Box => ({
     x,
@@ -248,8 +283,19 @@ export function breakHeadline(
     if (colon > 0 && maxLines > 1) {
         const head = text.slice(0, colon + 1);
         const chunks = text.slice(colon + 2).split(', ');
-        if (fits(head) && chunks.every(fits)) {
-            const lines = [head];
+        // In a narrow column the part before the colon may itself take two lines ("MCA seats
+        // in" then "Nairobi City:"), so the pairs after it still start on a line of their own.
+        const headLines = fits(head)
+            ? [head]
+            : maxLines > 2
+              ? wrapText(head, w, size, 2, true)
+              : [];
+        if (
+            headLines.length &&
+            headLines.join(' ') === head &&
+            chunks.every(fits)
+        ) {
+            const lines = [...headLines];
             let line = '';
             chunks.forEach((chunk, i) => {
                 const last = i === chunks.length - 1;
@@ -339,6 +385,42 @@ export function titleBlock(
         },
         bottom: scopeY + Math.round(scopeSize * 0.35),
     };
+}
+
+/**
+ * The title in a narrower column with the headline at the size it had (`least`): on its usual
+ * lines if it fits them, else on up to `headlineMax` lines. Null when the headline would have to
+ * shrink or be cut, so the caller keeps the wider column.
+ */
+function titleAtLeast(
+    x: number,
+    top: number,
+    w: number,
+    spec: Spec,
+    headline: string,
+    scope: string,
+    least: number,
+): ReturnType<typeof titleBlock> | null {
+    // Whole, at the size asked for, and broken cleanly: no "party count" pair split over lines.
+    const colon = headline.indexOf(': ');
+    const pairs = colon > 0 ? headline.slice(colon + 2).split(', ') : [];
+    const whole = (t: ReturnType<typeof titleBlock>) =>
+        t.headlineLines[0].size >= least &&
+        t.headlineLines.map((l) => l.text).join(' ') === headline.trim() &&
+        pairs.every((p) => t.headlineLines.some((l) => l.text.includes(p)));
+    const at = (lines: number) =>
+        titleBlock(
+            x,
+            top,
+            w,
+            { ...spec, headline: least, headlineLines: lines, headlineMin: 1 },
+            headline,
+            scope,
+        );
+    const usual = at(spec.headlineLines);
+    if (whole(usual)) return usual;
+    const more = at(spec.headlineMax);
+    return whole(more) ? more : null;
 }
 
 /** Height the footer needs at this width (footerBlock lays it out from the top of its box). */
@@ -619,6 +701,47 @@ interface Body {
 
 const titleHeight = (spec: Spec) => Math.round(spec.row.label * 0.86 * 1.9);
 
+/** The map with the callouts above the chart in a column beside it (null when the chart cannot fit). */
+function side(b: Box, spec: Spec, rows: number): Body | null {
+    const { gap } = spec;
+    const chartH = titleHeight(spec) + rows * spec.row.h;
+    const map = box(b.x, b.y, b.w - spec.colW - gap, b.h);
+    const x = map.x + map.w + gap;
+    // A long chart (a dozen parties) may tighten its rows to about three quarters; if it
+    // still does not fit under the callouts, the column is the chart alone (the mix bar
+    // above already gives the largest shares).
+    const fits = (room: number) => room >= rows * spec.row.h * 0.72;
+    const withCallouts = fits(b.h - spec.callout.h - gap);
+    if (!withCallouts && !fits(b.h)) return null;
+    if (!withCallouts)
+        return {
+            map,
+            calloutBox: box(map.x + map.w + gap, b.y, spec.colW, 0),
+            calloutFlow: 'row',
+            calloutGap: gap,
+            chartBox: box(map.x + map.w + gap, b.y, spec.colW, b.h),
+            chartTitle: b.h >= chartH,
+        };
+    const room = b.h - spec.callout.h - gap;
+    const title = room >= chartH;
+    // The column is centred on the map when it needs less than the full height.
+    const chartUsed = Math.min(
+        room,
+        (title ? titleHeight(spec) : 0) + rows * spec.row.max,
+    );
+    const y = Math.round(b.y + (room - chartUsed) / 2);
+    const calloutBox = box(x, y, spec.colW, spec.callout.h);
+    const chartY = calloutBox.y + calloutBox.h + gap;
+    return {
+        map,
+        calloutBox,
+        calloutFlow: 'row',
+        calloutGap: gap,
+        chartBox: box(x, chartY, spec.colW, chartUsed),
+        chartTitle: title,
+    };
+}
+
 /** Place map, callouts and chart in the body for one arrangement (null when it cannot fit). */
 function arrange(
     kind: Arrangement,
@@ -626,51 +749,36 @@ function arrange(
     spec: Spec,
     rows: number,
     callouts: number,
+    /** Width over height of what the map shows. */
+    aspect: number,
 ): Body | null {
     const { gap } = spec;
-    const chartH = titleHeight(spec) + rows * spec.row.h;
+    // Under the map the chart's rows sit a little closer than they would like (CHART_TIGHT),
+    // which is where a stacked card finds the map's extra room.
+    const chartH =
+        titleHeight(spec) +
+        Math.round(rows * spec.row.h * (kind === 'side' ? 1 : CHART_TIGHT));
     // Under the map, a long chart (a dozen parties) takes at most about half the body and its
     // rows tighten, so the map keeps its room.
-    const stackedChartH = Math.min(chartH, Math.round(b.h * 0.5));
+    const stackedChartH = Math.min(chartH, Math.round(b.h * 0.45));
     const colGap = Math.round(gap * 0.5);
     const calloutsColH = callouts * spec.callout.h + (callouts - 1) * colGap;
     switch (kind) {
         case 'side': {
-            const map = box(b.x, b.y, b.w - spec.colW - gap, b.h);
-            const x = map.x + map.w + gap;
-            // A long chart (a dozen parties) may tighten its rows to about three quarters; if it
-            // still does not fit under the callouts, the column is the chart alone (the mix bar
-            // above already gives the largest shares).
-            const fits = (room: number) => room >= rows * spec.row.h * 0.72;
-            const withCallouts = fits(b.h - spec.callout.h - gap);
-            if (!withCallouts && !fits(b.h)) return null;
-            if (!withCallouts)
-                return {
-                    map,
-                    calloutBox: box(map.x + map.w + gap, b.y, spec.colW, 0),
-                    calloutFlow: 'row',
-                    calloutGap: gap,
-                    chartBox: box(map.x + map.w + gap, b.y, spec.colW, b.h),
-                    chartTitle: b.h >= chartH,
-                };
-            const room = b.h - spec.callout.h - gap;
-            const title = room >= chartH;
-            // The column is centred on the map when it needs less than the full height.
-            const chartUsed = Math.min(
-                room,
-                (title ? titleHeight(spec) : 0) + rows * spec.row.max,
+            // A shape that is drawn as wide as its box (Kenya on a portrait card) grows by
+            // taking some of the chart column's width.
+            const widthBound = (b.w - spec.colW - gap) / aspect < b.h;
+            return side(
+                b,
+                widthBound
+                    ? {
+                          ...spec,
+                          colW: Math.round(spec.colW * SIDE_TIGHT),
+                          gap: Math.round(gap * TIGHT.gap),
+                      }
+                    : spec,
+                rows,
             );
-            const y = Math.round(b.y + (room - chartUsed) / 2);
-            const calloutBox = box(x, y, spec.colW, spec.callout.h);
-            const chartY = calloutBox.y + calloutBox.h + gap;
-            return {
-                map,
-                calloutBox,
-                calloutFlow: 'row',
-                calloutGap: gap,
-                chartBox: box(x, chartY, spec.colW, chartUsed),
-                chartTitle: title,
-            };
         }
         case 'stack': {
             const lowerH = Math.max(chartH, calloutsColH);
@@ -749,6 +857,13 @@ export function viewLayout(
     const nCallouts = Math.max(1, calloutsFor(view).length);
     const nRows = Math.max(1, view.rows.length);
     const withRows = view.mix.rows.length > 0;
+    // How much bigger the map is than on the first cards (owner, 2026-11-27): a quarter on an
+    // MCA card for a county or a constituency, about 15% elsewhere. The room comes from the
+    // padding and the gaps first (TIGHT), then from the rows, which shorten to "and N more".
+    const grow =
+        view.seat === 'mca' && view.focus && view.focus.level !== 'ward'
+            ? MCA_MAP_GROWTH
+            : MAP_GROWTH;
     // Above the chart, the bar has exactly the chart's rows, so the two never disagree.
     const chartParts: MixPartInput[] = view.rows.map((r) => ({
         key: r.key,
@@ -785,6 +900,7 @@ export function viewLayout(
         rowsMore: 0,
         moreLine: null,
         holder: block,
+        leaders: null,
     });
     const none = box(pad, h - 1, 0, 0);
     const base = (t: ReturnType<typeof titleBlock>, footerBox: Box) => ({
@@ -827,9 +943,37 @@ export function viewLayout(
             rowsMore: 0,
             moreLine: null,
             holder: null,
+            leaders: null,
         };
     };
-    /** Bar, legend and rows from `y` down to `bottom`, across `x`..`x + width`. */
+    /** The card's link as "+N more at <link>" prints it: no scheme, no query. */
+    const link = text.url
+        .replace(/^https?:\/\//, '')
+        .replace(/[?#].*$/, '')
+        .replace(/\/$/, '');
+    /** Room the rows always keep: `minRows` of them (or all, if fewer) and the "more" line. */
+    const minRowsH =
+        Math.min(spec.minRows, view.mix.rows.length) * spec.mix.rowMin +
+        (view.mix.rows.length > spec.minRows
+            ? Math.round(spec.mix.row * 1.6)
+            : 0) +
+        // A few pixels of slack: the blocks above are placed on whole pixels.
+        8;
+    /** The leaders strip across `width` from `y`, in at most `maxH`; null on cards without one. */
+    const stripAt = (x: number, y: number, width: number, maxH: number) =>
+        leadersStrip({
+            x,
+            y,
+            w: width,
+            maxH,
+            rows: view.leaders,
+            font: spec.leaders.font,
+            link,
+            columns: spec.leaders.columns,
+            lead: spec.leaders.lead,
+        });
+    const stripGap = Math.round(gap * 0.75);
+    /** Strip (if any), bar, legend and rows from `y` down to `bottom`, across `x`..`x + width`. */
     const withMixRows = (
         t: ReturnType<typeof titleBlock>,
         map: Box,
@@ -838,11 +982,26 @@ export function viewLayout(
         y: number,
         bottom: number,
         footerBox: Box,
+        /** The strip, when it is already placed elsewhere on the card (under the map on X). */
+        placedStrip?: LeadersStripLayout | null,
     ): ViewLayout => {
-        const bar = mixBar(box(x, y, width, spec.mix.bar), view);
+        // What the bar, its legend and the fewest rows need: the strip takes the rest at most.
+        const probe = mixBar(box(x, 0, width, spec.mix.bar), view);
+        const fixed =
+            spec.mix.bar +
+            gap * 0.55 +
+            mixLegend(x, 0, width, view, probe, spec.mix.legend).box.h +
+            gap * 0.9 +
+            minRowsH;
+        const inColumn = placedStrip
+            ? null
+            : stripAt(x, y, width, bottom - y - stripGap - fixed + 2);
+        const leaders = placedStrip ?? inColumn;
+        const barY = inColumn ? inColumn.box.y + inColumn.box.h + stripGap : y;
+        const bar = mixBar(box(x, barY, width, spec.mix.bar), view);
         const legend = mixLegend(
             x,
-            Math.round(y + spec.mix.bar + gap * 0.55),
+            Math.round(barY + spec.mix.bar + gap * 0.55),
             width,
             view,
             bar,
@@ -870,27 +1029,76 @@ export function viewLayout(
             rowsMore: r.more,
             moreLine: r.moreLine,
             holder: null,
+            leaders,
         };
     };
 
     if (size === 'x') {
         // Map on the left at full height; headline, the mix and the chart or rows on the right;
         // the footer runs under both.
-        const top = Math.round(spec.stripH * 2 + pad * 0.75);
+        const top = Math.round(spec.stripH * 2 + pad * TIGHT.top);
         const fh = footerHeight(w - 2 * pad, spec.footer, view, text.url);
-        const footerBox = box(pad, h - pad * 0.7 - fh, w - 2 * pad, fh);
-        const bodyBottom = Math.round(footerBox.y - gap * 0.75);
-        const mapW = Math.round(
-            Math.min(
-                w - 2 * pad - spec.colW - gap * 1.5,
-                Math.max(560, (bodyBottom - top) * text.mapAspect),
-            ),
+        const footerBox = box(
+            pad,
+            Math.round(h - pad * TIGHT.foot - fh),
+            w - 2 * pad,
+            fh,
         );
-        const map = box(pad, top, mapW, bodyBottom - top);
-        const colX = Math.round(pad + mapW + gap * 1.5);
-        const colW = w - pad - colX;
-        const t = titleBlock(colX, top, colW, spec, text.headline, scope);
+        const bodyBottom = Math.round(footerBox.y - gap * TIGHT.gap);
+        // The map already runs the full height here, so a wide unit grows by widening the map's
+        // column (a tall one, like Kenya, has no use for more width). The column of words beside
+        // it narrows, but never so far that the headline has to shrink: the growth steps down
+        // until the headline keeps the size it has beside the map at its first width.
+        const wanted = Math.max(560, (bodyBottom - top) * text.mapAspect);
+        const firstW = w - 2 * pad - spec.colW - gap * 1.5;
+        const columnAt = (mapW: number) => {
+            const colX = Math.round(pad + mapW + gap * 1.5);
+            return { mapW, colX, colW: w - pad - colX };
+        };
+        const firstCol = columnAt(Math.round(Math.min(firstW, wanted)));
+        const first = {
+            ...firstCol,
+            t: titleBlock(
+                firstCol.colX,
+                top,
+                firstCol.colW,
+                spec,
+                text.headline,
+                scope,
+            ),
+        };
+        let placed = first;
+        for (const g of [grow, (grow + 1) / 2]) {
+            const c = columnAt(Math.round(Math.min(firstW * g, wanted)));
+            const t = titleAtLeast(
+                c.colX,
+                top,
+                c.colW,
+                spec,
+                text.headline,
+                scope,
+                first.t.headlineLines[0].size,
+            );
+            if (t) {
+                placed = { ...c, t };
+                break;
+            }
+        }
+        const { mapW, colX, colW, t } = placed;
+        let map = box(pad, top, mapW, bodyBottom - top);
         const barY = Math.round(t.bottom + gap * 0.7);
+        // The leaders strip goes under the map when the shape leaves the room for it there (a
+        // wide unit in a tall column); otherwise it leads the column of words.
+        let under: LeadersStripLayout | null = null;
+        if (withRows) {
+            const probe = stripAt(pad, 0, mapW, Infinity);
+            const need = probe ? probe.box.h + stripGap : 0;
+            // "Leaves the room": the shape is drawn no more than 3% smaller for it.
+            if (probe && map.h - need >= (mapW / text.mapAspect) * 0.97) {
+                map = box(pad, top, mapW, map.h - need);
+                under = stripAt(pad, map.y + map.h + stripGap, mapW, Infinity);
+            }
+        }
         if (view.single)
             return single(
                 t,
@@ -899,7 +1107,16 @@ export function viewLayout(
                 footerBox,
             );
         if (withRows)
-            return withMixRows(t, map, colX, colW, barY, bodyBottom, footerBox);
+            return withMixRows(
+                t,
+                map,
+                colX,
+                colW,
+                barY,
+                bodyBottom,
+                footerBox,
+                under,
+            );
         const bar = mixBar(
             box(colX, barY, colW, spec.mix.bar),
             view,
@@ -938,20 +1155,24 @@ export function viewLayout(
     }
 
     const innerW = w - pad - Math.max(pad, spec.insetRight ?? 0);
-    const top = Math.round(Math.max(spec.stripH * 2 + pad * 0.8, spec.safeTop));
+    const top = Math.round(
+        Math.max(spec.stripH * 2 + pad * TIGHT.top, spec.safeTop),
+    );
     const fh = footerHeight(innerW, spec.footer, view, text.url);
     const footerBox = box(
         pad,
-        Math.round(h - Math.max(spec.safeBottom, pad * 0.8) - fh),
+        Math.round(h - Math.max(spec.safeBottom, pad * TIGHT.foot) - fh),
         innerW,
         fh,
     );
+    /** The gap between blocks: the spec's, tightened to give the map its extra room. */
+    const tight = Math.round(gap * TIGHT.gap);
 
     if (view.single) {
         // The map, and beside it (a tall shape on a wide card) or under it, who holds the seat.
         const t = titleBlock(pad, top, innerW, spec, text.headline, scope);
-        const bodyTop = Math.round(t.bottom + gap);
-        const bodyBottom = Math.round(footerBox.y - gap);
+        const bodyTop = Math.round(t.bottom + tight);
+        const bodyBottom = Math.round(footerBox.y - tight);
         const side = size !== 'story' && text.mapAspect < 1.15;
         if (side) {
             const colX = pad + innerW - spec.colW;
@@ -975,93 +1196,134 @@ export function viewLayout(
         const blockY = Math.round(bodyBottom - probe.box.h);
         return single(
             t,
-            box(pad, bodyTop, innerW, blockY - gap - bodyTop),
+            box(pad, bodyTop, innerW, blockY - tight - bodyTop),
             holderBlock(pad, blockY, innerW, view, holderFonts)!,
             footerBox,
         );
     }
 
     if (withRows) {
-        const bottom = Math.round(footerBox.y - gap);
+        const bottom = Math.round(footerBox.y - tight);
         const full = titleBlock(pad, top, innerW, spec, text.headline, scope);
         const bar = mixBar(box(pad, 0, innerW, spec.mix.bar), view);
         const legendH = mixLegend(0, 0, innerW, view, bar, spec.mix.legend).box
             .h;
-        const mapTop = Math.round(full.bottom + gap * 0.8);
-        const fullMap = (rowH: number) => {
-            const below =
-                spec.mix.bar +
-                gap * 0.55 +
-                legendH +
-                gap * 0.9 +
-                view.mix.rows.length * rowH;
-            return box(
-                pad,
-                mapTop,
-                innerW,
-                Math.round(bottom - below - gap - mapTop),
-            );
-        };
-        // Many rows: the map sits beside the headline; the mix, its legend and the rows fill
-        // the width. Beside the map the headline is narrower: it may shrink further, so it is
-        // never cut.
-        const mapW = Math.round(innerW * spec.insetMap);
-        const t = titleBlock(
-            pad,
-            top,
-            innerW - mapW - gap,
-            { ...spec, headlineMin: 0.6 },
-            text.headline,
-            scope,
-        );
-        const insetH = Math.round(
-            Math.min(
-                mapW * 1.25,
-                Math.max(mapW / text.mapAspect, t.bottom - top),
-            ),
-        );
-        const inset = box(pad + innerW - mapW, top, mapW, insetH);
-        // Whichever draws the map larger: full width above the rows (rows at their roomiest,
-        // else a little tighter) or the inset beside the headline. Rows then take what is left.
+        const mapTop = Math.round(full.bottom + tight);
+        // The strip at its full height (it shortens only for want of room).
+        const stripH = stripAt(pad, 0, innerW, Infinity)?.box.h ?? 0;
+        /** The bar and its legend, with their gaps. */
+        const mixH = spec.mix.bar + gap * 0.55 + legendH + gap * 0.9;
+        /** What must fit under the map: the strip, the mix and the fewest rows. */
+        const roomUnder = (stripH ? stripH + stripGap : 0) + mixH + minRowsH;
+
+        // The map across the width, above the strip, the mix and the rows. Its first height is
+        // what the rows leave at their roomiest (else a little tighter); it then grows, but no
+        // taller than the shape drawn across the full width, and never into `roomUnder`.
+        let across: Box | null = null;
         for (const rowH of [
             spec.mix.rowMax,
             Math.round((spec.mix.rowMax + spec.mix.rowMin) / 2),
         ]) {
-            const map = fullMap(rowH);
-            if (
-                map.h >= h * 0.12 &&
-                fittedArea(map, text.mapAspect) >
-                    fittedArea(inset, text.mapAspect)
-            )
-                return withMixRows(
-                    full,
-                    map,
-                    pad,
-                    innerW,
-                    Math.round(map.y + map.h + gap),
-                    bottom,
-                    footerBox,
-                );
+            const firstH =
+                bottom - mapTop - tight - mixH - view.mix.rows.length * rowH;
+            if (firstH < h * 0.12) continue;
+            const mapH = Math.round(
+                Math.min(
+                    firstH * grow,
+                    innerW / text.mapAspect,
+                    bottom - mapTop - tight - roomUnder,
+                ),
+            );
+            if (mapH >= h * 0.1) across = box(pad, mapTop, innerW, mapH);
+            break;
         }
-        const y = Math.round(Math.max(t.bottom, inset.y + inset.h) + gap * 0.8);
-        return withMixRows(t, inset, pad, innerW, y, bottom, footerBox);
+
+        // The map beside the headline; the strip, the mix and the rows fill the width under
+        // both. Beside the map the headline is narrower: it may shrink further, so it is never
+        // cut. A tall shape stops where `roomUnder` starts.
+        const insetSpec = { ...spec, headlineMin: 0.6 };
+        const inset = (share: number, least?: number) => {
+            const mapW = Math.round(innerW * share);
+            const t =
+                least === undefined
+                    ? titleBlock(
+                          pad,
+                          top,
+                          innerW - mapW - gap,
+                          insetSpec,
+                          text.headline,
+                          scope,
+                      )
+                    : titleAtLeast(
+                          pad,
+                          top,
+                          innerW - mapW - gap,
+                          insetSpec,
+                          text.headline,
+                          scope,
+                          least,
+                      );
+            if (!t) return null;
+            const insetH = Math.round(
+                Math.min(
+                    mapW * 1.25,
+                    Math.max(mapW / text.mapAspect, t.bottom - top),
+                    bottom - top - tight - roomUnder,
+                ),
+            );
+            return { t, map: box(pad + innerW - mapW, top, mapW, insetH) };
+        };
+        const firstInset = inset(spec.insetMap)!;
+        // The inset grows too, as far as the headline beside it keeps its size.
+        const least = firstInset.t.headlineLines[0].size;
+        const beside =
+            inset(spec.insetMap * grow, least) ??
+            inset((spec.insetMap * (grow + 1)) / 2, least) ??
+            firstInset;
+
+        // Whichever draws the map larger.
+        if (
+            across &&
+            fittedArea(across, text.mapAspect) >
+                fittedArea(beside.map, text.mapAspect)
+        )
+            return withMixRows(
+                full,
+                across,
+                pad,
+                innerW,
+                Math.round(across.y + across.h + tight),
+                bottom,
+                footerBox,
+            );
+        const y = Math.round(
+            Math.max(beside.t.bottom, beside.map.y + beside.map.h) + tight,
+        );
+        return withMixRows(beside.t, beside.map, pad, innerW, y, bottom, footerBox);
     }
 
     const t = titleBlock(pad, top, innerW, spec, text.headline, scope);
-    const barY = Math.round(t.bottom + gap * 0.7);
+    const barY = Math.round(t.bottom + tight * 0.8);
     const bar = mixBar(box(pad, barY, innerW, spec.mix.bar), view, chartParts);
-    const bodyTop = Math.round(barY + spec.mix.bar + gap);
+    const bodyTop = Math.round(barY + spec.mix.bar + tight);
     const body = box(
         pad,
         bodyTop,
         innerW,
-        Math.round(footerBox.y - gap) - bodyTop,
+        Math.round(footerBox.y - tight) - bodyTop,
     );
     // The arrangement that draws the map's shape the largest.
     let best: Body | null = null;
     let bestArea = -1;
     for (const kind of spec.arrangements) {
-        const placed = arrange(kind, body, spec, nRows, nCallouts);
+        const placed = arrange(
+            kind,
+            body,
+            spec,
+            nRows,
+            nCallouts,
+            text.mapAspect,
+        );
         // An arrangement that leaves the map less than a third of the body is no arrangement.
         const usable =
             placed && placed.map.h >= body.h / 3 && placed.map.w >= body.w / 3;
@@ -1080,6 +1342,7 @@ export function viewLayout(
                 spec,
                 nRows,
                 nCallouts,
+                text.mapAspect,
             )!,
         footerBox,
         bar,

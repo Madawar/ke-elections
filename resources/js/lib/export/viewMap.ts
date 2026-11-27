@@ -110,6 +110,12 @@ export function viewStyle(
     return { ...base, layers };
 }
 
+/**
+ * How far the card's map may zoom in to fill its box. A small urban constituency (Mathare is
+ * under 5 km across) needs more than the on-screen map's usual 13 to fill the card.
+ */
+export const VIEW_MAP_MAX_ZOOM = 16;
+
 /** Draw the view's map at the exact pixel size of its box on the card. */
 export function renderViewMap(
     view: ViewMapSpec,
@@ -127,5 +133,6 @@ export function renderViewMap(
             ? { level: view.focus.level as MapLevel, code: view.focus.code }
             : undefined,
         padding: pad,
+        maxZoom: VIEW_MAP_MAX_ZOOM,
     });
 }
