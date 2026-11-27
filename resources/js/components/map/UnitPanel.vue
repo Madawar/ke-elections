@@ -9,11 +9,16 @@ import {
     watch,
 } from 'vue';
 import { siteUrl } from '@/lib/export/format';
+import {
+    type LeaderRow,
+    leaderColour,
+    leadersFor,
+    mcaSummary,
+} from '@/lib/leaders';
 import { unitPath } from '@/lib/map/urls';
 import type { SeatsData } from '@/lib/seats';
-import { partyColours } from '@/lib/seats';
 import { SEAT_COLOURS } from '@/lib/map/theme';
-import { type Unit, type UnitIndex, seatsFor } from '@/lib/units';
+import type { Unit, UnitIndex } from '@/lib/units';
 
 const props = defineProps<{
     unit: Unit;
@@ -72,10 +77,6 @@ const counts = computed(() => {
         )
         .join(', ');
 });
-const colours = computed(() => partyColours(props.seats));
-const partyName = computed(
-    () => new Map(props.seats.parties.map((p) => [p.abbrev, p.name])),
-);
 /** Parties the data describes have a profile; independents are not a party and have none. */
 const profiled = computed(
     () =>
@@ -85,20 +86,22 @@ const profiled = computed(
                 .filter((a) => a !== 'IND'),
         ),
 );
-const partyLabel = (party: string | null) =>
-    party === 'IND' ? 'Independent' : (partyName.value.get(party ?? '') ?? party);
-const rows = computed(() =>
-    seatsFor(props.unit.l).map((seat) => ({
-        seat,
-        holder:
-            props.seats.holders.find(
-                (h) =>
-                    h.seat === seat.key &&
-                    h.level === props.unit.l &&
-                    h.code === props.unit.c,
-            ) ?? null,
-    })),
+// Who represents the unit: its own seat first, then the seats held above it (lib/leaders.ts).
+const rows = computed(() => leadersFor(props.unit, props.seats, props.index));
+/** A constituency's MCAs: one line of party counts that opens the list of its wards. */
+const mcas = computed(() => mcaSummary(props.unit, props.seats, props.index));
+const wardsOpen = ref(false);
+watch(
+    () => props.unit,
+    () => (wardsOpen.value = false),
 );
+const wardOf = (row: LeaderRow) => props.index.get('ward', row.unit.code);
+const basisLabel = (basis: string) =>
+    basis === 'by_election'
+        ? 'By-election'
+        : basis === 'succession'
+          ? 'Succeeded'
+          : 'Elected';
 const seatList = ref<HTMLElement | null>(null);
 let stopWaiting: (() => void) | null = null;
 async function showHighlight() {
@@ -179,86 +182,158 @@ const sourceHost = (url: string) => {
             </template>
         </nav>
 
-        <section v-if="rows.length">
-            <h3 class="mb-2 text-[15px] font-semibold">Seats</h3>
+        <section v-if="rows.length" data-leaders>
+            <h3 class="mb-2 text-[15px] font-semibold">
+                Who represents {{ unit.n }}
+            </h3>
             <ul
                 ref="seatList"
                 class="divide-y divide-hairline border-y border-hairline"
             >
                 <li
-                    v-for="{ seat, holder } in rows"
-                    :key="seat.key"
+                    v-for="row in rows"
+                    :key="row.seat"
                     class="flex gap-3 py-2.5"
                     :class="
-                        seat.key === highlightSeat
+                        row.seat === highlightSeat
                             ? 'outline-2 -outline-offset-2 outline-ink'
                             : ''
                     "
-                    :data-highlighted="seat.key === highlightSeat"
+                    :data-leader="row.seat"
+                    :data-highlighted="row.seat === highlightSeat"
                 >
                     <span
                         class="shrink-0 rounded-[1px]"
-                        :class="seat.key === highlightSeat ? 'w-3' : 'w-1.5'"
-                        :style="{ background: SEAT_COLOURS[seat.key] }"
+                        :class="row.seat === highlightSeat ? 'w-3' : 'w-1.5'"
+                        :style="{ background: leaderColour(row.seat) }"
                         aria-hidden="true"
                     />
                     <div class="min-w-0 flex-1">
                         <p class="text-[13px] text-muted-ink">
-                            {{ seat.label }}
+                            {{ row.title
+                            }}<template v-if="row.where">
+                                ({{ row.where }})</template
+                            >
                         </p>
-                        <template v-if="holder">
+                        <template v-if="row.holder">
                             <p class="text-[15px] font-medium">
-                                {{ holder.name }}
+                                {{ row.holder.name }}
                             </p>
                             <p
                                 class="flex flex-wrap items-center gap-x-2 text-[13px]"
                             >
-                                <span class="inline-flex items-center gap-1">
+                                <span
+                                    v-if="row.holder.party"
+                                    class="inline-flex items-center gap-1"
+                                >
                                     <span
                                         class="size-2.5 rounded-[2px]"
                                         :style="{
-                                            background: colours.get(
-                                                holder.party ?? '',
-                                            ),
+                                            background: row.holder.colour,
                                         }"
                                         aria-hidden="true"
                                     />
                                     <button
-                                        v-if="holder.party && profiled.has(holder.party)"
+                                        v-if="profiled.has(row.holder.party)"
                                         type="button"
                                         data-party
                                         class="-my-3.5 inline-flex min-h-11 items-center text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
-                                        :aria-label="`${partyLabel(holder.party)}: all seats`"
-                                        @click="emit('party', holder.party)"
+                                        :aria-label="`${row.holder.partyName}: all seats`"
+                                        @click="emit('party', row.holder.party)"
                                     >
-                                        {{ partyLabel(holder.party) }}
+                                        {{ row.holder.partyName }}
                                     </button>
                                     <template v-else>{{
-                                        partyLabel(holder.party)
+                                        row.holder.partyName
                                     }}</template>
                                 </span>
                                 <span class="text-muted-ink"
-                                    >{{
-                                        holder.basis === 'by_election'
-                                            ? 'By-election'
-                                            : holder.basis === 'succession'
-                                              ? 'Succeeded'
-                                              : 'Elected'
-                                    }}
-                                    {{ holder.started_on.slice(0, 4) }}</span
+                                    >{{ basisLabel(row.holder.basis) }}
+                                    {{ row.holder.startedOn.slice(0, 4) }}</span
                                 >
                                 <a
-                                    :href="holder.source_url"
+                                    :href="row.holder.sourceUrl"
                                     target="_blank"
                                     rel="noopener"
                                     class="text-muted-ink underline underline-offset-2"
-                                    >{{ sourceHost(holder.source_url) }}</a
+                                    >{{ sourceHost(row.holder.sourceUrl) }}</a
                                 >
                             </p>
                         </template>
                         <p v-else class="text-[15px] text-muted-ink">
                             No approved data yet
                         </p>
+                    </div>
+                </li>
+                <li v-if="mcas" class="flex gap-3 py-1" data-mca-summary>
+                    <span
+                        class="w-1.5 shrink-0 rounded-[1px]"
+                        :style="{ background: SEAT_COLOURS.mca }"
+                        aria-hidden="true"
+                    />
+                    <div class="min-w-0 flex-1">
+                        <button
+                            type="button"
+                            class="flex min-h-11 w-full items-center justify-between gap-2 text-left text-[15px]"
+                            :aria-expanded="wardsOpen"
+                            @click="wardsOpen = !wardsOpen"
+                        >
+                            <span>{{ mcas.text }}</span>
+                            <svg
+                                viewBox="0 0 12 12"
+                                class="size-3 shrink-0 transition-transform motion-reduce:transition-none"
+                                :class="wardsOpen ? 'rotate-180' : ''"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M2 4.5 6 8l4-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.6"
+                                />
+                            </svg>
+                        </button>
+                        <ul v-if="wardsOpen" class="pb-1.5">
+                            <li
+                                v-for="ward in mcas.rows"
+                                :key="ward.unit.code"
+                                :data-mca-ward="ward.unit.code"
+                                class="flex flex-wrap items-baseline gap-x-2 text-[14px]"
+                            >
+                                <span class="text-[13px] text-muted-ink">{{
+                                    ward.unit.name
+                                }}</span>
+                                <button
+                                    type="button"
+                                    class="inline-flex min-h-11 items-center text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
+                                    :class="ward.holder ? '' : 'text-muted-ink'"
+                                    :aria-label="
+                                        ward.holder
+                                            ? `${ward.holder.name}, MCA: show ${ward.unit.name} ward`
+                                            : `Show ${ward.unit.name} ward: no approved data yet`
+                                    "
+                                    @click="emit('go', wardOf(ward)!)"
+                                >
+                                    {{
+                                        ward.holder
+                                            ? ward.holder.name
+                                            : 'No approved data yet'
+                                    }}
+                                </button>
+                                <span
+                                    v-if="ward.holder?.party"
+                                    class="inline-flex items-center gap-1 text-[13px]"
+                                >
+                                    <span
+                                        class="size-2.5 rounded-[2px]"
+                                        :style="{
+                                            background: ward.holder.colour,
+                                        }"
+                                        aria-hidden="true"
+                                    />{{ ward.holder.partyLabel }}
+                                </span>
+                            </li>
+                        </ul>
                     </div>
                 </li>
             </ul>

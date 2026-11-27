@@ -1,7 +1,10 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import LeadersStrip from '@/components/map/LeadersStrip.vue';
 import Legend from '@/components/map/Legend.vue';
+import { leadersFor } from '@/lib/leaders';
 import { legendTitle } from '@/lib/seats';
+import { LEADERS_SEATS, leadersIndex } from '../leadersFixtures';
 
 const rows = [
     {
@@ -447,5 +450,56 @@ describe('Legend as a bar chart', () => {
             expect(li.get('[aria-pressed]').attributes('aria-pressed')).toBe('true');
             expect(li.get('[data-party-details]').attributes('aria-pressed')).toBeUndefined();
         });
+    });
+});
+
+describe('Legend: the "Leaders here" strip', () => {
+    const leaders = leadersFor(
+        leadersIndex.get('constituency', 290)!,
+        LEADERS_SEATS,
+        leadersIndex,
+    );
+    beforeEach(() => {
+        localStorage.clear();
+        window.matchMedia = ((q: string) => ({
+            matches: q.includes('min-width'),
+            media: q,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            addListener: () => {},
+            removeListener: () => {},
+        })) as never;
+    });
+
+    it('sits at the top of the open legend, above the party bars, inside the part that scrolls', () => {
+        const wrapper = mountLegend({ leaders, note: 'Source: IEBC' });
+        const strip = wrapper.getComponent(LeadersStrip);
+        expect(strip.props('rows')).toEqual(leaders);
+        const scroller = wrapper.get('.overflow-y-auto');
+        expect(scroller.element.contains(strip.element)).toBe(true);
+        expect(scroller.element.firstElementChild).toBe(strip.element);
+        // The share button and the source stay outside the scrolling part, always in reach.
+        const share = mountLegend({ leaders, shareable: true }).get(
+            '[data-share-view]',
+        );
+        expect(share.element.closest('.overflow-y-auto')).toBeNull();
+    });
+
+    it('passes on the leader whose name was pressed', async () => {
+        const wrapper = mountLegend({ leaders });
+        await wrapper.get('[data-leader="governor"] button').trigger('click');
+        expect(wrapper.emitted('leader')?.[0]).toEqual([leaders[1]]);
+    });
+
+    it('is absent with nobody to list, and while the legend is a chip', () => {
+        expect(mountLegend().findComponent(LeadersStrip).exists()).toBe(false);
+        expect(
+            mountLegend({ leaders: [] }).findComponent(LeadersStrip).exists(),
+        ).toBe(false);
+        expect(
+            mountLegend({ leaders, open: false })
+                .findComponent(LeadersStrip)
+                .exists(),
+        ).toBe(false);
     });
 });

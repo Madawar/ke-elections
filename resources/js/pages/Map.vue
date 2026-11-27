@@ -62,6 +62,7 @@ import {
     createFocusHistory,
     gatePopState,
 } from '@/lib/map/history';
+import { type LeaderRow, leadersFor, legendOmits } from '@/lib/leaders';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
@@ -363,11 +364,16 @@ const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
 // of it); the person can collapse it to its chip. On a phone it starts as the chip.
 const legendOpen = ref(isDesktop.value);
 watch(isDesktop, (d) => (legendOpen.value = d));
-// The open legend is capped to the room between the search bar and its own bottom edge, so its
-// heading is never pushed under the search bar.
+// The open legend is capped to the room under the controls at the top (the search bar, the seat
+// chips, and the back button while a unit is focused), so it is never pushed under them. The
+// chips sit beside the search bar on wide desktops, and under it everywhere else.
+const isWide = useMediaQuery('(min-width: 1280px)');
+const legendTopClearance = computed(
+    () => (isWide.value ? 64 : 116) + (selection.value ? 52 : 0),
+);
 const legendMaxHeight = computed(
     () =>
-        `calc(100dvh - ${(isDesktop.value ? 24 : sheetHeight.value + 12) + 68}px)`,
+        `calc(100dvh - ${(isDesktop.value ? 24 : sheetHeight.value + 12) + legendTopClearance.value}px)`,
 );
 // Only an open legend beside a focused unit takes room from the fit.
 const legendBoxOpen = computed(
@@ -571,6 +577,32 @@ function onPickPerson({ holder, unit }: PersonResult) {
         { name: holder.name, title: SEAT_TITLE[holder.seat] },
         unit ?? null,
     );
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+// ---- leaders here -----------------------------------------------------------------------
+// Who holds each seat that covers the focused unit, at the top of the legend box. The same rows as
+// the panel's "Who represents" (lib/leaders.ts), less the one seat the legend's single bar counts.
+const leadersHere = computed(() =>
+    index.value
+        ? leadersFor(selection.value, seats.value, index.value, {
+              omit: legendOmits(
+                  index.value,
+                  colourKey.value,
+                  focusOf(selection.value),
+              ),
+          })
+        : [],
+);
+/** A name in "Leaders here" was pressed: point at that person's row in the panel. The focus stays. */
+function onPickLeader(row: LeaderRow) {
+    if (!row.holder) return;
+    partyAbbrev.value = null;
+    view.value = 'unit';
+    // Set again even for the same seat, so the row scrolls back into view.
+    highlightSeat.value = undefined;
+    void nextTick(() => (highlightSeat.value = row.seat));
+    announce.value = `${row.holder.name}, ${row.title}${row.where ? ` (${row.where})` : ''}: shown in the panel.`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
 
@@ -1102,9 +1134,11 @@ const showView = (v: typeof view.value) => {
                     (onlyParties.length > 0 || !!focusOf(selection))
                 "
                 @toggle="toggleParty"
+                :leaders="leadersHere"
                 @clear="onlyParties = []"
                 @share="shareView"
                 @party="openParty"
+                @leader="onPickLeader"
             />
         </div>
 

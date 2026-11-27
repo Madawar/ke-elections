@@ -2,6 +2,8 @@
 // The map legend. With counts it is a bar chart: one bar per party on a single scale that starts
 // at zero, largest first, "Other parties" last. Without counts (former provinces) it is a plain key.
 import { computed } from 'vue';
+import LeadersStrip from './LeadersStrip.vue';
+import type { LeaderRow } from '@/lib/leaders';
 import { type LegendRow, shareOf } from '@/lib/legend';
 
 const props = defineProps<{
@@ -20,6 +22,8 @@ const props = defineProps<{
     shareable?: boolean;
     /** Make "Share this view" stand out: parties are highlighted or a unit is focused. */
     shareEmphasis?: boolean;
+    /** Who holds each seat that covers the focused unit: the "Leaders here" strip. */
+    leaders?: LeaderRow[];
 }>();
 const emit = defineEmits<{
     /** A row was pressed: switch that party's highlight on or off. */
@@ -30,6 +34,8 @@ const emit = defineEmits<{
     share: [];
     /** A row's "Party details" button: open that party's profile (its abbreviation). */
     party: [abbrev: string];
+    /** A name in "Leaders here" was pressed: show that person in the panel. */
+    leader: [row: LeaderRow];
 }>();
 const isOn = (key: string) => props.highlighted?.includes(key) ?? false;
 const open = defineModel<boolean>('open', { default: true });
@@ -105,6 +111,11 @@ const spoken = (r: LegendRow) =>
             </svg>
         </button>
         <div v-if="open" class="min-h-0 flex-1 overflow-y-auto px-3 pb-1">
+            <LeadersStrip
+                v-if="leaders?.length"
+                :rows="leaders"
+                @pick="(row) => emit('leader', row)"
+            />
             <ul class="space-y-0.5">
                 <li v-for="r in sorted" :key="r.key" :data-key="r.key">
                     <template v-if="r.count !== undefined">
