@@ -14,6 +14,7 @@ resume from here.
 | H1 | The dialog's general ability: a card may be a series | done | `e6549cd` |
 | G review | Side by side and the choice: a vacant Woman Rep inside its column, bar proportions, dialog robustness | done | `ebfc563` |
 | H2 | The county carousel (mock-up 3), portrait and story | done | `d5310c2` |
+| Final review | One link per series, the carousel on County seats, keyboard focus in the stepper, small fixes, missing tests | done | `081ab8a` |
 
 ## Task F: the tile grid and its neighbours
 
@@ -289,7 +290,7 @@ A `cards` entry may carry `slides` (`seriesCard(key, label, slides)` in `lib/exp
 
 While it is picked the dialog shows a "Slide" group under the "Card" choice: "Previous" and "Next"
 buttons (accessible names "Previous slide", "Next slide", chevron icons from `@lucide/vue`, 44px,
-disabled at the ends) with "2 of 4" between them. The preview is the current slide; the sizes on
+marked `aria-disabled` at the ends, see the final review) with "2 of 4" between them. The preview is the current slide; the sizes on
 offer are those every slide has, in the first slide's order (the stored-size rule unchanged); the
 headline is the slide's own and fixed (the usual fixed-headline line); the caption and the dialog's
 title and description are the first slide's. The map cache key is `<card>#<slide>|size|theme|slot|box`,
@@ -325,8 +326,8 @@ text at every size, long links, the fallbacks, every card declaring `page`).
 entry, `coverCaption`, and `carouselCard` in `shareView.ts`. Slides: the cover, `leadersCardView` for
 the county, `snapshotView` for the county on MP and on MCA. `Map.vue` adds `carouselCard(...)` last
 for a county in focus on any seat view that offers "Share this view": Governor, Senator, Woman Rep
-("This view|County leaders|Carousel"), MP and MCA ("This view|County leaders|Side by side|Carousel").
-A county on "County seats" still goes the leaders way (its leaders card alone), left as it is. No
+("This view|County leaders|Carousel"), MP and MCA ("This view|County leaders|Side by side|Carousel"),
+and, since the final review, County seats ("County leaders|Carousel", opening on the leaders card). No
 place reaches five entries: at 390px wide the four sit in two rows of two, each 175×44
 (`carousel-dialog-phone.png`).
 
@@ -345,8 +346,8 @@ portrait light and dark and story light, and looked at beside mock-up 3. The cov
 mock-up line for line (kicker, two-line headline, one-line scope on portrait, the map, the note);
 on the story the scope wraps to two lines. Fixed after looking: the page text sat far from the link
 (its place was computed from an estimate of the link's width); it is now drawn in the link's own
-text element. On the story, the leaders slide (long link) and Nairobi City's MCA slide have no
-brand: see the ruling. The older PNGs (`/?seat=mca`, `/county/47?seat=county_seats`, `/party/uda`
+text element. On the story, the leaders slide (long link) and Nairobi City's MCA slide had no
+brand: fixed in the final review (one link per series). The older PNGs (`/?seat=mca`, `/county/47?seat=county_seats`, `/party/uda`
 square, `/county/37?seat=mca` portrait) are byte-identical before the first change and after the
 last.
 
@@ -355,19 +356,40 @@ last.
 - **Ruling: a series entry also carries `view` (its first slide)** — the page's `ShareCard[]` and
   the dialog's `view` prop keep one type, and the dialog opens a series on its cover — cost if
   wrong: one field.
-- **Ruling: the page text is muted, regular weight, at the link's size, on the link's line; the link
-  keeps its size: after the brand where the three fit; else right after the link, which starts the
-  line as it does when the brand does not fit (the brand gives way); only where even that is too
-  narrow does the link shrink (the page text then stands apart at the start)** — the footer's height
-  never changes, and the link reads the same on every slide. The cost: on a story, a slide whose link
-  is long has no brand where the same card outside the series has one (Nairobi City's MCA slide:
-  "localhost:8080/county/47?seat=mca 4 of 4"; the leaders slide never had room for the brand on a
-  story). With the real links, portrait always fits all three — cost if wrong: the order in
-  `footerBlock`.
-- **Ruling: where the page text sits right beside the link it is drawn in the link's text element
-  (a `tspan` with `dx`)** — the layout's estimate of the link's width is wider than the drawn link,
-  so a separate element left a gap of about 60px; the cards outside a series have no extra node —
-  cost if wrong: markup only.
+- ~~**Ruling: the page text is muted, regular weight, at the link's size, on the link's line; the
+  link keeps its size: after the brand where the three fit; else right after the link, which starts
+  the line …; only where even that is too narrow does the link shrink (the page text then stands
+  apart at the start)**~~ **Superseded** by "a series has one link" (final review): each slide kept
+  its own link, so the footers of one series differed slide to slide (the brand dropped and the link
+  jumping to the left on Nairobi City's story slides 2 and 4; with
+  `https://kenya-electoral-map.example.org` slides 3 and 4 lost the brand on portrait in all 47
+  counties though the same cards keep it outside the series; the link's size could differ too). Its
+  claim "With the real links, portrait always fits all three" was wrong: it held for
+  `localhost:8080` only, not for a production-length host.
+- **Ruling: a series has one link, and its footer is the same on every slide** (final review). The
+  dialog gives every slide of any series the series' link, its first slide's (the carousel's
+  `/county/<code>`), in place of its own, and the widest page text of the series (`widestPlace`,
+  "4 of 4", the later one on a tie) as `pageWidest`, one of the uniform card props. `footerBlock`
+  then puts the page text (muted, regular, at the link's size) just before the link, which is
+  right-aligned at the footer's right edge on every slide; the brand at the left when brand, page
+  text and link fit, measured with `pageWidest`, so it is on every slide or on none; else no brand
+  and the two stay right-aligned; only where page text and link alone do not fit does the link
+  shrink (to its floor, then without its query), alike on every slide. The cover's link is the
+  shortest of the four, so a slide has at least the room the stand-alone MP or MCA card has: tested
+  over 47 counties, portrait and story, `http://localhost:8080`,
+  `https://kenya-electoral-map.example.org` and a 45-character host (`seriesFooter.test.ts`): within
+  a series every slide shows the brand alike, the link at one size, page text and link at the same
+  x; with the first two hosts the brand is kept wherever the stand-alone seat-view card keeps it. A
+  card outside a series is unchanged (own link, own footer path; the older PNGs byte-identical). The
+  caption still uses the first slide's link — cost if wrong: a slide's footer names the county page,
+  not its own seat view (`?seat=mp`), so a reader who types the link from slide 3 lands on the
+  county's default view; the caption already said the same link.
+- **Ruling: the page text is drawn in the link's text element (a `tspan` with `dx`), just before the
+  link** — the layout's estimate of the link's width is wider than the drawn link, so a separate
+  element left a gap of about 60px; the cards outside a series have no extra node. With the link
+  always right-aligned, the "after the link" and "apart" placements are gone — cost if wrong: markup
+  only. (The page text's left edge moves by 1–2px between "1 of 4" and the others, the "1" being
+  narrower; its right end and the link do not move.)
 - **Ruling: the series' sizes are the intersection, in the first slide's order** (portrait, story
   for the carousel) — cost if wrong: none.
 - **Ruling: "Download PNG" in a series names the file with its place too** (`…-2-of-4.png`), like
@@ -404,6 +426,84 @@ last.
   every pair of counties (1,081 × 2 seats × 2 sizes) lays out clean (run once, not committed; the
   committed sweep has both cases).
 
+## The final review of the branch, and its fixes
+
+The final review found no wrong data. Fixed in `081ab8a`, each test first and seen to fail for the
+right reason unless said:
+
+1. **One link per series** (the ruling above). Tests: `footerPage.test.ts` (rewritten for the new
+   rule: right-aligned link, brand dropped not moved, the widest page text deciding for every slide,
+   the shrink alike on every slide), `seriesFooter.test.ts` (the 47-county sweep), a dialog test that
+   every slide's preview shows `<n> of 4` + the first slide's link at one x and size, and one that a
+   card outside a series keeps its own link. Downloaded with "Download all 4": Nairobi City story and
+   Kakamega portrait, light; the four footers have the brand, the page text and the link at the same
+   pixels (measured), apart from the "1" above.
+2. **The carousel on County seats with a county in focus**: "Share this view" there offers
+   "County leaders|Carousel", opening on the leaders card (`carouselOf` in `Map.vue`, shared with the
+   seat views). "Share leaders" in the panel still offers the leaders card alone. Page tests updated.
+3. **Keyboard focus**: "Previous slide", "Next slide" and "Download all N" use `aria-disabled` (with
+   the disabled look through `aria-disabled:` classes) and a guard in their handlers, not
+   `disabled`, so the focused button keeps the focus at the last slide and while the run is on; a
+   further press does nothing. During "Download all" the slide's place ("2 of 4", `role="status"`)
+   is `aria-live="off"`, so only "Drawing 2 of 4…" is read out. Tests: the stepper's attributes, focus
+   after stepping to the last slide and a further press, focus on "Download all 4" during and after
+   the run, a second press and the stepper doing nothing mid-run (progress never goes back to slide
+   1), one live region speaking. In happy-dom a `disabled` button keeps `document.activeElement`, so
+   the focus checks alone would not catch the attribute; the tests also check `disabled` is false.
+   In Chromium: three Enter presses on "Next slide" end on "4 of 4" with the focus on "Next slide";
+   the focus stays on "Download all 4" for the whole run.
+4. **Small ones**: the cover keeps "Swipe for each." together (`COVER_SWIPE`; the rest wrapped, the
+   sentence on the last line where it fits, else on its own), tested on Nairobi City's story and
+   every county in both sizes; the series' buttons put the primary first (see the ruling); the unused
+   `VERSUS_SEATS`, `VERSUS_SIZES` and `versusSpecOf` are removed; `npm run boundaries:rebuild` ends
+   with `boundaries:neighbours` (`node boundaries/pipeline/neighbours.mjs`, run from the repo root:
+   it rewrites `countyNeighbours.json` identically today), and `CLAUDE.md` says so.
+5. **Missing tests** (the code was right; each test below was shown to fail under the mutation
+   named): closing the dialog while the files are saved saves nothing more (the `saveEach` guard);
+   closing and opening it again while the slides are drawn saves nothing (the guard after
+   `settled()` in `makeAll`); a second "Download all" in the same size and colours reuses the
+   images (reuse removed); after a change of size, or of colours, they are made again (the reuse key
+   reduced to the card); a blocked share says "Tap Share all 4 again" and the second tap shares the
+   same files without drawing again; an unavailable share saves the four files; the cover's source
+   line names the MCA holders' sources only, with a fixture whose seats cite different sites (MP or
+   governor sources added); a key entry that does not fit the words' column steps the "Side by side"
+   type down (the key widths removed from `widest`). No real abbreviation is wide enough to bind
+   there (the widest real key entry, "No approved holder yet 85", ends 70px inside the column at the
+   largest story scale), so the case labels a party with the longest real party name, "National
+   Ordinary People Empowerment Union".
+
+- **Ruling: the carousel is offered on County seats for a county, after its leaders card, which the
+  dialog opens on** — the plan says a county's "Share this view" offers the carousel on any seat view
+  where it is offered; County seats has no "This view", so the leaders card stays first — cost if
+  wrong: one list.
+- **Ruling: in a series the primary action comes first; four buttons sit two by two, three put the
+  primary across the row on a phone with the other two under it, and sit three across from md up** —
+  without file sharing: "Download all 4", then "Download PNG" and "Copy caption"; with it: "Share all
+  4", "Download PNG", "Download all 4", "Copy caption" (two rows of two). Looked at, at 390px wide: a
+  3-across row does not fit ("Download all 4" needs about 130px of the 114 each would get), so the
+  primary goes full width; no button sits alone otherwise. The order is the DOM order, so the tab
+  order follows it — cost if wrong: one list (`seriesActions`).
+- **Ruling: the stepper and "Download all" are marked `aria-disabled`, not disabled; "Download PNG"
+  and "Share all" keep `disabled` while a run is on** — the focus is never on those during a run —
+  cost if wrong: two attributes.
+- **Ruling: the slide's place is silenced (`aria-live="off"`) while "Download all" runs**, rather
+  than the progress line, which says more ("Drawing 2 of 4…") — cost if wrong: one attribute.
+- **Ruling: the scope line keeps its last sentence whole ("Swipe for each.")**, on the last line where
+  it fits, else on a line of its own (Nairobi City's story: "… 17 MPs and 85 MCAs." / "Swipe for
+  each.") — cost if wrong: `COVER_SWIPE` in `coverLayout`.
+
+Existing tests changed in the final review, and why: `footerPage.test.ts` (the old rule's "right
+after the link" and "apart at the start" cases replaced by the new rule; the uniform-props check also
+asks for `pageWidest`), `carousel.test.ts` ("slides 2 to 4 … apart from the page text" now gives the
+slides the series' link as the dialog does and compares the cards apart from the footer's link line:
+brand, page text and link), `ShareViewDialogSeries.test.ts` (the stepper's ends are `aria-disabled`,
+not `disabled`; every mounted dialog is unmounted after its test, so a run of one test cannot reach
+the next), `countySeatsPage.test.ts` (County seats on a county lists "County leaders|Carousel"; the
+"no Carousel on County seats" expectation removed).
+
+The older PNGs (`/?seat=mca`, `/county/47?seat=county_seats`, `/party/uda` square,
+`/county/37?seat=mca` portrait) are byte-identical before the first change and after the last.
+
 ## Parked minor findings
 
 - The card's own tests (`tilesCard.test.ts`, `tilesLayout.test.ts`) first failed on the missing
@@ -430,8 +530,8 @@ last.
   and up to 30 lay out clean. Not fixed.
 - The tiles card's link is now also fed through `parseViewQuery` in a test (it opens that seat with
   nothing highlighted); it passed at once, as the link was already right.
-- The neighbour data is not rebuilt by `npm run boundaries:rebuild`; after a boundary change, rerun
-  `node boundaries/pipeline/neighbours.mjs` (the test fails until then).
+- ~~The neighbour data is not rebuilt by `npm run boundaries:rebuild`~~: it is, since the final
+  review (`boundaries:neighbours` ends the chain).
 
 - Task H: the cover's tests and code were written in one go: `coverCard.test.ts` and
   `carousel.test.ts` were written first but not run before `coverCard.ts` and `coverLayout.ts`
@@ -441,11 +541,19 @@ last.
 - Existing tests changed in H: `countySeatsPage.test.ts` (five expectations gain "|Carousel"; the
   "County leaders … whatever the seat mode" test covers Governor, MP and MCA again), `versusSweep.test.ts`
   (the worst case vacates the Woman Rep, plus a case with no county seats held).
-- On the story the cover's scope line wraps ("… Swipe" / "for each."); a balanced break was not tried.
+- ~~On the story the cover's scope line wraps ("… Swipe" / "for each.")~~: fixed in the final review.
 - In a series on a phone the footer of the dialog has two rows of buttons, so the preview starts
-  lower; when the device cannot share, "Copy caption" sits alone on the second row.
-- "Share all 4" is untested on a real phone (only with a mocked `navigator.share`).
+  lower. ~~"Copy caption" sits alone on the second row~~: fixed (the primary is across the row).
+- Parked after the final review:
+  - "This view" on MP and carousel slide 3 draw the same map twice (separate cache keys).
+  - `countyNeighbours.json` lives under `lib/export` though only tests import it.
+  - "Download all" (several downloads) and "Share all 4" are untested on real phones (only with a
+    mocked `navigator.share` and in desktop Chromium).
+  - The seat slides keep their deeper strip lid, the cover and leaders slides do not.
+  - The leaders card's editable headline shows the numbers hint ("Keep it to the numbers, …") though
+    its headline has no numbers (seen in the County seats screenshot; older than this branch).
 
 ## What is next
 
-Final review of Task H (H1, H2 and the review fixes to G), then the owner's look at the carousel.
+The owner's review of the branch (the carousel above all), then a PR from `feature/share-formats-2`
+into `develop`.
