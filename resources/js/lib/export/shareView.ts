@@ -9,6 +9,7 @@ import {
     leadersCaption,
     numbersCaption,
     partyCaption,
+    topCountiesCaption,
     type CaptionPlatform,
 } from './caption';
 import {
@@ -26,6 +27,13 @@ import { type NumbersLayout, numbersLayout } from './numbersLayout';
 import { type PartyCardView, partyHeadline } from './partyCard';
 import { type PartyLayout, partyLayout } from './partyLayout';
 import { VIEW_SIZES, type ViewSize, viewFilename } from './sizes';
+import {
+    type TopCountiesCardView,
+    topCountiesCardView,
+    topCountiesColouring,
+    topCountiesHeadline,
+} from './topCountiesCard';
+import { type TopCountiesLayout, topCountiesLayout } from './topCountiesLayout';
 import type { Box } from './layout';
 import { type ViewLayout, viewLayout } from './viewLayout';
 import { type ViewMapSpec, viewMapAspect } from './viewMap';
@@ -38,8 +46,9 @@ import {
 import LeadersCard from '@/components/export/LeadersCard.vue';
 import NumbersCard from '@/components/export/NumbersCard.vue';
 import PartyCard from '@/components/export/PartyCard.vue';
+import TopCountiesCard from '@/components/export/TopCountiesCard.vue';
 import ViewCard from '@/components/export/ViewCard.vue';
-import type { MapTheme, ThemeName } from '@/lib/map/theme';
+import { type MapTheme, THEMES, type ThemeName } from '@/lib/map/theme';
 import type { SeatsData } from '@/lib/seats';
 import type { UnitIndex } from '@/lib/units';
 
@@ -47,12 +56,14 @@ export type ShareableView =
     | ViewState
     | PartyCardView
     | LeadersCardView
-    | NumbersCardView;
+    | NumbersCardView
+    | TopCountiesCardView;
 export type ShareLayout =
     | ViewLayout
     | PartyLayout
     | LeadersLayout
-    | NumbersLayout;
+    | NumbersLayout
+    | TopCountiesLayout;
 export type ShareKind = ShareableView['kind'];
 
 /** What a layout is laid out for besides the card: its headline, link and map shape. */
@@ -234,6 +245,52 @@ const NUMBERS_CARD: CardKind<NumbersCardView> = {
     component: NumbersCard,
 };
 
+const TOP_COUNTIES: CardKind<TopCountiesCardView> = {
+    key: 'topCounties',
+    // Ranked rows beside a map: square for feeds, story for TikTok and Reels.
+    sizes: ['square', 'story'],
+    // The group is the person's pick; the headline is a fixed template so the card stays neutral.
+    editableHeadline: false,
+    label: () => 'Top 10 counties',
+    headline: topCountiesHeadline,
+    caption: topCountiesCaption,
+    layout: topCountiesLayout,
+    // Kenya with the listed counties shaded by count. The colouring fills counties, so the spec
+    // names a seat held at the county (governor): that is what decides which fills are coloured,
+    // and that no ward lines are drawn.
+    maps: (layout: TopCountiesLayout, view) => [
+        {
+            key: 'map',
+            box: layout.map,
+            spec: {
+                seat: 'governor',
+                only: [],
+                focus: null,
+                showSurroundings: false,
+                colouring: topCountiesColouring(view, THEMES[view.theme]),
+            },
+        },
+    ],
+    aspect: () => viewMapAspect({ focus: null } as ViewMapSpec),
+    copy: (view) => ({
+        title: 'Share top 10 counties',
+        description: `The counties where ${topCountiesHeadline(view).replace(/^Where /, '')}, sized for Instagram or stories.`,
+    }),
+    // Taken again from the seats in that theme, so independents follow it.
+    inTheme: (view, theme, ctx) =>
+        topCountiesCardView({
+            seats: seatsInTheme(ctx.seats, theme),
+            index: ctx.index,
+            seat: view.seat,
+            group: view.group,
+            theme,
+            sample: view.sample,
+        }),
+    filename: (view, size) =>
+        `kenya-electoral-map-top-counties-${view.group.toLowerCase()}-${view.seat}-${size}.png`,
+    component: TopCountiesCard,
+};
+
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
 
 const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
@@ -241,6 +298,7 @@ const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
     partyCard: PARTY_CARD,
     leaders: LEADERS_CARD,
     numbers: NUMBERS_CARD,
+    topCounties: TOP_COUNTIES,
 };
 
 // TypeScript cannot follow a union of views to the matching entry, so this one lookup says it.

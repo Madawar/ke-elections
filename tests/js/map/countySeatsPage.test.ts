@@ -41,11 +41,15 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
                 view: { unit?: { name: string } };
             }[];
             const alt = cards.find((c) => c.key === 'leaders' && c.view !== v);
+            const top = cards.find((c) => c.key === 'topCounties')?.view as
+                | { group: string; seat: string }
+                | undefined;
             return h('div', {
                 'data-share-kind': v.kind,
                 'data-share-unit': v.unit?.name,
                 'data-share-offers': alt?.view.unit?.name,
                 'data-share-cards': cards.map((c) => c.label).join('|'),
+                'data-share-top': top && `${top.group} ${top.seat}`,
             });
         },
     }),
@@ -269,6 +273,47 @@ describe('sharing the leaders of a unit', () => {
         expect(
             kenya.get('[data-share-kind]').attributes('data-share-cards'),
         ).toBe('This view|By the numbers');
+    });
+
+    it('offers the top 10 counties for all of Kenya when the seat is MP or MCA and one group is highlighted', async () => {
+        const offered = async (search: string, unit: { name: string } | null = null) => {
+            const w = await mountPage(search, unit);
+            w.findComponent(Legend).vm.$emit('share');
+            await flushPromises();
+            const d = w.get('[data-share-kind]');
+            const out = [
+                d.attributes('data-share-cards'),
+                d.attributes('data-share-top'),
+            ];
+            w.unmount();
+            document.body.innerHTML = '';
+            return out;
+        };
+        expect(await offered('?seat=mca&parties=ind')).toEqual([
+            'This view|By the numbers|Top 10 counties',
+            'IND mca',
+        ]);
+        expect(await offered('?seat=mp&parties=odm')).toEqual([
+            'This view|By the numbers|Top 10 counties',
+            'ODM mp',
+        ]);
+        // Not for a seat a county has one of, more than one group, none, or a place.
+        expect(await offered('?seat=governor&parties=uda')).toEqual([
+            'This view|By the numbers',
+            undefined,
+        ]);
+        expect(await offered('?seat=mca&parties=odm,uda')).toEqual([
+            'This view|By the numbers',
+            undefined,
+        ]);
+        expect(await offered('?seat=mca')).toEqual([
+            'This view|By the numbers',
+            undefined,
+        ]);
+        expect(await offered('?seat=mca&parties=ind', county)).toEqual([
+            'This view|County leaders',
+            undefined,
+        ]);
     });
 
     it('opens the leaders card straight from the panel, with no seat colouring at all', async () => {

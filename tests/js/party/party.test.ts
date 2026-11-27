@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildLegend } from '@/lib/legend';
-import { findParty, partyProfile } from '@/lib/party';
+import { findParty, partyProfile, topCounties } from '@/lib/party';
 import { OTHER } from '@/lib/map/theme';
 import { parsePartyPath, partyPath } from '@/lib/map/urls';
 import { legendScope, chamberGroups } from '@/lib/seats';
@@ -383,6 +383,45 @@ describe('where a party holds the most MCA seats', () => {
             [9, 2],
             [1, 1],
         ]);
+    });
+
+    it('is the general ranking, for MCA seats, five at most', () => {
+        for (const abbrev of ['UDA', 'ODM'])
+            expect(partyProfile(SCOPED, abbrev, { index })!.topCounties).toEqual(
+                topCounties(SCOPED, index, { seat: 'mca', group: abbrev, limit: 5 }),
+            );
+    });
+
+    it('ranks the counties for MP seats too, by constituencies, and for independents', () => {
+        const constituenciesOf = (county: number) =>
+            units.filter((u) => u.l === 'constituency' && u.p === county).map((u) => u.c);
+        for (const group of ['UDA', 'IND']) {
+            const want = counties
+                .map((c) => {
+                    const mine = constituenciesOf(c.c);
+                    const n = SCOPED.holders.filter(
+                        (h) => h.seat === 'mp' && h.party === group && mine.includes(h.code),
+                    ).length;
+                    return { code: c.c, count: n, total: mine.length };
+                })
+                .filter((c) => c.count > 0)
+                .sort((a, b) => b.count - a.count || a.code - b.code);
+            const got = topCounties(SCOPED, index, { seat: 'mp', group });
+            expect(got.map((c) => ({ code: c.code, count: c.count, total: c.total })), group).toEqual(
+                want,
+            );
+            if (got.length)
+                expect(got[0].value).toBe(
+                    `${got[0].count} of ${got[0].total} ${got[0].total === 1 ? 'constituency' : 'constituencies'}`,
+                );
+        }
+        // Without a limit every county with any is listed; with one, the first that many.
+        const all = topCounties(SCOPED, index, { seat: 'mca', group: 'UDA' });
+        expect(all.length).toBeGreaterThan(10);
+        expect(topCounties(SCOPED, index, { seat: 'mca', group: 'UDA', limit: 10 })).toEqual(
+            all.slice(0, 10),
+        );
+        expect(topCounties(SCOPED, index, { seat: 'mca', group: 'NOSEAT' })).toEqual([]);
     });
 
     it('is a national list: none within a county or without the units', () => {

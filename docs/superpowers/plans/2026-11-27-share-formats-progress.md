@@ -11,7 +11,7 @@ from here.
 | A | The card system takes more kinds of card: one registry, sizes per card, any number of map slots, a map spec's own colouring, the "Card" choice as a list, fixed headlines | done | `fe2d018` |
 | B | "By the numbers" (mock-up 6), square and story, offered with nothing focused | done | see `git log` (`feat(export): "By the numbers" card…`) |
 | Review fixes | Slot images reach the card, one component per registry entry, a map-less card credits only the codes, skipped maps leave the cache, no other card's map while one's own is drawing, small numbers-card fixes | done | see `git log` (`fix(export): …`) |
-| C | "Top 10 counties for a group" (mock-up 8) | not started | |
+| C | "Top 10 counties for a group" (mock-up 8), square and story, from the national seat view (MP/MCA, one group highlighted) and the party profile | done | see `git log` (`feat(export): "Top 10 counties"…`) |
 | D | "Kenya, five ways" (mock-up 5) | not started | |
 | E | "Who represents this ward" (mock-up 1) | not started | |
 
@@ -41,6 +41,18 @@ cards with the same slot key and box: unfinished maps clear the preview, and the
 the cache key). `ShareViewDialog.test.ts` checks that no card gets a dialog prop as an attribute.
 The seat view, leaders card and party card PNGs (square) are byte-identical before and after; the
 numbers card changed in its footer only (the codes credit), which frees room the rows now use.
+
+### Task C: how it was checked
+
+Downloaded from the running app in square and story, light and dark: independents on MCA seats
+(`/?seat=mca&parties=ind`, "Share this view", "Top 10 counties") and UDA on MP seats
+(`/?seat=mp&parties=uda`), plus UDA's MCA card from its profile (`/party/uda`, "Share"). Looked
+at beside mock-up 8. Fixed on the way: a lone "seats" on the headline's second line (the last two
+lines are now rebalanced, tested), small row type on the story (its rows sit a little closer),
+short bars beside "of 12 constituencies" (the bars keep at least 28% of the rows' width), a note
+wrapped in the rows' column under an empty map column (it takes the full width there), and a
+faint lowest shade on the dark map. The seat view, leaders and party PNGs are still
+byte-identical.
 
 ## Rulings
 
@@ -128,6 +140,51 @@ Each one: what was decided, why, and what it costs if it is wrong.
   a map counts as finished only then too, so a later drawing of the same key is never forgotten
   by an older one's skip — cost if wrong: none.
 
+- **Ruling: the top-10 map is a neutral count scale, not the group's colour** (review note,
+  over the plan's "filled in the group's colour"): the listed counties are the theme's ink laid
+  over its land, 40% for the fewest the list shows to 82% for the most, the rest no-data; a key
+  under the caption gives the two ends ("4 seats", "9 seats", in their shades). The bars keep the
+  group's data colour, as the plan says, because they are the legend's counts in the legend's
+  colour — cost if wrong: `countyShade` and `SHADE` in `topCountiesCard.ts`.
+- **Ruling: the map spec is seat `governor`, no focus, no highlight, with the card's colouring**
+  (`mode: { kind: 'seat', seat: 'governor' }`), so the county fills are what is coloured and no
+  ward lines are drawn; said in `ViewMapSpec.colouring`'s doc comment — cost if wrong: one spec.
+- **Ruling: the scope line is the plan's two sentences on one line when they fit at 86% of the
+  scope size; otherwise the first is the scope line and "The 10 counties with the most:" a line
+  of its own above the rows** (the story for independents) — the title block's scope line is one
+  line and would otherwise be cut — cost if wrong: one threshold.
+- **Ruling: wordings the plan leaves open** — one county: "The one county with any:", "The one
+  county shaded"; none: "No county has any." (nothing listed) and "No county shaded" (no key);
+  one seat held: "1 of 290 MPs nationally is UDA." / "is an independent."; "of 1 ward" in the
+  singular; the key reads "4 seats" / "1 seat" — cost if wrong: strings in `topCountiesCard.ts`.
+- **Ruling: rank is the place in the list (1 to 10), so tied counties have consecutive ranks
+  ordered by code**, as in the mock-up; the note says ties go by county code whenever two listed
+  counties tie or the tenth ties with one left out — cost if wrong: `rank` in
+  `topCountiesCardView`.
+- **Ruling: the card's sources are the group's holders of that seat** (the counts on the card);
+  with none, the seat's holders. "Of 1,450" and "of 40 wards" come from the unit index — cost if
+  wrong: one line.
+- **Ruling: the national seat view offers the card only when the highlighted group holds any of
+  that seat** (the profile's rule, "when the party holds any", applied to both entry points); the
+  card itself still handles none (tested) — cost if wrong: one condition in `topCountiesOf`
+  (`Map.vue`).
+- **Ruling: from the party profile, only across Kenya** — a profile scoped to a county or a
+  constituency offers the party card alone, as the ranking is national — cost if wrong: one
+  condition in `shareParty`.
+- **Ruling: the strip draws the ranked seat's lid deeper** (MP or MCA), as the seat views do —
+  cost if wrong: one argument.
+- **Ruling: the dialog copy is "Share top 10 counties" / "The counties where <group> hold(s) the
+  most <seat> seats, sized for Instagram or stories."; the file is
+  `kenya-electoral-map-top-counties-<group>-<seat>-<size>.png`; the Instagram caption gives the
+  scope, one line per county ("1. Kitui: 9 of 40 wards"), the note, the source** — cost if wrong:
+  strings.
+- **Ruling: `topCounties(data, index, { seat, group, limit? })` in `lib/party.ts` is the one
+  ranking; the profile asks it for MCA seats, five at most**; its `value` says "of N
+  constituencies" for MPs — cost if wrong: none.
+- **Ruling: a two-line headline whose last line would be one word is rebalanced** (the same words
+  and size, broken where the two lines are most even), here only, as this headline is fixed and
+  cannot be reworded by the person — cost if wrong: `balanced` in `topCountiesLayout.ts`.
+
 ## Parked minor findings
 
 - The dialog tests store the size as `JSON.stringify('square')`, which `useStorage` (a string
@@ -139,7 +196,14 @@ Each one: what was decided, why, and what it costs if it is wrong.
   wiring in `Map.vue` and the dialog, not before; the card's own tests were written first.
 - The leaders layout keeps its own copy of the bar-spreading arithmetic; it could use `spread`
   too.
+- On the top-10 story the map block (about 310 × 380) leaves empty room to the right of the map
+  above its caption; the rows take the height first. A bigger map would mean smaller rows.
+- `npm run check` (vp check) reports formatting issues in 118 files across the repository,
+  as it did before this branch; not fixed here.
 
 ## What is next
 
-Task C: "Top 10 counties for a group" (generalise `topCounties` in `lib/party.ts`).
+Task D: "Kenya, five ways" (mock-up 5): five map slots (one per seat) and one shared key, square
+and story, offered as "Five seats" in the national view's "Card" choice (between "This view" and
+"By the numbers"). The registry entry's `component` and `maps` now carry everything a new card
+needs; the dialog hands every card `mapImages` by slot key.

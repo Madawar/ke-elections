@@ -56,9 +56,9 @@ export interface TopCounty {
     code: number;
     name: string;
     count: number;
-    /** Wards in the county. */
+    /** The county's seats of that kind: its wards (MCA) or its constituencies (MP). */
     total: number;
-    /** "85 of 85 wards" */
+    /** "85 of 85 wards", "5 of 6 constituencies" */
     value: string;
 }
 
@@ -262,7 +262,8 @@ export function partyProfile(
             : null,
         scope,
         rows,
-        topCounties: !scope && index ? topCounties(data, index, key) : [],
+        topCounties:
+            !scope && index ? topCounties(data, index, { seat: 'mca', group: key, limit: TOP }) : [],
         elected: {
             count: electedCount,
             total: electedTotal,
@@ -277,32 +278,46 @@ export function partyProfile(
     };
 }
 
+/** How many counties the party profile lists. */
 const TOP = 5;
 
+/** The seats a county has more than one of, so its counties can be ranked by them. */
+export type RankedSeat = 'mp' | 'mca';
+
+const UNIT_WORD: Record<RankedSeat, [string, string]> = {
+    mp: ['constituency', 'constituencies'],
+    mca: ['ward', 'wards'],
+};
+
 /**
- * The counties where the party holds the most MCA seats: five at most, the most first and ties by
- * county code, counties with none left out. Each county's wards are counted with the legend's own
- * functions (legendScope, seatLegend).
+ * The counties where a group (a party abbreviation, or IND for independents) holds the most seats
+ * of one kind, MP or MCA: the most first, ties by IEBC county code, counties with none left out,
+ * `limit` at most (all of them when not given). Each county is counted with the legend's own
+ * functions (legendScope, seatLegend), so a ranking always agrees with the legend for that county.
  */
-function topCounties(data: SeatsData, index: UnitIndex, abbrev: string): TopCounty[] {
+export function topCounties(
+    data: SeatsData,
+    index: UnitIndex,
+    { seat, group, limit }: { seat: RankedSeat; group: string; limit?: number },
+): TopCounty[] {
+    const [one, many] = UNIT_WORD[seat];
     const out: TopCounty[] = [];
     for (const county of index.all()) {
         if (county.l !== 'county') continue;
-        const found = legendScope(index, 'mca', { level: 'county', code: county.c });
+        const found = legendScope(index, seat, { level: 'county', code: county.c });
         if (!found) continue;
         const count =
-            seatLegend(data, 'mca', found.codes).find((r) => r.abbrev === abbrev)
-                ?.seats ?? 0;
+            seatLegend(data, seat, found.codes).find((r) => r.abbrev === group)?.seats ?? 0;
+        const total = found.codes.size;
         if (count > 0)
             out.push({
                 code: county.c,
                 name: county.n,
                 count,
-                total: found.codes.size,
-                value: `${fmt(count)} of ${fmt(found.codes.size)} wards`,
+                total,
+                value: `${fmt(count)} of ${fmt(total)} ${total === 1 ? one : many}`,
             });
     }
-    return out
-        .sort((a, b) => b.count - a.count || a.code - b.code)
-        .slice(0, TOP);
+    out.sort((a, b) => b.count - a.count || a.code - b.code);
+    return limit === undefined ? out : out.slice(0, limit);
 }

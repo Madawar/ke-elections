@@ -13,6 +13,13 @@ import {
     numbersRowLine,
 } from './numbersCard';
 import { type PartyCardView, TOP_COUNTIES_TITLE, partyHeadline } from './partyCard';
+import {
+    type TopCountiesCardView,
+    topCountiesHeadline,
+    topCountiesNote,
+    topCountiesRowLine,
+    topCountiesScope,
+} from './topCountiesCard';
 import { type ViewState, headlineFor } from './viewState';
 
 export type CaptionPlatform = 'instagram' | 'x';
@@ -203,6 +210,34 @@ export function numbersCaption(
         ...card.rows.map(numbersRowLine),
         '',
         numbersNote(card),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "Top 10 counties": the fixed headline, the scope, one line per county, the
+ * card's note, the source with its date, the link and the tags. On X only the headline, source,
+ * link and tags fit.
+ */
+export function topCountiesCaption(
+    card: TopCountiesCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = topCountiesHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    const scope = topCountiesScope(card);
+    const note = topCountiesNote(card);
+    return [
+        clip(headline, 300),
+        '',
+        `${scope.lead} ${scope.list}`,
+        ...card.rows.map(topCountiesRowLine),
+        ...(note ? ['', note] : []),
         '',
         sourceText(card, 10),
         url,

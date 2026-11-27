@@ -86,6 +86,7 @@ import { leadersCardView } from '@/lib/export/leadersCard';
 import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
 import { type ShareCard, shareCards } from '@/lib/export/shareView';
+import { topCountiesCardView } from '@/lib/export/topCountiesCard';
 import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
 import { type PartyScope, findParty, scopeFor } from '@/lib/party';
 import { parsePartyPath } from '@/lib/map/urls';
@@ -671,6 +672,7 @@ function showPartyOnMap(seat: SeatKey) {
 function shareParty() {
     const abbrev = partyAbbrev.value;
     if (!abbrev) return;
+    // Across Kenya the party's top 10 counties for MCA seats come too, when it holds any.
     sharedCards.value = shareCards([
         partyCardView({
             seats: seats.value,
@@ -679,6 +681,7 @@ function shareParty() {
             index: index.value ?? undefined,
             scope: partyScope.value,
         }),
+        !partyScope.value && topCountiesOf('mca', [abbrev]),
     ]);
 }
 
@@ -1108,6 +1111,22 @@ const leadersOf = (focus: FocusSelection | null) =>
               theme: theme.value,
           })
         : null;
+/**
+ * "Top 10 counties" for all of Kenya: a seat a county has more than one of (MP, MCA) and exactly
+ * one group highlighted (a party or the independents) that holds any of it; otherwise null.
+ */
+function topCountiesOf(seat: ColourKey, only: readonly string[]) {
+    if (!index.value || (seat !== 'mp' && seat !== 'mca') || only.length !== 1)
+        return null;
+    const card = topCountiesCardView({
+        seats: seats.value,
+        index: index.value,
+        seat,
+        group: only[0],
+        theme: theme.value,
+    });
+    return card.rows.length ? card : null;
+}
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
@@ -1133,6 +1152,7 @@ function shareView() {
                 index: index.value,
                 theme: theme.value,
             }),
+        !focus && topCountiesOf(k, onlyParties.value),
     ]);
 }
 

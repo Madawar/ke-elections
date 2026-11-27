@@ -36,7 +36,9 @@ export type ViewMapSpec = Pick<
     onlyMp?: readonly string[];
     /**
      * A colouring made by the card itself (a locator, the top-10 map), drawn as it is in place of
-     * the seat colouring. `seat` still says which level's fills it colours.
+     * the seat colouring. `seat` still decides which level's fills are coloured and whether ward
+     * lines are drawn, so a colouring by county (the top-10 map, of MP or MCA counts) goes with a
+     * seat held at the county, such as `governor`, and no focus.
      */
     colouring?: Colouring;
 };
