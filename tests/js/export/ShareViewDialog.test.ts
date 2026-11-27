@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
+import { leadersCardView } from '@/lib/export/leadersCard';
 import { partyCardView } from '@/lib/export/partyCard';
 import { seatsInTheme, snapshotView } from '@/lib/export/viewState';
 import { PARTY_SEATS } from '../party/partyFixtures';
@@ -225,5 +226,137 @@ describe('ShareViewDialog with a party card', () => {
         expect(await open()).toBeNull();
         resetOnboardingState();
         localStorage.clear();
+    });
+});
+
+describe('ShareViewDialog: the leaders card beside the view', () => {
+    const county = snapshotView({
+        seats: VIEW_SEATS,
+        index: viewIndex,
+        seat: 'mp',
+        focus: { level: 'county', code: 47 },
+        only: [],
+        showSurroundings: false,
+        theme: 'dark',
+    });
+    const leaders = leadersCardView({
+        seats: VIEW_SEATS,
+        index: viewIndex,
+        focus: { level: 'county', code: 47 },
+        theme: 'dark',
+    })!;
+    const cardOption = (value: string) =>
+        document.querySelector<HTMLInputElement>(
+            `input[name="view-card"][value="${value}"]`,
+        );
+    const headlineInput = () =>
+        document.querySelector<HTMLInputElement>('#view-headline')!;
+    beforeEach(() => {
+        renders.length = 0;
+        localStorage.setItem('km.viewSize', JSON.stringify('square'));
+    });
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    it('offers "This view" and "County leaders", and starts on the view', async () => {
+        mount(ShareViewDialog, {
+            props: { open: true, view: county, leaders, context },
+            attachTo: document.body,
+        });
+        await settle();
+        expect(cardOption('view')?.checked).toBe(true);
+        expect(
+            cardOption('leaders')?.closest('label')?.textContent?.trim(),
+        ).toBe('County leaders');
+        expect(headlineInput().value).toContain('MP seats in Nairobi City');
+        expect(document.querySelector('[data-leader]')).toBeNull();
+    });
+
+    it('switches to the leaders card, with its own headline, caption and file', async () => {
+        mount(ShareViewDialog, {
+            props: { open: true, view: county, leaders, context },
+            attachTo: document.body,
+        });
+        await settle();
+        cardOption('leaders')!.click();
+        await settle();
+        expect(headlineInput().value).toBe('County leaders in Nairobi City');
+        expect(
+            [...document.querySelectorAll('[data-preview] [data-leader]')].map(
+                (g) => g.getAttribute('data-leader'),
+            ),
+        ).toEqual(['governor', 'senator', 'woman_rep']);
+        expect(
+            document.querySelector<HTMLTextAreaElement>('#view-caption')!.value,
+        ).toContain('Governor: Placeholder governor 47 (UDA)');
+        // Back again: the view's own headline returns.
+        cardOption('view')!.click();
+        await settle();
+        expect(headlineInput().value).toContain('MP seats in Nairobi City');
+        expect(document.querySelector('[data-preview] [data-leader]')).toBeNull();
+    });
+
+    it('puts the new card’s own headline on it at once, never the other card’s for a moment', async () => {
+        mount(ShareViewDialog, {
+            props: { open: true, view: county, leaders, context },
+            attachTo: document.body,
+        });
+        await settle();
+        cardOption('leaders')!.click();
+        // No waiting for the typing pause: the very next render has the leaders headline.
+        await nextTick();
+        await nextTick();
+        expect(
+            [...document.querySelectorAll('[data-preview] [data-headline]')]
+                .map((t) => t.textContent?.trim())
+                .join(' '),
+        ).toBe('County leaders in Nairobi City');
+    });
+
+    it('keeps the new card’s headline even when the person had just been typing on the other', async () => {
+        mount(ShareViewDialog, {
+            props: { open: true, view: county, leaders, context },
+            attachTo: document.body,
+        });
+        await settle();
+        // Typing, then switching card before the typing pause is over.
+        const input = headlineInput();
+        input.value = 'Typed on the first card';
+        input.dispatchEvent(new Event('input'));
+        cardOption('leaders')!.click();
+        await nextTick();
+        await nextTick();
+        const shown = () =>
+            [...document.querySelectorAll('[data-preview] [data-headline]')]
+                .map((t) => t.textContent?.trim())
+                .join(' ');
+        expect(shown()).toBe('County leaders in Nairobi City');
+        // ... and after the pause has run out, it is still the leaders card's own.
+        await new Promise((r) => setTimeout(r, 420));
+        await settle();
+        expect(shown()).toBe('County leaders in Nairobi City');
+        expect(headlineInput().value).toBe('County leaders in Nairobi City');
+    });
+
+    it('has no card choice without a leaders card, or when it was opened for one', async () => {
+        const plain = mount(ShareViewDialog, {
+            props: { open: true, view: county, context },
+            attachTo: document.body,
+        });
+        await settle();
+        expect(cardOption('leaders')).toBeNull();
+        plain.unmount();
+        document.body.innerHTML = '';
+        mount(ShareViewDialog, {
+            props: { open: true, view: leaders, leaders, context },
+            attachTo: document.body,
+        });
+        await settle();
+        expect(cardOption('leaders')).toBeNull();
+        expect(document.body.textContent).toContain('Share leaders card');
+        expect(
+            document.querySelectorAll('[data-preview] [data-leader]'),
+        ).toHaveLength(3);
     });
 });

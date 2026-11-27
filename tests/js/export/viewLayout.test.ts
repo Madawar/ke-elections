@@ -34,6 +34,36 @@ const nairobiMp = view('mp', { level: 'county', code: 47 });
 const mathareMca = view('mca', { level: 'constituency', code: 290 });
 const kenyaMca = view('mca', null, ['ODM']);
 const nairobiGovernor = view('governor', { level: 'county', code: 47 });
+/** A constituency with a single ward: one row under the strip. */
+const oneWardMca = {
+    ...mathareMca,
+    mix: { ...mathareMca.mix, rows: mathareMca.mix.rows.slice(0, 1) },
+};
+/**
+ * MCA cards whose strip has every leader, with long names: Nairobi City with its 85 wards, and
+ * Mathare. The fixture itself has only a Governor, so its other rows read "No approved data yet".
+ */
+const ledMca = [nairobiMca, mathareMca].map((v) => ({
+    ...v,
+    leaders: v.leaders.map((r, i) => ({
+        ...r,
+        holder: r.holder ?? {
+            name: [
+                'Placeholder Longer Middle Name Surname',
+                'Placeholder Wa Kwanza',
+                'Placeholder Another Quite Long Name',
+                'Placeholder Short',
+            ][i % 4],
+            party: 'ODM',
+            partyLabel: 'ODM',
+            partyName: 'Orange Democratic Movement',
+            colour: '#e07b24',
+            basis: 'elected',
+            startedOn: '2022-08-09',
+            sourceUrl: 'https://www.iebc.or.ke/sample.pdf',
+        },
+    })),
+}));
 const URL = 'https://example.org/county/47?seat=mca';
 const layoutOf = (size: ViewSize, v = nairobiMca) =>
     viewLayout(size, v, {
@@ -71,19 +101,19 @@ const texts = (l: ViewLayout): TextItem[] => [
     ...l.mixRows.flatMap((r) => r.texts),
     ...(l.moreLine ? [l.moreLine] : []),
     ...(l.holder?.texts ?? []),
+    ...(l.leaders?.rows.flatMap((r) => r.texts) ?? []),
+    ...(l.leaders?.more ? [l.leaders.more] : []),
 ];
 
 describe('seat mix layout', () => {
-    it('fits all 17 Nairobi City rows on story and portrait, and lists the first ones plus "and N more" on square and X', () => {
-        for (const size of ['story', 'portrait'] as const) {
+    it('lists the first Nairobi City rows plus "and N more": a dozen or more on story and portrait, six or more on square and X', () => {
+        // Before the bigger map and the leaders strip (owner, 2026-11-27), story and portrait
+        // listed all 17. The room for both came from the rows, as the owner's addition asks.
+        for (const size of SIZES) {
             const l = layoutOf(size);
-            expect(l.mixRows, size).toHaveLength(17);
-            expect(l.rowsMore, size).toBe(0);
-            expect(l.moreLine).toBeNull();
-        }
-        for (const size of ['square', 'x'] as const) {
-            const l = layoutOf(size);
-            expect(l.mixRows.length, size).toBeGreaterThanOrEqual(6);
+            expect(l.mixRows.length, size).toBeGreaterThanOrEqual(
+                size === 'story' || size === 'portrait' ? 12 : 6,
+            );
             expect(l.mixRows.length, size).toBeLessThan(17);
             expect(l.rowsMore).toBe(17 - l.mixRows.length);
             expect(l.moreLine?.text).toBe(
@@ -132,9 +162,17 @@ describe('seat mix layout', () => {
             mathareMca,
             kenyaMca,
             nairobiGovernor,
+            oneWardMca,
+            ...ledMca,
         ])
-            for (const size of SIZES) {
-                const l = layoutOf(size, v);
+            for (const [size, aspect] of SIZES.flatMap((s) =>
+                [0.6, 1.05, 1.5, 2.3].map((a) => [s, a] as const),
+            )) {
+                const l = viewLayout(size, v, {
+                    headline: headlineFor(v),
+                    url: URL,
+                    mapAspect: aspect,
+                });
                 const blocks: [string, Box][] = [
                     ['headline', l.headline],
                     ['map', l.map],
@@ -152,6 +190,9 @@ describe('seat mix layout', () => {
                             ] as [string, Box][])),
                     ...(l.mixLegend
                         ? ([['mix legend', l.mixLegend.box]] as [string, Box][])
+                        : []),
+                    ...(l.leaders
+                        ? ([['leaders', l.leaders.box]] as [string, Box][])
                         : []),
                 ];
                 for (const [name, b] of blocks)
@@ -177,7 +218,7 @@ describe('seat mix layout', () => {
     });
 
     it('keeps story text out of the zones TikTok and Reels cover', () => {
-        for (const v of [nairobiMca, nairobiMp, mathareMca]) {
+        for (const v of [nairobiMca, nairobiMp, mathareMca, oneWardMca, ...ledMca]) {
             const l = layoutOf('story', v);
             const footer = footerBlock(l.footerBox, l.footerFonts, {
                 source: v.source,
@@ -270,7 +311,7 @@ describe('the headline beside the map', () => {
 });
 
 describe('room for the map and the rows', () => {
-    it('lists all 17 rows on portrait and story even with a three-line headline', () => {
+    it('still lists a dozen rows on portrait and story with a three-line headline', () => {
         const headline =
             'MCA seats in Nairobi City: ODM and UDA, 35 each of 85';
         for (const size of ['portrait', 'story'] as const) {
@@ -279,7 +320,10 @@ describe('room for the map and the rows', () => {
                 url: URL,
                 mapAspect: 1.5,
             });
-            expect(l.mixRows, size).toHaveLength(17);
+            expect(l.mixRows.length, size).toBeGreaterThanOrEqual(12);
+            expect(l.moreLine?.text, size).toBe(
+                `and ${17 - l.mixRows.length} more constituencies`,
+            );
         }
     });
 
@@ -290,5 +334,64 @@ describe('room for the map and the rows', () => {
             expect(l.map.y + l.map.h).toBeLessThan(l.mixBar!.box.y);
             expect(l.mixRows).toHaveLength(5);
         }
+    });
+});
+
+describe('the leaders strip on MCA cards', () => {
+    it('is on every MCA card for a county or a constituency, in all four sizes, and on no other card', () => {
+        for (const size of SIZES) {
+            expect(
+                layoutOf(size, nairobiMca).leaders?.rows.map((r) => r.seat),
+                size,
+            ).toEqual(['governor', 'senator', 'woman_rep']);
+            const mathare = layoutOf(size, mathareMca).leaders!;
+            expect(mathare.rows[0].seat, size).toBe('mp');
+            expect(mathare.rows.map((r) => r.seat).slice(1), size).toEqual(
+                ['governor', 'senator', 'woman_rep'].slice(
+                    0,
+                    mathare.rows.length - 1,
+                ),
+            );
+            for (const v of [nairobiMp, kenyaMca, nairobiGovernor])
+                expect(layoutOf(size, v).leaders, size).toBeNull();
+        }
+    });
+
+    it('sits above the seat mix, under the map (or beside it on X, where it leads the words)', () => {
+        for (const v of [nairobiMca, mathareMca, ...ledMca])
+            for (const size of SIZES) {
+                const l = layoutOf(size, v);
+                const strip = l.leaders!.box;
+                if (strip.x >= l.mixBar!.box.x - 1)
+                    expect(strip.y + strip.h, size).toBeLessThanOrEqual(
+                        l.mixBar!.box.y,
+                    );
+                else expect(strip.y, size).toBeGreaterThanOrEqual(l.map.y + l.map.h);
+            }
+    });
+
+    it('names its sources in the footer with the card’s own', () => {
+        expect(nairobiMca.source).toBe('IEBC gazette notices');
+        const other = snapshotView({
+            seats: {
+                ...seats,
+                holders: seats.holders.map((h) =>
+                    h.seat === 'governor'
+                        ? { ...h, source_url: 'https://www.parliament.go.ke/x' }
+                        : h,
+                ),
+            },
+            index: mixIndex,
+            seat: 'mca',
+            focus: { level: 'county', code: 47 },
+            only: [],
+            showSurroundings: false,
+            theme: 'dark',
+        });
+        expect(other.source).toBe('IEBC gazette notices and parliament.go.ke');
+        expect(other.sources).toEqual([
+            'IEBC gazette notices',
+            'parliament.go.ke',
+        ]);
     });
 });

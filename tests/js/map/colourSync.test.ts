@@ -149,7 +149,7 @@ describe('the seat chips and the legend share one colour mode', () => {
         const w = await mountPage();
         expect(w.findComponent(SeatChips).exists()).toBe(true);
         expect(w.find('[data-onboarding="seat-chips"]').exists()).toBe(true);
-        expect(w.findAll('[role="radio"]')).toHaveLength(6);
+        expect(w.findAll('[role="radio"]')).toHaveLength(7);
         expect(checked(w)).toEqual(['None']);
         expect(w.findComponent(Legend).exists()).toBe(false);
     });

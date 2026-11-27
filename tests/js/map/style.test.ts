@@ -512,8 +512,13 @@ describe('buildStyle', () => {
                 theme.ground,
                 theme.selected,
             ];
+            // The boundary lines, that is: the MP outline (owner, 2026-11-27) is a layer of its
+            // own, drawn only in the MCA view, and is the one line that carries a party colour.
+            const boundary = (id: string) => !id.startsWith('mp-outline');
             for (const st of Object.values(views))
-                for (const l of st.layers.filter((x) => x.type === 'line'))
+                for (const l of st.layers.filter(
+                    (x) => x.type === 'line' && boundary(x.id),
+                ))
                     expect(tokens).toContain(
                         (l as unknown as { paint: Record<string, unknown> })
                             .paint['line-color'],

@@ -36,8 +36,20 @@ a feature finishes.
 ## Queue, in order (owner priorities as of 2026-11-27)
 0. **Next branch: leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with their
    owner additions).
-1. **Share formats the owner picks** from the eight mock-ups
-   (https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj). The suggestion is 1, 5 and 6 first.
+1. **All eight share formats.** The owner said, 2026-11-27: "I loved all."
+   - **Mock-ups:** https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj
+   - **Order:**
+     - After the leaders branch, because format 1 reuses `leadersFor()`: 1 (who represents this
+       ward), 5 (Kenya, five ways), 6 (by the numbers), 8 (top 10 counties for a chosen group).
+     - Then: 4 (equal-size county tiles; check the tile layout by hand), 7 (side by side; needs a
+       "compare with" picker), 3 (county carousel, slides 1–4).
+     - With the by-election history work in the pocketbook phase: 2 (what changed since 2022) and
+       carousel slide 5. Both need a terms/changes endpoint.
+   - **Neutrality rules from the mock-ups:**
+     - Order by seat, count, date or code. Break ties by code, and say so on the card.
+     - The group in the top-10 format is always the user's pick, and its headline is a template.
+     - Write "was" and "now" as words.
+     - Use seat colours only for edges and strips.
 - ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
    added once the pocketbook data lands.
 2. **Voter guide, "How elections work".** English first, then a reviewed Kiswahili version.
@@ -170,6 +182,45 @@ a feature finishes.
 - The Senate notice says "Saturday, 25th June", but 25 Jun 2027 is a Friday.
 
 ## Parked minor findings (fix when touching the code)
+- **Map controls (v0.2.0).** The final review decided these can wait:
+  - **Seat chips:**
+    - The Map button's badge counts the chip choice.
+    - Muted chips use `role=radio`; consider `role=button`.
+    - Party highlights pruned by an automatic seat switch aren't restored when stepping out.
+    - Phones show "None" off-screen when MP or MCA is active.
+    - There's no contrast test for faded chips.
+  - **Hover:** runs 3 `queryRenderedFeatures` calls per mousemove. Query only the focus level and
+    the next one.
+  - **History:**
+    - The pending-pop queue isn't keyed to a path.
+    - A zoom that jumps two levels leaves a duplicate entry.
+    - After a reload, the app's Back button pushes an entry instead of going back.
+    - The popstate gate has no listener-order guard test against an Inertia upgrade.
+    - A swallowed popstate drops the query string.
+  - **Outside-tap hint:** inside taps and pans don't dismiss it.
+  - **Party profile:**
+    - Zooming out closes the profile.
+    - "Show on map" closes it on desktop.
+    - The tab title drops the scope after `router.replace`.
+    - A ward `?in=` isn't resolved to its constituency.
+    - The vacancy wording ("Not held by X" for a vacant seat) needs fixing when the by-election
+      model lands.
+    - The percentage for "Total elected seats" at county scope is dominated by MCAs.
+    - Add a `coalition_source_url` data column; until then only Azimio and Kenya Kwanza show.
+  - **Party card:** the empty bands in square and portrait sizes.
+  - **Legend:** at 320 px, windows 1100–1199 px wide lose the focused unit's clearance.
+  - **Onboarding:**
+    - Tips steal focus.
+    - The legend fallback should use the "below" side.
+    - The docked phone tip has no pointer.
+    - `goto()` races on a double Next.
+    - The location guard is a source-text test.
+  - **Tests:**
+    - Flaky `vi.waitFor` timeouts in the colourSync and partyPage tests under parallel load.
+    - The no-WebGL test relies on a `__noWebGL` mock global.
+  - **Ops:**
+    - Production `APP_URL` should be `https://`.
+    - The unused MySQL user `ke_elections` on the server should be removed.
 - **Social export:**
   - A scoped deep link with `parties=other` expands against the national uncoloured set, so a
     county link can highlight a small party from outside that county. Expand it within the link's

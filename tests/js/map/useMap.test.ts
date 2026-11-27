@@ -15,6 +15,12 @@ const fake = vi.hoisted(() => ({
         filters: Map<string, unknown>;
         setFilter: ReturnType<typeof vi.fn>;
         setPaintProperty: ReturnType<typeof vi.fn>;
+        setLayoutProperty: ReturnType<typeof vi.fn>;
+        setLayerZoomRange: ReturnType<typeof vi.fn>;
+        addImage: ReturnType<typeof vi.fn>;
+        images: Set<string>;
+        /** What the map was asked to do, in order ("image:<id>", "paint:<layer>:<property>"). */
+        calls: string[];
         fitBounds: ReturnType<typeof vi.fn>;
         queryRenderedFeatures: ReturnType<typeof vi.fn>;
         zoom: number;
@@ -73,8 +79,18 @@ vi.mock('maplibre-gl', () => {
                         : undefined,
                 addSource: (id: string) => sources.add(id),
                 addLayer: (l: { id: string }) => layers.add(l.id),
-                setLayoutProperty: () => {},
-                setPaintProperty: vi.fn(),
+                images: new Set<string>(),
+                calls: [] as string[],
+                hasImage: (id: string) => self.images.has(id),
+                addImage: vi.fn((id: string) => {
+                    self.images.add(id);
+                    self.calls.push(`image:${id}`);
+                }),
+                setLayoutProperty: vi.fn(),
+                setLayerZoomRange: vi.fn(),
+                setPaintProperty: vi.fn((layer: string, property: string) => {
+                    self.calls.push(`paint:${layer}:${property}`);
+                }),
                 setFilter: vi.fn((id: string, f: unknown) =>
                     filters.set(id, f),
                 ),
@@ -112,7 +128,16 @@ import { useMap } from '@/composables/useMap';
 import { NO_COLOURING } from '@/lib/map/colouring';
 import { FOCUS_LAYERS } from '@/lib/map/focus';
 import { OVERLAYS } from '@/lib/map/overlays';
+import { patternId } from '@/lib/map/stripes';
+import { THEMES } from '@/lib/map/theme';
+import {
+    countySeatsColouring,
+    mcaNameLines,
+    mpOutline,
+    seatColouring,
+} from '@/lib/seats';
 import { type Unit, UnitIndex } from '@/lib/units';
+import { LEADERS_SEATS } from '../leadersFixtures';
 
 const index = UnitIndex.fromRows(
     JSON.parse(
@@ -658,5 +683,138 @@ describe('useMap focus', () => {
             userZoom(13);
             expect(map().easeTo).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('useMap: the seat views that need more than a fill colour', () => {
+    const out: { api?: ReturnType<typeof useMap> } = {};
+    let colouring: ReturnType<typeof harness>['colouring'];
+    const map = () => fake.current!;
+    const T = THEMES.light;
+    const tokens = { noData: T.noData, faded: T.faded };
+    const stripes = countySeatsColouring(LEADERS_SEATS, tokens);
+    const mca = {
+        ...seatColouring(LEADERS_SEATS, 'mca', tokens),
+        outline: mpOutline(LEADERS_SEATS, tokens),
+        names: mcaNameLines(LEADERS_SEATS),
+    };
+    /** The last value a paint or layout property of a layer was set to. */
+    const lastSet = (
+        fn: ReturnType<typeof vi.fn>,
+        layer: string,
+        property: string,
+    ) => fn.mock.calls.filter((c) => c[0] === layer && c[1] === property).at(-1)?.[2];
+
+    beforeEach(async () => {
+        webgl.ok = true;
+        fake.throws = false;
+        fake.current = null;
+        const h = harness(() => {}, out);
+        colouring = h.colouring;
+        mount(h.component);
+        await vi.waitFor(() => expect(fake.current).not.toBeNull());
+        map().handlers.get('load')!();
+        await nextTick();
+        map().calls.length = 0;
+        map().setPaintProperty.mockClear();
+        map().setLayoutProperty.mockClear();
+    });
+
+    it('adds every stripe image before the paint that names it, in the County seats view', async () => {
+        colouring.value = stripes;
+        await nextTick();
+        const calls = map().calls;
+        const painted = calls.indexOf('paint:counties-fill:fill-pattern');
+        expect(painted).toBeGreaterThan(-1);
+        const ids = new Set([...stripes.patterns!.values(), stripes.fallbackPattern!]);
+        for (const id of ids) {
+            expect(map().images.has(id), id).toBe(true);
+            expect(calls.indexOf(`image:${id}`), id).toBeLessThan(painted);
+        }
+        expect(
+            JSON.stringify(
+                lastSet(map().setPaintProperty, 'counties-fill', 'fill-pattern'),
+            ),
+        ).toContain(stripes.patterns!.get(47));
+    });
+
+    it('does not add an image twice when the view is drawn again', async () => {
+        colouring.value = stripes;
+        await nextTick();
+        const added = map().addImage.mock.calls.length;
+        colouring.value = { ...stripes };
+        await nextTick();
+        expect(map().addImage.mock.calls.length).toBe(added);
+    });
+
+    it('clears the stripes when the view changes to another, so no county stays striped', async () => {
+        colouring.value = stripes;
+        await nextTick();
+        map().setPaintProperty.mockClear();
+        colouring.value = seatColouring(LEADERS_SEATS, 'governor', tokens);
+        await nextTick();
+        expect(map().setPaintProperty).toHaveBeenCalledWith(
+            'counties-fill',
+            'fill-pattern',
+            undefined,
+        );
+        // ... and only then: a view that never had stripes clears nothing.
+        map().setPaintProperty.mockClear();
+        colouring.value = NO_COLOURING;
+        await nextTick();
+        expect(
+            map().setPaintProperty.mock.calls.some((c) => c[1] === 'fill-pattern'),
+        ).toBe(false);
+    });
+
+    it('makes a stripe image the style asks for and does not have, and ignores other missing images', () => {
+        const id = patternId(['#112233', '#445566', '#778899']);
+        map().handlers.get('styleimagemissing')!({ id });
+        expect(map().images.has(id)).toBe(true);
+        map().handlers.get('styleimagemissing')!({ id: 'some-icon' });
+        expect(map().images.has('some-icon')).toBe(false);
+    });
+
+    it('draws the MP outlines and writes the badges in the MCA view, and takes them away again', async () => {
+        colouring.value = mca;
+        await nextTick();
+        expect(
+            JSON.stringify(lastSet(map().setPaintProperty, 'mp-outline', 'line-color')),
+        ).toContain('#e07b24');
+        expect(
+            lastSet(map().setPaintProperty, 'mp-outline', 'line-opacity'),
+        ).not.toBe(0);
+        expect(
+            JSON.stringify(lastSet(map().setLayoutProperty, 'labels-mp', 'text-field')),
+        ).toContain('MP: ODM');
+        colouring.value = seatColouring(LEADERS_SEATS, 'mp', tokens);
+        await nextTick();
+        expect(lastSet(map().setPaintProperty, 'mp-outline', 'line-opacity')).toBe(0);
+        expect(lastSet(map().setPaintProperty, 'mp-outline-edge', 'line-opacity')).toBe(
+            0,
+        );
+        expect(lastSet(map().setLayoutProperty, 'labels-mp', 'text-field')).toBe('');
+    });
+
+    it('puts the MCA’s name on the selected ward’s label once its geometry is in, and takes it off when the focus leaves', async () => {
+        colouring.value = mca;
+        await nextTick();
+        const name = () =>
+            JSON.stringify(
+                lastSet(map().setLayoutProperty, 'labels-ward-mca', 'text-field'),
+            );
+        out.api!.setFocus({ level: 'ward', code: 1448 });
+        // Drawn as its constituency while the wards load: no name line yet.
+        expect(name()).toBe('""');
+        map().loadWards.forEach((done) => done());
+        await new Promise((r) => setTimeout(r, 0));
+        expect(name()).toContain('Placeholder mca 1448 (ODM)');
+        expect(map().filters.get('labels-ward-mca')).toEqual(
+            expect.arrayContaining(['all']),
+        );
+        out.api!.setFocus({ level: 'constituency', code: 290 });
+        expect(name()).toBe('""');
+        out.api!.setFocus(null);
+        expect(name()).toBe('""');
     });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { LEGEND_WIDTH, centreOn, mapPadding } from '@/lib/map/camera';
+import {
+    CHIPS_BESIDE_SEARCH,
+    LEGEND_WIDTH,
+    centreOn,
+    mapPadding,
+} from '@/lib/map/camera';
 
 describe('mapPadding', () => {
     it('keeps a phone unit centred in the map above a half-height sheet', () => {
@@ -36,7 +41,8 @@ describe('mapPadding', () => {
     });
 
     it('centres a desktop unit in the map to the right of the side panel', () => {
-        const viewport = { width: 1440, height: 900 };
+        // A wide desktop: the chips sit beside the search bar, so top and bottom are even.
+        const viewport = { width: 1600, height: 900 };
         const p = mapPadding({ desktop: true, sheetHeight: 0, viewport });
         expect(p.left).toBeGreaterThanOrEqual(380);
         const middleX = (p.left + (viewport.width - p.right)) / 2;
@@ -72,9 +78,23 @@ describe('mapPadding with the seat chips', () => {
         const p = mapPadding({
             desktop: true,
             sheetHeight: 0,
-            viewport: { width: 1440, height: 900 },
+            viewport: { width: 1600, height: 900 },
         });
         expect(p.top).toBe(72);
+    });
+
+    it('puts the seven chips beside the search bar only from 1536px: at 1440 they sit under it', () => {
+        // Seven chips need about 640px to the right of the panel and the search bar (864px).
+        expect(CHIPS_BESIDE_SEARCH).toBe(1536);
+        const top = (width: number) =>
+            mapPadding({
+                desktop: true,
+                sheetHeight: 0,
+                viewport: { width, height: 900 },
+            }).top;
+        expect(top(1440)).toBeGreaterThan(CHIPS_BOTTOM);
+        expect(top(1535)).toBeGreaterThan(CHIPS_BOTTOM);
+        expect(top(1536)).toBe(72);
     });
 });
 

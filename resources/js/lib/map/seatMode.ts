@@ -1,7 +1,12 @@
 // The seat colouring follows the focus: a governor means nothing inside a single constituency,
 // and an MP means nothing inside a single ward. The page remembers what the person chose at each
 // level, so stepping back out brings their choice back.
-import { type ColourKey, type SeatKey, SEAT_LEVEL } from './colouring';
+import {
+    type ColourKey,
+    type SeatMode,
+    isSeatMode,
+    seatModeLevel,
+} from './colouring';
 import type { MapLevel } from './levels';
 
 const DEPTH: Record<MapLevel, number> = { county: 0, constituency: 1, ward: 2 };
@@ -14,13 +19,12 @@ export type RememberedModes = Partial<Record<MapLevel, ColourKey>>;
 /** The level to remember a person's choice under (Kenya shares the county level's). */
 export const rememberLevel = bucket;
 
-const isSeat = (mode: ColourKey): mode is SeatKey =>
-    mode !== 'none' && mode !== 'province';
+const isSeat = (mode: ColourKey): mode is SeatMode => isSeatMode(mode);
 
 /** The mode shows at this focus level: its seats are held at that level or finer. */
 function isValid(level: FocusLevel, mode: ColourKey): boolean {
     const depth = DEPTH[bucket(level)];
-    if (isSeat(mode)) return DEPTH[SEAT_LEVEL[mode]] >= depth;
+    if (isSeat(mode)) return DEPTH[seatModeLevel(mode)] >= depth;
     return mode === 'none' || depth === 0;
 }
 
@@ -32,6 +36,7 @@ const ALL: ColourKey[] = [
     'woman_rep',
     'mp',
     'mca',
+    'county_seats',
 ];
 
 /** Every mode that makes sense with this focus. */
@@ -73,7 +78,7 @@ export function chipStepUp(
     mode: ColourKey,
 ): 'county' | 'constituency' | null {
     if (!isSeat(mode)) return null;
-    const seatLevel = SEAT_LEVEL[mode];
+    const seatLevel = seatModeLevel(mode);
     return DEPTH[seatLevel] < DEPTH[bucket(level)]
         ? (seatLevel as 'county' | 'constituency')
         : null;

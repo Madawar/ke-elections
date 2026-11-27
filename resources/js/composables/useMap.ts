@@ -24,6 +24,7 @@ import {
     WARD_MIN_ZOOM,
 } from '@/lib/map/levels';
 import { type MapOverlay, overlaySourceId } from '@/lib/map/overlays';
+import { addStripeImage } from '@/lib/map/stripes';
 import { MAP_LEVELS, SOURCE_OF, buildStyle, fileUrl } from '@/lib/map/style';
 import type { ThemeName } from '@/lib/map/theme';
 import { THEMES } from '@/lib/map/theme';
@@ -66,6 +67,9 @@ export interface UseMapOptions {
 }
 
 type Padding = { top: number; bottom: number; left: number; right: number };
+
+/** The label layers whose text and zoom range a restyle updates, not only their paint. */
+const SEAT_LABEL_LAYERS = new Set(['labels-mp', 'labels-ward-mca']);
 
 /** MapLibre is loaded on demand so the first paint (and phones without WebGL2) never pay for it. */
 export const loadMapLibre = () => import('maplibre-gl');
@@ -118,6 +122,7 @@ export function useMap(
                 ? {
                       outside: surroundings ? focusOutside(drawn) : undefined,
                       level: drawn.level,
+                      code: drawn.code,
                   }
                 : undefined,
         });
@@ -182,10 +187,25 @@ export function useMap(
      * Theme and colouring changes only touch paint and visibility: the boundary sources
      * (2+ MB of GeoJSON) are never reloaded, and feature-state (the selection) survives.
      */
+    /** The last restyle drew stripe patterns ("County seats"), so leaving it must clear them. */
+    let patterned = false;
     function restyle() {
         const m = map.value;
         if (!m || !ready.value) return;
         const theme = THEMES[opts.theme.value];
+        // The stripe images are added before the paint that names them (a new theme or highlight
+        // is a new set of ids); `styleimagemissing` covers any that are asked for later.
+        const patterns = opts.colouring.value.patterns;
+        if (patterns) {
+            for (const id of new Set([
+                ...patterns.values(),
+                opts.colouring.value.fallbackPattern ?? '',
+            ]))
+                addStripeImage(m, id);
+        } else if (patterned) {
+            m.setPaintProperty('counties-fill', 'fill-pattern', undefined);
+        }
+        patterned = !!patterns;
         const overlayLayers = new Set<string>();
         const layers = [
             ...style().layers,
@@ -206,6 +226,21 @@ export function useMap(
             )?.visibility;
             if (visibility && !overlayLayers.has(layer.id))
                 m.setLayoutProperty(layer.id, 'visibility', visibility);
+            // The seat labels (the MP badges, the selected ward's MCA name) change their text
+            // with the colouring and the focus.
+            if (SEAT_LABEL_LAYERS.has(layer.id)) {
+                m.setLayoutProperty(
+                    layer.id,
+                    'text-field',
+                    (layer.layout as { 'text-field'?: never })['text-field'],
+                );
+                // A focused constituency keeps its badge label at any zoom.
+                m.setLayerZoomRange(
+                    layer.id,
+                    (layer as { minzoom?: number }).minzoom ?? 0,
+                    (layer as { maxzoom?: number }).maxzoom ?? 24,
+                );
+            }
         }
         applyFocus();
     }
@@ -364,6 +399,7 @@ export function useMap(
         const m = map.value;
         m.touchZoomRotate.disableRotation();
         m.on('error', (e) => console.warn('[map]', e.error?.message ?? e));
+        m.on('styleimagemissing', (e) => addStripeImage(m, e.id));
         m.on('load', () => {
             ready.value = true;
             applyZoomAnchor();

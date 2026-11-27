@@ -13,7 +13,7 @@ const radios = (w: ReturnType<typeof mountChips>) =>
     w.findAll('[role="radio"]');
 
 describe('SeatChips', () => {
-    it('is a labelled radiogroup of six chips, in ballot order', () => {
+    it('is a labelled radiogroup of seven chips: the seats in ballot order, then the county seats together', () => {
         const w = mountChips();
         expect(w.find('[role="radiogroup"]').attributes('aria-label')).toBe(
             'Colour the map by seat',
@@ -25,6 +25,7 @@ describe('SeatChips', () => {
             'Woman Rep',
             'MP',
             'MCA',
+            'County seats',
         ]);
     });
 
@@ -34,6 +35,7 @@ describe('SeatChips', () => {
             'false',
             'false',
             'true',
+            'false',
             'false',
             'false',
             'false',
@@ -72,6 +74,7 @@ describe('SeatChips', () => {
             '-1',
             '-1',
             '-1',
+            '-1',
         ]);
         // With a mode that has no chip (former provinces), the row is still reachable.
         const other = mountChips('province');
@@ -88,9 +91,16 @@ describe('SeatChips', () => {
         expect(w.emitted('update:modelValue')?.at(-1)).toEqual(['none']);
         const first = mountChips('none');
         await radios(first)[0].trigger('keydown', { key: 'ArrowLeft' });
-        expect(first.emitted('update:modelValue')?.at(-1)).toEqual(['mca']);
-        const last = mountChips('mca');
-        await radios(last)[5].trigger('keydown', { key: 'ArrowRight' });
+        expect(first.emitted('update:modelValue')?.at(-1)).toEqual([
+            'county_seats',
+        ]);
+        const mca = mountChips('mca');
+        await radios(mca)[5].trigger('keydown', { key: 'ArrowRight' });
+        expect(mca.emitted('update:modelValue')?.at(-1)).toEqual([
+            'county_seats',
+        ]);
+        const last = mountChips('county_seats');
+        await radios(last)[6].trigger('keydown', { key: 'ArrowRight' });
         expect(last.emitted('update:modelValue')?.at(-1)).toEqual(['none']);
     });
 
@@ -104,7 +114,9 @@ describe('SeatChips', () => {
     it('jumps to the ends with Home and End', async () => {
         const w = mountChips('senator');
         await radios(w)[2].trigger('keydown', { key: 'End' });
-        expect(w.emitted('update:modelValue')?.at(-1)).toEqual(['mca']);
+        expect(w.emitted('update:modelValue')?.at(-1)).toEqual([
+            'county_seats',
+        ]);
         await radios(w)[2].trigger('keydown', { key: 'Home' });
         expect(w.emitted('update:modelValue')?.at(-1)).toEqual(['none']);
     });
@@ -138,7 +150,12 @@ describe('SeatChips inside a constituency or a ward', () => {
 
     it('mutes the county-wide seats inside a constituency, saying why', () => {
         const w = inConstituency();
-        expect(muted(w)).toEqual(['Governor', 'Senator', 'Woman Rep']);
+        expect(muted(w)).toEqual([
+            'Governor',
+            'Senator',
+            'Woman Rep',
+            'County seats',
+        ]);
         const governor = radios(w)[1];
         expect(governor.text()).toContain('County-wide');
         expect(governor.attributes('aria-label')).toBe(
@@ -151,7 +168,13 @@ describe('SeatChips inside a constituency or a ward', () => {
 
     it('also mutes MP inside a ward', () => {
         const w = inWard();
-        expect(muted(w)).toEqual(['Governor', 'Senator', 'Woman Rep', 'MP']);
+        expect(muted(w)).toEqual([
+            'Governor',
+            'Senator',
+            'Woman Rep',
+            'MP',
+            'County seats',
+        ]);
         const mp = radios(w)[4];
         expect(mp.attributes('aria-label')).toBe(
             'MP — constituency-wide seat; go back to Mathare to see it',
@@ -203,7 +226,57 @@ describe('SeatChips inside a constituency or a ward', () => {
             '0',
             '0',
             '-1',
+            '0',
         ]);
+    });
+
+    describe('the "County seats" chip', () => {
+        it('carries the three county ballot colours, in the order of its stripes', () => {
+            const chip = radios(mountChips())[6];
+            expect(
+                chip
+                    .findAll('[data-chip-lids] span')
+                    .map((s) => s.classes().find((c) => c.startsWith('bg-seat-'))),
+            ).toEqual([
+                'bg-seat-governor',
+                'bg-seat-senator',
+                'bg-seat-woman-rep',
+            ]);
+            expect(chip.get('[data-chip-lids]').attributes('aria-hidden')).toBe(
+                'true',
+            );
+            expect(chip.text()).toBe('County seats');
+        });
+
+        it('is chosen like any chip, and filled when it is the active one', async () => {
+            const w = mountChips();
+            await radios(w)[6].trigger('click');
+            expect(w.emitted('update:modelValue')).toEqual([['county_seats']]);
+            const on = mountChips('county_seats');
+            expect(radios(on)[6].attributes('aria-checked')).toBe('true');
+            expect(radios(on)[6].get('[data-chip-face]').classes()).toContain(
+                'bg-ink',
+            );
+        });
+
+        it('is county-wide: muted inside a constituency or a ward, and leads back up to the county', async () => {
+            const w = inConstituency();
+            const chip = radios(w)[6];
+            expect(chip.text()).toContain('County-wide');
+            expect(chip.attributes('aria-label')).toBe(
+                'County seats — county-wide seat; go back to Nairobi City to see it',
+            );
+            await chip.trigger('click');
+            expect(w.emitted('stepUp')).toEqual([['county_seats', 'county']]);
+            expect(w.emitted('update:modelValue')).toBeUndefined();
+        });
+
+        it('cannot be chosen when none of the three county seats has data', async () => {
+            const w = mountChips('none', { unavailable: ['county_seats'] });
+            expect(radios(w)[6].attributes('aria-disabled')).toBe('true');
+            await radios(w)[6].trigger('click');
+            expect(w.emitted('update:modelValue')).toBeUndefined();
+        });
     });
 });
 
@@ -256,6 +329,7 @@ describe('SeatChips colours', () => {
                 'woman_rep',
                 'mp',
                 'mca',
+                'county_seats',
             ];
             for (const key of keys) {
                 const chip =
