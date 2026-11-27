@@ -42,4 +42,29 @@ describe('LayersPanel', () => {
         await box.setValue(true);
         expect(w.emitted('update:colour')).toBeUndefined();
     });
+
+    it('keeps the reason at full strength and points the checkbox at it', () => {
+        const w = mountPanel({ provinceAvailable: false });
+        const label = province(w);
+        const input = label.find('input');
+        const reason = label
+            .findAll('span')
+            .find((s) => s.text() === 'Available for Kenya and counties')!;
+        // Only the checkbox and the title fade; the reason must stay readable.
+        for (
+            let el: Element | null = reason.element;
+            el;
+            el = el.parentElement
+        ) {
+            expect(el.className).not.toMatch(/opacity-/);
+            if (el === label.element) break;
+        }
+        expect(reason.attributes('id')).toBeTruthy();
+        expect(input.attributes('aria-describedby')).toBe(
+            reason.attributes('id'),
+        );
+        expect(input.classes().some((c) => c.startsWith('opacity-'))).toBe(
+            true,
+        );
+    });
 });

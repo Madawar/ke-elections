@@ -249,7 +249,6 @@ describe('SeatChips colours', () => {
 
     for (const mode of ['light', 'dark'] as const) {
         it(`reads at 4.5:1 or better on every active chip, in ${mode} mode`, () => {
-            const w = mountChips('none');
             const keys = [
                 'none',
                 'governor',
@@ -269,8 +268,7 @@ describe('SeatChips colours', () => {
                     /^text-(seat-|surface)/.test(c),
                 )!;
                 const bg = colourOf(face, mode);
-                const fg =
-                    colourOf(text, mode);
+                const fg = colourOf(text, mode);
                 expect(bg, `${key} face ${face}`).toBeTruthy();
                 expect(fg, `${key} text ${text}`).toBeTruthy();
                 expect(
@@ -278,7 +276,6 @@ describe('SeatChips colours', () => {
                     `${key}: ${text} on ${face}`,
                 ).toBeGreaterThanOrEqual(4.5);
             }
-            expect(w.exists()).toBe(true);
         });
     }
 

@@ -32,19 +32,24 @@ const toggle = (list: string[], v: string) =>
             </legend>
             <label
                 class="flex min-h-11 items-center gap-3"
-                :class="provinceAvailable ? 'cursor-pointer' : 'opacity-60'"
+                :class="provinceAvailable ? 'cursor-pointer' : ''"
             >
                 <input
                     type="checkbox"
                     class="size-5 accent-current"
+                    :class="provinceAvailable ? '' : 'opacity-60'"
                     :disabled="!provinceAvailable"
+                    aria-describedby="province-note"
                     :checked="colour === 'province'"
                     @change="
                         colour = colour === 'province' ? 'none' : 'province'
                     "
                 />
                 <span class="text-[14px]"
-                    >Former provinces<span
+                    ><span :class="provinceAvailable ? '' : 'opacity-60'"
+                        >Former provinces</span
+                    ><span
+                        id="province-note"
                         class="block text-[12px] text-muted-ink"
                         >{{
                             provinceAvailable
