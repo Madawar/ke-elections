@@ -10,6 +10,19 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig, lazyPlugins } from 'vite-plus';
 
 export default defineConfig({
+    build: {
+        rollupOptions: {
+            output: {
+                // MapLibre's worker ships as .mjs. Many servers (nginx's stock mime.types among
+                // them) serve .mjs as application/octet-stream, and browsers refuse to start a
+                // worker with that type, which leaves the map blank. Emit it as .js instead.
+                assetFileNames: (asset) =>
+                    (asset.names?.[0] ?? asset.name ?? '').endsWith('.mjs')
+                        ? 'assets/[name]-[hash].js'
+                        : 'assets/[name]-[hash][extname]',
+            },
+        },
+    },
     plugins: lazyPlugins(() => [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.ts'],
