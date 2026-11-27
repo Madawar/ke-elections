@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.3.0, 27 November 2026
+
+### Who represents a place
+- **"Who represents" in the panel:** a ward lists its MCA, its MP, then the county's Governor,
+  Senator and Woman Rep; a constituency starts at its MP; a county shows its three. Seats held
+  above the place say where, such as "Nairobi City, county-wide".
+- **MCAs of a constituency:** one line of party counts that opens the list of wards. A name takes
+  you to its ward, and each one links to its source.
+- **"Leaders here" in the legend:** the same people, at the top of the legend box. It follows the
+  place you are looking at and folds to one line. A name points at that person in the panel.
+- **No approved holder:** the seat keeps its row and says "No approved data yet".
+
+### County seats
+- **A seventh chip, "County seats":** every county is striped by the parties of its Governor,
+  Senator and Woman Rep, always in that order. One party for all three gives a solid fill.
+- **Its legend** counts the county seats each party holds across all three, and tapping a party
+  fades the other parties' stripes.
+
+### MPs and MCAs together
+- **MP outlines:** in the MCA view each constituency is outlined in its MP's party colour, over the
+  ward colours, with "MP: ODM" under the constituency's name.
+- **Two lists in the legend:** "MPs (outline)" and "MCAs (fill)", each with its own counts and its
+  own highlight.
+- **"Show MPs as outlines"** in Map settings turns the outlines off.
+- **MCA names on the map:** the selected ward's label names its MCA, and so does the tooltip of a
+  ward under the pointer.
+
+### Sharing
+- **Leaders cards:** "County leaders in <county>" with the striped map, and "Leaders of <place>"
+  for a constituency or a ward, in all four sizes. Use "Share leaders" in the panel, or the "Card"
+  choice in the share dialog.
+- **Leaders on MCA cards:** a county's or constituency's MCA card names the Governor, Senator and
+  Woman Rep, and a constituency's starts with its MP. A county's card counts its MPs by party.
+- **Bigger maps:** about a quarter bigger on MCA cards for a county or a constituency and about
+  15% on the other "Share this view" cards, where the card has the room. Long lists shorten to
+  "and N more". A small urban constituency now fills its space on the card.
+
+### Fixes
+- **Seat chips at 1280 to 1535px wide:** they sit under the search bar, so none scrolls out of
+  view.
+- **Legend:** it no longer runs under the chips and the Back button, and its source line names
+  every source behind what the box shows.
+
 ## 0.2.0, 27 November 2026
 
 ### Map controls
