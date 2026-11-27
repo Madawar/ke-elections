@@ -36,8 +36,20 @@ a feature finishes.
 ## Queue, in order (owner priorities as of 2026-11-27)
 0. **Next branch: leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with their
    owner additions).
-1. **Share formats the owner picks** from the eight mock-ups
-   (https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj). The suggestion is 1, 5 and 6 first.
+1. **All eight share formats.** The owner said, 2026-11-27: "I loved all."
+   - **Mock-ups:** https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj
+   - **Order:**
+     - After the leaders branch, because format 1 reuses `leadersFor()`: 1 (who represents this
+       ward), 5 (Kenya, five ways), 6 (by the numbers), 8 (top 10 counties for a chosen group).
+     - Then: 4 (equal-size county tiles; check the tile layout by hand), 7 (side by side; needs a
+       "compare with" picker), 3 (county carousel, slides 1–4).
+     - With the by-election history work in the pocketbook phase: 2 (what changed since 2022) and
+       carousel slide 5. Both need a terms/changes endpoint.
+   - **Neutrality rules from the mock-ups:**
+     - Order by seat, count, date or code. Break ties by code, and say so on the card.
+     - The group in the top-10 format is always the user's pick, and its headline is a template.
+     - Write "was" and "now" as words.
+     - Use seat colours only for edges and strips.
 - ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
    added once the pocketbook data lands.
 2. **Voter guide, "How elections work".** English first, then a reviewed Kiswahili version.
