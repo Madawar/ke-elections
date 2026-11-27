@@ -15,10 +15,6 @@ import {
     DialogTitle,
 } from 'reka-ui';
 import { computed, nextTick, ref, shallowRef, watch } from 'vue';
-import LeadersCard from './LeadersCard.vue';
-import NumbersCard from './NumbersCard.vue';
-import PartyCard from './PartyCard.vue';
-import ViewCard from './ViewCard.vue';
 import { CARD_FONTS } from '@/lib/export/fonts';
 import { siteUrl } from '@/lib/export/format';
 import type { ViewLayout } from '@/lib/export/viewLayout';
@@ -39,13 +35,12 @@ import {
     type ShareableView,
     aspectOf,
     captionOf,
+    componentOf,
     dialogCopy,
     filenameOf,
     headlineEditable,
     headlineOf,
     inTheme,
-    isLeadersCard,
-    isPartyCard,
     layoutOf,
     mapSlotsOf,
     shareCards,
@@ -57,7 +52,7 @@ import { THEMES, type ThemeName } from '@/lib/map/theme';
 import { TIPS, claimTip } from '@/lib/onboarding';
 
 const props = defineProps<{
-    /** The card the dialog opens on: a seat view, a party card or a leaders card. */
+    /** The card the dialog opens on: any kind in the registry (`lib/export/shareView.ts`). */
     view: ShareableView;
     /**
      * The "Card" choice: the cards on offer for what is in view, the first being `view` itself
@@ -93,22 +88,12 @@ const theme = computed(() => THEMES[themeName.value]);
 const shown = computed(() =>
     inTheme(base.value, themeName.value, props.context),
 );
-/** Each kind of card has its own component; these narrow `shown` for the template. */
+/** The registry's component for the card; the template gives every card the same props. */
+const cardComponent = computed(() => componentOf(shown.value));
+/** The seat view alone says when a size leaves rows out (`rowsHint`). */
 const seatView = computed(() => {
     const v = shown.value;
     return v.kind === 'party' ? v : null;
-});
-const leadersCard = computed(() => {
-    const v = shown.value;
-    return isLeadersCard(v) ? v : null;
-});
-const partyCard = computed(() => {
-    const v = shown.value;
-    return isPartyCard(v) ? v : null;
-});
-const numbersCard = computed(() => {
-    const v = shown.value;
-    return v.kind === 'numbers' ? v : null;
 });
 const copy = computed(() => dialogCopy(base.value));
 
@@ -181,6 +166,8 @@ const canShare = ref(false);
 // Map images by card, size, theme, slot and box: a changed headline only redraws a map when it
 // moves its box, and each card's maps are kept apart.
 const images = new Map<string, Promise<string>>();
+/** The keys in `images` whose drawing has finished; the others are queued or drawing. */
+const finished = new Set<string>();
 let token = 0;
 /** The maps the latest build is waiting for; a queued drawing of any other map is skipped. */
 let wanted = new Set<string>();
@@ -200,12 +187,16 @@ async function cardSvg(): Promise<SVGSVGElement | null> {
 
 /** The drawing of one slot's map: the cached one, or a new one queued behind the others. */
 function mapOf(slot: MapSlot, key: string, name: ThemeName): Promise<string> {
-    let pending = images.get(key);
-    if (pending) return pending;
-    pending = queue.then(() => {
+    const cached = images.get(key);
+    if (cached) return cached;
+    const drawing: Promise<string> = queue.then(() => {
         // Skip a map nobody waits for any more; a later build may still want this one,
-        // even after the build that queued it has moved on.
-        if (!wanted.has(key)) throw new Superseded();
+        // even after the build that queued it has moved on. It leaves the cache, so coming
+        // back to its card queues it again rather than meeting a skipped drawing.
+        if (!wanted.has(key)) {
+            if (images.get(key) === drawing) images.delete(key);
+            throw new Superseded();
+        }
         return renderViewMap(
             slot.spec,
             {
@@ -214,11 +205,20 @@ function mapOf(slot: MapSlot, key: string, name: ThemeName): Promise<string> {
             },
             THEMES[name],
             slot.box,
-        );
+        ).then((image) => {
+            if (images.get(key) === drawing) finished.add(key);
+            return image;
+        });
     });
-    queue = pending.catch(() => {});
-    images.set(key, pending);
-    return pending;
+    queue = drawing.catch(() => {});
+    images.set(key, drawing);
+    return drawing;
+}
+
+/** Forget one map, so the next build that wants it draws it again. */
+function forget(key: string) {
+    images.delete(key);
+    finished.delete(key);
 }
 
 async function build() {
@@ -238,7 +238,9 @@ async function build() {
             `${which.value}|${s}|${name}|${slot.key}|${slot.box.w}x${slot.box.h}`,
     );
     wanted = new Set(keys);
-    if (keys.some((k) => !images.has(k))) {
+    // Any of this card's maps still to draw: the preview shows none of the maps it had (they may
+    // be another card's, under the same slot key), and fills up as this card's are drawn.
+    if (keys.some((k) => !finished.has(k))) {
         mapImages.value = {};
         mapStatus.value = 'Drawing the map…';
     }
@@ -251,7 +253,7 @@ async function build() {
             if (t !== token) return;
             mapImages.value = { ...drawn };
         } catch (error) {
-            images.delete(keys[i]);
+            if (images.get(keys[i]) === pending[i]) forget(keys[i]);
             if (t !== token) return;
             // Skipped while another card or size was wanted, and wanted again now: draw it.
             if (error instanceof Superseded) return void build();
@@ -309,6 +311,7 @@ watch(
         } else {
             token++;
             images.clear();
+            finished.clear();
         }
     },
     { immediate: true },
@@ -319,6 +322,7 @@ watch(
     () => [props.view, props.cards],
     () => {
         images.clear();
+        finished.clear();
         which.value = options.value[0].key;
         themeName.value = base.value.theme;
         setHeadline(headlineOf(base.value));
@@ -547,42 +551,13 @@ async function copyCaption() {
                         data-preview
                         class="mt-3 flex justify-center rounded-md border border-hairline bg-ground p-2 [&>svg]:h-auto [&>svg]:max-h-[46dvh] [&>svg]:w-auto [&>svg]:max-w-full"
                     >
-                        <PartyCard
-                            v-if="partyCard"
-                            :view="partyCard"
+                        <component
+                            :is="cardComponent"
+                            :view="shown"
                             :size="size"
                             :headline="headline"
                             :map-image="mapImage"
-                            :map-placeholder="mapStatus"
-                            :map-aspect="mapAspect"
-                            :url="url"
-                            :theme="theme"
-                        />
-                        <LeadersCard
-                            v-else-if="leadersCard"
-                            :view="leadersCard"
-                            :size="size"
-                            :headline="headline"
-                            :map-image="mapImage"
-                            :map-placeholder="mapStatus"
-                            :map-aspect="mapAspect"
-                            :url="url"
-                            :theme="theme"
-                        />
-                        <NumbersCard
-                            v-else-if="numbersCard"
-                            :view="numbersCard"
-                            :size="size"
-                            :headline="headline"
-                            :url="url"
-                            :theme="theme"
-                        />
-                        <ViewCard
-                            v-else-if="seatView"
-                            :view="seatView"
-                            :size="size"
-                            :headline="headline"
-                            :map-image="mapImage"
+                            :map-images="mapImages"
                             :map-placeholder="mapStatus"
                             :map-aspect="mapAspect"
                             :url="url"

@@ -106,6 +106,14 @@ export const PROVINCE_TINTS = [
     '#CFCFDF',
 ];
 
-/** Shown in the About sheet and on every export (plan: Global Constraints). */
-export const ATTRIBUTION =
-    'Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data); 13 wards: American Red Cross (HDX), CC BY 4.0; Codes: Kenya Gazette Notice 13771 (2026); Towns: © OpenStreetMap contributors';
+/** The boundaries every map is drawn from. */
+export const BOUNDARIES_CREDIT =
+    'Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data); 13 wards: American Red Cross (HDX), CC BY 4.0';
+/** The unit codes and names every count is joined on: the credit of a card with no map. */
+export const CODES_CREDIT = 'Codes: Kenya Gazette Notice 13771 (2026)';
+/** The town names on the map. */
+export const TOWNS_CREDIT = 'Towns: © OpenStreetMap contributors';
+/** Shown in the About sheet and on every export with a map (plan: Global Constraints). */
+export const ATTRIBUTION = [BOUNDARIES_CREDIT, CODES_CREDIT, TOWNS_CREDIT].join(
+    '; ',
+);

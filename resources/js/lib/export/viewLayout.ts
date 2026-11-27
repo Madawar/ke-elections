@@ -423,17 +423,21 @@ function titleAtLeast(
     return whole(more) ? more : null;
 }
 
-/** Height the footer needs at this width (footerBlock lays it out from the top of its box). */
+/**
+ * Height the footer needs at this width (footerBlock lays it out from the top of its box), with
+ * the credit the card prints: every map credit by default, less on a card that uses less.
+ */
 export function footerHeight(
     w: number,
     fonts: FooterFonts,
     view: Pick<ViewState, 'source' | 'asOf'>,
     url: string,
+    attribution: string = ATTRIBUTION,
 ): number {
     const { bottom } = footerBlock(box(0, 0, w, 0), fonts, {
         source: view.source,
         asOf: view.asOf,
-        attribution: ATTRIBUTION,
+        attribution,
         url,
     });
     return Math.ceil(bottom);
@@ -684,6 +688,8 @@ export function cardFrame(
     size: ViewSize,
     view: Pick<ViewState, 'source' | 'asOf'>,
     url: string,
+    /** The credit the card's footer prints (CardFooter's `attribution`). */
+    attribution: string = ATTRIBUTION,
 ) {
     const { w, h } = VIEW_SIZES[size];
     const spec = SPECS[size];
@@ -693,7 +699,7 @@ export function cardFrame(
     const top = Math.round(
         Math.max(spec.stripH * 2 + pad * TIGHT.top, spec.safeTop),
     );
-    const fh = footerHeight(innerW, spec.footer, view, url);
+    const fh = footerHeight(innerW, spec.footer, view, url, attribution);
     const footerBox = box(
         pad,
         Math.round(h - Math.max(spec.safeBottom, pad * TIGHT.foot) - fh),

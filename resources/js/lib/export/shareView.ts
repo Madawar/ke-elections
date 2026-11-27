@@ -1,8 +1,9 @@
 // What the share dialog can make: one registry of card kinds. Each kind says how its card is
 // titled, captioned and laid out, what the dialog says about it, how it looks in the other theme,
 // what its file is called, which sizes it comes in, whether its headline may be edited, and the
-// map images its layout needs. The dialog only looks things up here, so a new kind of card is a
-// new entry, not a new branch in the dialog.
+// map images its layout needs, and the component that draws it. The dialog only looks things up
+// here, so a new kind of card is a new entry, not a new branch in the dialog.
+import type { Component } from 'vue';
 import {
     captionFor,
     leadersCaption,
@@ -34,7 +35,11 @@ import {
     seatsInTheme,
     withTheme,
 } from './viewState';
-import type { ThemeName } from '@/lib/map/theme';
+import LeadersCard from '@/components/export/LeadersCard.vue';
+import NumbersCard from '@/components/export/NumbersCard.vue';
+import PartyCard from '@/components/export/PartyCard.vue';
+import ViewCard from '@/components/export/ViewCard.vue';
+import type { MapTheme, ThemeName } from '@/lib/map/theme';
 import type { SeatsData } from '@/lib/seats';
 import type { UnitIndex } from '@/lib/units';
 
@@ -102,6 +107,28 @@ interface CardKind<V extends ShareableView> {
     /** The same card in another theme. */
     inTheme(view: V, theme: ThemeName, ctx: Context): V;
     filename(view: V, size: ViewSize): string;
+    /**
+     * The component that draws the card. The dialog gives every card the same props (`view`,
+     * `size`, `headline`, `mapImage`, `mapImages`, `mapPlaceholder`, `mapAspect`, `url`,
+     * `theme`; see `CardProps`), and each card declares them all, using what it needs.
+     */
+    component: Component;
+}
+
+/** What the dialog hands every card's component. */
+export interface CardProps {
+    view: ShareableView;
+    size: ViewSize;
+    headline: string;
+    /** The "map" slot's image, for the one-map cards; null while it is drawn. */
+    mapImage: string | null;
+    /** Every slot's image drawn so far, by slot key. */
+    mapImages: Record<string, string>;
+    /** Shown where a map is while it is drawn. */
+    mapPlaceholder: string;
+    mapAspect: number;
+    url: string;
+    theme: MapTheme;
 }
 
 const ALL_SIZES = Object.keys(VIEW_SIZES) as ViewSize[];
@@ -129,6 +156,7 @@ const SEAT_VIEW: CardKind<ViewState> = {
     }),
     inTheme: withTheme,
     filename: viewFilename,
+    component: ViewCard,
 };
 
 const PARTY_CARD: CardKind<PartyCardView> = {
@@ -147,6 +175,7 @@ const PARTY_CARD: CardKind<PartyCardView> = {
     }),
     inTheme: (view, theme) => ({ ...view, theme }),
     filename: viewFilename,
+    component: PartyCard,
 };
 
 const LEADERS_CARD: CardKind<LeadersCardView> = {
@@ -174,6 +203,7 @@ const LEADERS_CARD: CardKind<LeadersCardView> = {
             sample: view.sample,
         }) ?? { ...view, theme },
     filename: viewFilename,
+    component: LeadersCard,
 };
 
 const NUMBERS_CARD: CardKind<NumbersCardView> = {
@@ -201,6 +231,7 @@ const NUMBERS_CARD: CardKind<NumbersCardView> = {
             sample: view.sample,
         }),
     filename: (_view, size) => `kenya-electoral-map-numbers-${size}.png`,
+    component: NumbersCard,
 };
 
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
@@ -273,6 +304,10 @@ export const filenameOf = (view: ShareableView, size: ViewSize): string =>
     kindOf(view).filename(view, size);
 
 export const dialogCopy = (view: ShareableView) => kindOf(view).copy(view);
+
+/** The component that draws the card, given `CardProps`. */
+export const componentOf = (view: ShareableView): Component =>
+    kindOf(view).component;
 
 /** What the dialog calls a leaders card when it offers it beside the view. */
 export const leadersLabel = (card: LeadersCardView): string =>

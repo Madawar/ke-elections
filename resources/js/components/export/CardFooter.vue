@@ -1,23 +1,29 @@
 <script setup lang="ts">
-// Footer on every card: source and "as of" date, boundary attribution, site and deep link.
+// Footer on every card: source and "as of" date, the credits for what the card uses, site and
+// deep link.
 import { computed } from 'vue';
 import { type Box, type FooterFonts, footerBlock } from '@/lib/export/layout';
 import { ATTRIBUTION, type MapTheme } from '@/lib/map/theme';
 
-const props = defineProps<{
-    box: Box;
-    fonts: FooterFonts;
-    source: string;
-    asOf: string | null;
-    url: string;
-    theme: MapTheme;
-}>();
+const props = withDefaults(
+    defineProps<{
+        box: Box;
+        fonts: FooterFonts;
+        source: string;
+        asOf: string | null;
+        url: string;
+        theme: MapTheme;
+        /** The credit line: every map credit unless the card uses less (it was measured with it). */
+        attribution?: string;
+    }>(),
+    { attribution: ATTRIBUTION },
+);
 
 const block = computed(() =>
     footerBlock(props.box, props.fonts, {
         source: props.source,
         asOf: props.asOf,
-        attribution: ATTRIBUTION,
+        attribution: props.attribution,
         url: props.url,
     }),
 );

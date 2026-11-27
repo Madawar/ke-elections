@@ -21,6 +21,11 @@ const props = withDefaults(
         /** The card's deep link. */
         url: string;
         theme?: MapTheme;
+        // The share dialog gives every card these; this card has no map, so it uses none of them.
+        mapImage?: string | null;
+        mapImages?: Record<string, string>;
+        mapPlaceholder?: string;
+        mapAspect?: number;
     }>(),
     { theme: () => THEMES.dark },
 );
@@ -184,6 +189,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 :as-of="asOfText"
                 :url="url"
                 :theme="theme"
+                :attribution="layout.attribution"
             />
             <SampleWatermark
                 v-if="view.sample"

@@ -10,6 +10,7 @@ from here.
 |---|---|---|---|
 | A | The card system takes more kinds of card: one registry, sizes per card, any number of map slots, a map spec's own colouring, the "Card" choice as a list, fixed headlines | done | `fe2d018` |
 | B | "By the numbers" (mock-up 6), square and story, offered with nothing focused | done | see `git log` (`feat(export): "By the numbers" card…`) |
+| Review fixes | Slot images reach the card, one component per registry entry, a map-less card credits only the codes, skipped maps leave the cache, no other card's map while one's own is drawing, small numbers-card fixes | done | see `git log` (`fix(export): …`) |
 | C | "Top 10 counties for a group" (mock-up 8) | not started | |
 | D | "Kenya, five ways" (mock-up 5) | not started | |
 | E | "Who represents this ward" (mock-up 1) | not started | |
@@ -29,6 +30,17 @@ Downloaded from the running app (`/?seat=mca`, "Share this view", "By the number
 story, light and dark, and looked at beside mock-up 6. The square card follows the mock-up row
 for row. The seat view, leaders card and party card PNGs were downloaded again after Task B and
 are still byte-identical to the ones taken before Task A.
+
+### Review fixes: how they were checked
+
+Each fault has a test that fails without its fix (checked by undoing each fix in turn):
+`ShareViewDialogCards.test.ts` draws the mocked three-slot card with a stub that shows one image
+per slot key (slot images reach the preview); "draws the maps a card skipped once more…" (skipped
+maps leave the cache, and the preview is cleared once); "never shows another card’s map…" (two
+cards with the same slot key and box: unfinished maps clear the preview, and the card is part of
+the cache key). `ShareViewDialog.test.ts` checks that no card gets a dialog prop as an attribute.
+The seat view, leaders card and party card PNGs (square) are byte-identical before and after; the
+numbers card changed in its footer only (the codes credit), which frees room the rows now use.
 
 ## Rulings
 
@@ -73,11 +85,14 @@ Each one: what was decided, why, and what it costs if it is wrong.
   members its note counts** — the plan says "all five seats' holders"; the nominated count is a
   number on the card too, so its sources are named — cost if wrong: one line in
   `numbersCardView`.
-- **Ruling: a seat "has no approved holder" when no holder of that seat has its code** (any party
-  or none); the bar's no-data part is that count — cost if wrong: a holder without a party would
-  then count as held but sit in no part of the bar; the data has none today.
-- **Ruling: singular wordings** — "1 nominated MP or senator", "1 seat has no approved holder
-  yet" — cost if wrong: two strings.
+- **Ruling: a seat "has no approved holder" when no holder of that seat with a party has its
+  code** (independents have the party IND); the bar's no-data part is that count, so the bar,
+  `seatLegend` and the note agree. Superseded the earlier "any party or none" (review fix). It
+  changes no real number: `/data/seats.json` gives every holder a party (none is IND) — cost if
+  wrong: one filter in `numbersCard.ts`.
+- **Ruling: singular wordings** — "1 seat has no approved holder yet"; the nominated members are
+  named by what the data has: "nominated MPs", "nominated senators" or "nominated MPs and
+  senators" ("1 nominated MP", "1 nominated senator") — cost if wrong: strings in `numbersNote`.
 - **Ruling: the headline can be edited** (the plan fixes only the top-10 headline) — cost if
   wrong: `editableHeadline: false` on the entry.
 - **Ruling: the dialog copy is "Share by the numbers" / "Every elected seat below the President
@@ -97,6 +112,21 @@ Each one: what was decided, why, and what it costs if it is wrong.
   code three times; the existing caption tests pass unchanged — cost if wrong: none.
 - **Ruling: `spread` in `viewMix.ts` is exported** so the card's thin bars use the same part
   widths as the seat mix bar — cost if wrong: none.
+
+- **Ruling: the card's component is a field of its registry entry (`component`, read with
+  `componentOf`), in `lib/export/shareView.ts` itself** — no card component imports
+  `shareView.ts`, so there is no import cycle, and the pure-TS tests that import the registry
+  load the SFCs through Vitest's Vue plugin without trouble; one entry is then the whole of a new
+  card. The dialog gives every card the same props (`CardProps`), and each card declares them all
+  (the numbers card declares the four map props and ignores them) — cost if wrong: move the four
+  imports to a sibling module.
+- **Ruling: the credits are split into `BOUNDARIES_CREDIT`, `CODES_CREDIT` and `TOWNS_CREDIT`**,
+  and `ATTRIBUTION` is the three joined with "; " (byte-identical, tested). A card with no map
+  credits `CODES_CREDIT` alone: its counts are joined on the gazetted codes; it draws no boundary
+  and no town — cost if wrong: the numbers card passes `ATTRIBUTION` again.
+- **Ruling: a skipped map leaves the cache only if the cache still holds that same drawing**, and
+  a map counts as finished only then too, so a later drawing of the same key is never forgotten
+  by an older one's skip — cost if wrong: none.
 
 ## Parked minor findings
 

@@ -7,7 +7,8 @@
 // number of seats large and right-aligned in its column, then the seat's name, "Most held:" with
 // the three groups holding the most, and a thin mix bar. The rows take the largest type that fits
 // the card; a "Most held:" line that does not fit goes on to a second line between groups, never
-// inside one. The note sits under a rule after the rows.
+// inside one. The note sits under a rule after the rows. With no map, the footer credits only
+// the unit codes the counts are joined on.
 import type { Box, FooterFonts, TextItem } from './layout';
 import {
     type NumbersCardView,
@@ -27,7 +28,7 @@ import {
     titleBlock,
 } from './viewLayout';
 import type { SeatKey } from '@/lib/map/colouring';
-import { SEAT_COLOURS } from '@/lib/map/theme';
+import { CODES_CREDIT, SEAT_COLOURS } from '@/lib/map/theme';
 
 export interface NumbersRowItem {
     seat: SeatKey;
@@ -60,6 +61,8 @@ export interface NumbersLayout {
     note: TextItem[];
     footerBox: Box;
     footerFonts: FooterFonts;
+    /** The footer's credit, as it was measured: the codes alone, as the card has no map. */
+    attribution: string;
 }
 
 export interface NumbersText {
@@ -251,6 +254,7 @@ export function numbersLayout(
         size,
         card,
         text.url,
+        CODES_CREDIT,
     );
     const { pad } = spec;
     const t = titleBlock(pad, top, innerW, spec, text.headline, NUMBERS_SCOPE);
@@ -356,5 +360,6 @@ export function numbersLayout(
         note,
         footerBox,
         footerFonts: spec.footer,
+        attribution: CODES_CREDIT,
     };
 }

@@ -4,7 +4,7 @@
 // dialog only asks the registry, so this is what it does for any such card.
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
+import { defineComponent, h, nextTick } from 'vue';
 import { leadersCardView } from '@/lib/export/leadersCard';
 import type { ShareableView } from '@/lib/export/shareView';
 import { snapshotView } from '@/lib/export/viewState';
@@ -45,6 +45,7 @@ vi.mock('@/lib/export/shareView', async (actual) => {
     return {
         ...real,
         mapSlotsOf: vi.fn(real.mapSlotsOf),
+        componentOf: vi.fn(real.componentOf),
         sizesOf: vi.fn(real.sizesOf),
         headlineEditable: vi.fn(real.headlineEditable),
     };
@@ -87,6 +88,52 @@ const SLOTS = ['first', 'second', 'third'].map((key, i) => ({
     spec: { ...leaders, focus: { ...leaders.focus, code: 47 + i } },
 }));
 
+/**
+ * The card the dialog draws for the mocked leaders card: one image per slot it is handed, by slot
+ * key, so a test can see each slot's image reach the preview. Every set of images it is drawn
+ * with is kept in `drawnWith`.
+ */
+const drawnWith: string[][] = [];
+const SlotCard = defineComponent({
+    props: {
+        view: { type: Object, required: true },
+        size: { type: String, required: true },
+        headline: { type: String, required: true },
+        mapImage: { type: String, default: null },
+        mapImages: { type: Object, required: true },
+        mapPlaceholder: { type: String, default: '' },
+        mapAspect: { type: Number, default: 1 },
+        url: { type: String, required: true },
+        theme: { type: Object, required: true },
+    },
+    setup(props) {
+        return () => {
+            const images = props.mapImages as Record<string, string>;
+            drawnWith.push(Object.keys(images));
+            return h('svg', { viewBox: '0 0 1080 1080' }, [
+                h('text', { 'data-headline': '' }, props.headline),
+                ...Object.entries(images).map(([key, href]) =>
+                    h('image', { 'data-slot': key, href }),
+                ),
+            ]);
+        };
+    },
+});
+const slotImages = () =>
+    Object.fromEntries(
+        [...document.querySelectorAll('[data-preview] image[data-slot]')].map(
+            (i) => [i.getAttribute('data-slot'), i.getAttribute('href')],
+        ),
+    );
+/** The one map both cards share in some tests: the same key and the same box. */
+const SHARED = (v: ShareableView) => [
+    {
+        key: 'map',
+        box: { x: 0, y: 0, w: 500, h: 400 },
+        spec: v as never,
+    },
+];
+
 async function settle() {
     for (let i = 0; i < 6; i++) {
         await flushPromises();
@@ -119,7 +166,11 @@ const open = (cards: ShareableView[]) =>
 describe('ShareViewDialog: cards of other shapes', () => {
     beforeEach(() => {
         renders.length = 0;
+        drawnWith.length = 0;
         vi.mocked(svgToPng).mockClear();
+        vi.mocked(shareView.componentOf).mockImplementation((v) =>
+            isLeaders(v) ? SlotCard : real.componentOf(v),
+        );
         localStorage.setItem('km.viewSize', JSON.stringify('square'));
         vi.mocked(shareView.mapSlotsOf).mockImplementation((size, v, text) =>
             isLeaders(v) ? SLOTS : real.mapSlotsOf(size, v, text),
@@ -151,6 +202,89 @@ describe('ShareViewDialog: cards of other shapes', () => {
         // Each map from its own spec, in the layout's order.
         expect(renders.map((r) => r.spec)).toEqual(SLOTS.map((s) => s.spec));
         expect(svgToPng).toHaveBeenCalledTimes(1);
+        expect(download().disabled).toBe(false);
+        // Every slot's image reaches the card in the preview, under its own key.
+        expect(slotImages()).toEqual({
+            first: 'data:image/png;base64,A',
+            second: 'data:image/png;base64,B',
+            third: 'data:image/png;base64,C',
+        });
+    });
+
+    it('draws the maps a card skipped once more when the person comes back, clearing the preview once', async () => {
+        open([view, leaders]);
+        await settle();
+        renders[0].resolve('data:image/png;base64,VIEW');
+        await settle();
+        cardOption('leaders').click();
+        await settle();
+        // The first of its three maps is drawing when the person goes back to the view.
+        expect(renders).toHaveLength(2);
+        cardOption('view').click();
+        await settle();
+        expect(download().disabled).toBe(false);
+        // The first finishes; the other two are skipped, as nobody waits for them now.
+        renders[1].resolve('data:image/png;base64,L1');
+        await settle();
+        expect(renders).toHaveLength(2);
+        drawnWith.length = 0;
+        cardOption('leaders').click();
+        await settle();
+        // Each skipped map is drawn once more, one at a time; the drawn one is not.
+        expect(renders).toHaveLength(3);
+        renders[2].resolve('data:image/png;base64,L2');
+        await settle();
+        expect(renders).toHaveLength(4);
+        renders[3].resolve('data:image/png;base64,L3');
+        await settle();
+        expect(renders).toHaveLength(4);
+        expect(renders.slice(2).map((r) => r.box)).toEqual([
+            '301x201',
+            '302x202',
+        ]);
+        expect(slotImages()).toEqual({
+            first: 'data:image/png;base64,L1',
+            second: 'data:image/png;base64,L2',
+            third: 'data:image/png;base64,L3',
+        });
+        expect(download().disabled).toBe(false);
+        // The preview was cleared once, when the card came back, and then only filled up.
+        const firstShown = drawnWith.findIndex((k) => k.includes('first'));
+        expect(firstShown).toBeGreaterThan(-1);
+        expect(
+            drawnWith.slice(firstShown).every((k) => k.includes('first')),
+        ).toBe(true);
+    });
+
+    it('never shows another card’s map while its own, with the same slot and box, is drawing', async () => {
+        vi.mocked(shareView.mapSlotsOf).mockImplementation((_size, v) =>
+            SHARED(v),
+        );
+        open([view, leaders]);
+        await settle();
+        renders[0].resolve('data:image/png;base64,VIEW');
+        await settle();
+        cardOption('leaders').click();
+        await settle();
+        // Its own map, though the slot and the box are the view's.
+        expect(renders).toHaveLength(2);
+        expect(slotImages()).toEqual({});
+        cardOption('view').click();
+        await settle();
+        expect(
+            document
+                .querySelector('[data-preview] image[data-map]')
+                ?.getAttribute('href'),
+        ).toBe('data:image/png;base64,VIEW');
+        // Back while its map is still drawing: the view's map is not shown on it.
+        cardOption('leaders').click();
+        await settle();
+        expect(renders).toHaveLength(2);
+        expect(slotImages()).toEqual({});
+        expect(download().disabled).toBe(true);
+        renders[1].resolve('data:image/png;base64,LEADERS');
+        await settle();
+        expect(slotImages()).toEqual({ map: 'data:image/png;base64,LEADERS' });
         expect(download().disabled).toBe(false);
     });
 

@@ -62,6 +62,9 @@ export interface NumbersCardView {
     rows: NumbersRow[];
     /** Nominated MPs and senators in office. */
     nominated: number;
+    /** ... of whom nominated MPs and nominated senators. */
+    nominatedMps: number;
+    nominatedSenators: number;
     /** Seats with no approved holder, across the five. */
     vacant: number;
     /** "YYYY-MM-DD": the date the data describes. */
@@ -83,8 +86,12 @@ function row(
 ): NumbersRow {
     const level = SEAT_LEVEL[seat];
     const total = index.all().filter((u) => u.l === level).length;
+    // Held: a holder with a party, as the legend counts them (an independent's party is IND), so
+    // the bar, the groups and the note cannot disagree.
     const held = new Set(
-        seats.holders.filter((h) => h.seat === seat).map((h) => h.code),
+        seats.holders
+            .filter((h) => h.seat === seat && h.party)
+            .map((h) => h.code),
     ).size;
     const vacant = Math.max(0, total - held);
     const ranked = seatLegend(seats, seat);
@@ -141,6 +148,10 @@ export function numbersCardView({
         total: rows.reduce((n, r) => n + r.seats, 0),
         rows,
         nominated: nominated.length,
+        nominatedMps: nominated.filter((h) => h.seat === 'nominated_mp').length,
+        nominatedSenators: nominated.filter(
+            (h) => h.seat === 'nominated_senator',
+        ).length,
         vacant: rows.reduce((n, r) => n + r.vacant, 0),
         asOf: seats.data_as_of ?? seats.as_of ?? null,
         source: sourceLine(urls),
@@ -154,16 +165,28 @@ export function numbersCardView({
 export const numbersHeadline = (card: Pick<NumbersCardView, 'total'>): string =>
     `${fmt(card.total)} elected seats below the President`;
 
+/** "nominated MPs", "nominated senator", "nominated MPs and senators": what the data has. */
+function nominatedWords(
+    card: Pick<NumbersCardView, 'nominatedMps' | 'nominatedSenators'>,
+    n: number,
+): string {
+    const s = n === 1 ? '' : 's';
+    if (!card.nominatedSenators) return `nominated MP${s}`;
+    if (!card.nominatedMps) return `nominated senator${s}`;
+    return 'nominated MPs and senators';
+}
+
 /** The note under the rows: the sixth ballot, then what the data adds, in plain sentences. */
 export function numbersNote(
-    card: Pick<NumbersCardView, 'nominated' | 'vacant' | 'rows'>,
+    card: Pick<
+        NumbersCardView,
+        'nominated' | 'nominatedMps' | 'nominatedSenators' | 'vacant' | 'rows'
+    >,
 ): string {
     const lines = ['The President is elected on a sixth ballot.'];
     if (card.nominated)
         lines.push(
-            card.nominated === 1
-                ? 'Parliament also has 1 nominated MP or senator in office.'
-                : `Parliament also has ${fmt(card.nominated)} nominated MPs and senators in office.`,
+            `Parliament also has ${fmt(card.nominated)} ${nominatedWords(card, card.nominated)} in office.`,
         );
     if (card.vacant)
         lines.push(

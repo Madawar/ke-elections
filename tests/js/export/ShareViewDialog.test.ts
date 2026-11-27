@@ -426,4 +426,34 @@ describe('ShareViewDialog: "By the numbers" beside the national view', () => {
         expect(download().disabled).toBe(false);
         expect(document.body.textContent).toContain('Share by the numbers');
     });
+
+    it('gives every card the same props, and none of them falls through onto the card as an attribute', async () => {
+        const leaders = leadersCardView({
+            seats: VIEW_SEATS,
+            index: viewIndex,
+            focus: { level: 'county', code: 47 },
+            theme: 'dark',
+        })!;
+        const party = partyCardView({
+            seats: seatsInTheme(PARTY_SEATS, 'dark'),
+            abbrev: 'UDA',
+            theme: 'dark',
+        })!;
+        for (const card of [kenya, numbers, leaders, party]) {
+            const w = mount(ShareViewDialog, {
+                props: { open: true, view: card, context: numbersContext },
+                attachTo: document.body,
+            });
+            await settle();
+            const svg = document.querySelector('[data-preview] > svg')!;
+            expect(
+                [...svg.attributes].map((a) => a.name).sort(),
+                card.kind,
+            ).toEqual(
+                ['aria-label', 'height', 'role', 'viewBox', 'width', 'xmlns'].sort(),
+            );
+            w.unmount();
+            document.body.innerHTML = '';
+        }
+    });
 });

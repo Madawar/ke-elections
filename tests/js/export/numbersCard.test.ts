@@ -25,8 +25,14 @@ import {
 import { textWidth } from '@/lib/export/text';
 import { HEADLINE_STRETCH } from '@/lib/export/viewLayout';
 import { buildLegend } from '@/lib/legend';
-import { ATTRIBUTION, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
+import {
+    ATTRIBUTION,
+    CODES_CREDIT,
+    SEAT_COLOURS,
+    THEMES,
+} from '@/lib/map/theme';
 import { type SeatsData, seatLegend, withIndependentColour } from '@/lib/seats';
+import { type Unit, UnitIndex } from '@/lib/units';
 import {
     GOVERNORS,
     NUMBERS_SEATS,
@@ -83,6 +89,32 @@ describe('numbersCardView', () => {
             ['mp', 'MPs', 290],
             ['mca', 'MCAs', 1450],
         ]);
+    });
+
+    it('takes the total from the index it is given, not from a number it knows', () => {
+        const u = (l: Unit['l'], c: number, p: number | null): Unit => ({
+            l,
+            c,
+            n: `Place ${l} ${c}`,
+            p,
+            b: [36, -1, 37, 0],
+        });
+        // Two counties, three constituencies and five wards: 2 × 3 + 3 + 5.
+        const small = UnitIndex.fromRows([
+            u('province', 1, null),
+            u('county', 1, 1),
+            u('county', 2, 1),
+            u('constituency', 1, 1),
+            u('constituency', 2, 1),
+            u('constituency', 3, 2),
+            ...[1, 2, 3, 4, 5].map((c) => u('ward', c, c <= 2 ? 1 : 3)),
+        ]);
+        const v = numbersCardView({ seats, index: small, theme: 'dark' });
+        expect(v.total).toBe(14);
+        expect(numbersHeadline(v)).toBe(
+            '14 elected seats below the President',
+        );
+        expect(v.rows.map((r) => r.seats)).toEqual([2, 2, 2, 3, 5]);
     });
 
     it('lists the three groups holding the most, as the legend counts them', () => {
@@ -162,6 +194,60 @@ describe('numbersCardView', () => {
         expect(empty.rows[0].parts).toEqual([
             { key: 'none', colour: THEMES.dark.noData, count: 47 },
         ]);
+    });
+
+    it('counts a seat as held only when its holder has a party, so the bar, the groups and the note agree', () => {
+        // One governor's record names no party: no group holds that seat.
+        const partyless: SeatsData = {
+            ...seats,
+            holders: seats.holders.map((h) =>
+                h.seat === 'governor' && h.code === 1 ? { ...h, party: null } : h,
+            ),
+        };
+        const v = card(partyless);
+        const governors = v.rows[0];
+        expect(governors.vacant).toBe(1);
+        expect(governors.parts.at(-1)).toEqual({
+            key: 'none',
+            colour: THEMES.dark.noData,
+            count: 1,
+        });
+        expect(governors.parts.reduce((n, p) => n + p.count, 0)).toBe(47);
+        const legend = seatLegend(partyless, 'governor');
+        expect(legend.reduce((n, l) => n + l.seats, 0)).toBe(46);
+        expect(numbersNote(v)).toContain('1 seat has no approved holder yet.');
+    });
+
+    it('names the nominated members by the seats the data has', () => {
+        const only = (seat: string): SeatsData => ({
+            ...seats,
+            holders: seats.holders.filter(
+                (h) => !h.seat.startsWith('nominated') || h.seat === seat,
+            ),
+        });
+        const one = (seat: string): SeatsData => {
+            let kept = false;
+            return {
+                ...seats,
+                holders: seats.holders.filter((h) => {
+                    if (!h.seat.startsWith('nominated')) return true;
+                    if (h.seat !== seat || kept) return false;
+                    return (kept = true);
+                }),
+            };
+        };
+        expect(numbersNote(card(only('nominated_mp')))).toContain(
+            'Parliament also has 11 nominated MPs in office.',
+        );
+        expect(numbersNote(card(only('nominated_senator')))).toContain(
+            'Parliament also has 20 nominated senators in office.',
+        );
+        expect(numbersNote(card(one('nominated_mp')))).toContain(
+            'Parliament also has 1 nominated MP in office.',
+        );
+        expect(numbersNote(card(one('nominated_senator')))).toContain(
+            'Parliament also has 1 nominated senator in office.',
+        );
     });
 
     it('names the nominated members of Parliament when the data has them', () => {
@@ -393,7 +479,7 @@ describe('numbersLayout', () => {
             const footer = footerBlock(l.footerBox, l.footerFonts, {
                 source: c.source,
                 asOf: '16 July 2026',
-                attribution: ATTRIBUTION,
+                attribution: l.attribution,
                 url: URL,
             });
             const all: [TextItem, number][] = [
@@ -482,6 +568,18 @@ describe('NumbersCard', () => {
         expect(text).toContain('Data as of 16 July 2026.');
         expect(text).toContain('example.org');
         expect(w.find('image').exists()).toBe(false);
+    });
+
+    it('credits only what it uses: the codes, not the boundaries or the towns of a map it has not got', () => {
+        for (const size of SIZES) {
+            expect(layout(numbers, size).attribution).toBe(CODES_CREDIT);
+            const footer = draw(numbers, size).find('[data-footer]').text();
+            expect(footer).toContain(
+                'Codes: Kenya Gazette Notice 13771 (2026)',
+            );
+            expect(footer).not.toContain('Boundaries');
+            expect(footer).not.toContain('OpenStreetMap');
+        }
     });
 
     it('marks sample data as sample', () => {
