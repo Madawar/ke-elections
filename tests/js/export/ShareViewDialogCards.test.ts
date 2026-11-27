@@ -48,6 +48,7 @@ vi.mock('@/lib/export/shareView', async (actual) => {
         componentOf: vi.fn(real.componentOf),
         sizesOf: vi.fn(real.sizesOf),
         headlineEditable: vi.fn(real.headlineEditable),
+        headlineWording: vi.fn(real.headlineWording),
     };
 });
 
@@ -178,6 +179,9 @@ describe('ShareViewDialog: cards of other shapes', () => {
         vi.mocked(shareView.sizesOf).mockImplementation(real.sizesOf);
         vi.mocked(shareView.headlineEditable).mockImplementation(
             real.headlineEditable,
+        );
+        vi.mocked(shareView.headlineWording).mockImplementation(
+            real.headlineWording,
         );
     });
     afterEach(() => {
@@ -413,5 +417,30 @@ describe('ShareViewDialog: cards of other shapes', () => {
                 .map((t) => t.textContent?.trim())
                 .join(' '),
         ).toBe('County leaders in Nairobi City');
+    });
+
+    it('words the line under an editable headline and its reset link for the card', async () => {
+        vi.mocked(shareView.headlineWording).mockImplementation((v) =>
+            isLeaders(v) ? real.FACTS_WORDING : real.NUMBERS_WORDING,
+        );
+        open([view, leaders]);
+        await settle();
+        const hint = () => document.querySelector('[data-headline-hint]')?.textContent?.trim();
+        const reset = () => document.querySelector('[data-headline-reset]')?.textContent?.trim();
+        const edit = async (text: string) => {
+            const input = document.querySelector<HTMLInputElement>('#view-headline')!;
+            input.value = text;
+            input.dispatchEvent(new Event('input'));
+            await settle();
+        };
+        expect(hint()).toBe('Keep it to the numbers, so the image stays neutral.');
+        expect(reset()).toBeUndefined();
+        await edit('An edited headline');
+        expect(reset()).toBe('Use the numbers again');
+        cardOption('leaders').click();
+        await settle();
+        expect(hint()).toBe('Keep it to the facts, so the image stays neutral.');
+        await edit('Another edited headline');
+        expect(reset()).toBe('Use the default again');
     });
 });

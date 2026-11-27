@@ -14,6 +14,7 @@ import {
     dialogCopy,
     filenameOf,
     headlineEditable,
+    headlineWording,
     headlineOf,
     inTheme,
     layoutOf,
@@ -115,6 +116,11 @@ describe('the card registry, for the kinds that came before it', () => {
         for (const v of [seatView, party, county]) {
             expect(sizesOf(v)).toEqual(SIZES);
             expect(headlineEditable(v)).toBe(true);
+            // Their dialogs say what they said before the registry had a wording.
+            expect(headlineWording(v)).toEqual({
+                hint: 'Keep it to the numbers, so the image stays neutral.',
+                reset: 'Use the numbers again',
+            });
         }
     });
 

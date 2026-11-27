@@ -116,6 +116,24 @@ interface Context {
     index: UnitIndex;
 }
 
+export interface HeadlineWording {
+    /** Under the headline's input. */
+    hint: string;
+    /** The link that puts the default headline back, once it has been edited. */
+    reset: string;
+}
+
+/** The dialog's words for a card whose headline is its numbers ("MCA seats across Kenya: …"). */
+export const NUMBERS_WORDING: HeadlineWording = {
+    hint: 'Keep it to the numbers, so the image stays neutral.',
+    reset: 'Use the numbers again',
+};
+/** The dialog's words for a card whose headline has no numbers in it. */
+export const FACTS_WORDING: HeadlineWording = {
+    hint: 'Keep it to the facts, so the image stays neutral.',
+    reset: 'Use the default again',
+};
+
 // Written as methods so that each entry may take its own view and layout types.
 interface CardKind<V extends ShareableView> {
     /** The key of the card in the dialog's "Card" choice. */
@@ -123,6 +141,11 @@ interface CardKind<V extends ShareableView> {
     sizes: readonly ViewSize[];
     /** False for a card whose headline is a fixed template, so it stays neutral. */
     editableHeadline: boolean;
+    /**
+     * The line under an editable headline and its reset link, for a card whose default headline
+     * is not a count ("Who represents Isukha West ward"); `NUMBERS_WORDING` when not given.
+     */
+    headlineWording?: HeadlineWording;
     label(view: V): string;
     headline(view: V): string;
     caption(
@@ -320,6 +343,7 @@ const FIVE_SEATS: CardKind<FiveSeatsCardView> = {
     // Five maps and a key: square for feeds, story for TikTok and Reels.
     sizes: ['square', 'story'],
     editableHeadline: true,
+    headlineWording: FACTS_WORDING,
     label: () => 'Five seats',
     headline: () => FIVE_SEATS_HEADLINE,
     caption: fiveSeatsCaption,
@@ -355,6 +379,7 @@ const BALLOTS: CardKind<BallotsCardView> = {
     sizes: ['portrait', 'story'],
     // Editable, as the leaders card it replaces on a ward.
     editableHeadline: true,
+    headlineWording: FACTS_WORDING,
     label: () => 'Who represents',
     headline: ballotsHeadline,
     caption: ballotsCaption,
@@ -431,6 +456,10 @@ export const headlineOf = (view: ShareableView): string =>
 /** False for a card whose headline is fixed: the dialog shows it, with no input. */
 export const headlineEditable = (view: ShareableView): boolean =>
     kindOf(view).editableHeadline;
+
+/** The line under an editable headline and its reset link, for this card. */
+export const headlineWording = (view: ShareableView): HeadlineWording =>
+    kindOf(view).headlineWording ?? NUMBERS_WORDING;
 
 export const captionOf = (
     view: ShareableView,

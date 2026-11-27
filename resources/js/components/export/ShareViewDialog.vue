@@ -39,6 +39,7 @@ import {
     dialogCopy,
     filenameOf,
     headlineEditable,
+    headlineWording,
     headlineOf,
     inTheme,
     layoutOf,
@@ -101,6 +102,7 @@ const HEADLINE_MAX = 120;
 const generated = computed(() => headlineOf(base.value));
 /** False for a card whose headline is a fixed template: it is shown, not edited. */
 const editable = computed(() => headlineEditable(base.value));
+const wording = computed(() => headlineWording(base.value));
 const headlineInput = ref(generated.value);
 /**
  * The headline on the card. It follows the typing after a short pause, so the map is not redrawn
@@ -515,9 +517,10 @@ async function copyCaption() {
                                 v-if="edited"
                                 type="button"
                                 class="min-h-11 text-[14px] underline underline-offset-4"
+                                data-headline-reset
                                 @click="setHeadline(generated)"
                             >
-                                Use the numbers again
+                                {{ wording.reset }}
                             </button>
                         </div>
                         <input
@@ -527,8 +530,11 @@ async function copyCaption() {
                             :maxlength="HEADLINE_MAX"
                             class="mt-1 h-11 w-full rounded-md border border-hairline bg-surface px-3 text-[15px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
                         />
-                        <p class="mt-1 text-[13px] text-muted-ink">
-                            Keep it to the numbers, so the image stays neutral.
+                        <p
+                            data-headline-hint
+                            class="mt-1 text-[13px] text-muted-ink"
+                        >
+                            {{ wording.hint }}
                         </p>
                     </div>
                     <div v-else class="mt-3">

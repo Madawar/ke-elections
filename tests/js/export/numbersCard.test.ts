@@ -15,6 +15,7 @@ import {
     dialogCopy,
     filenameOf,
     headlineEditable,
+    headlineWording,
     headlineOf,
     inTheme,
     layoutOf,
@@ -604,6 +605,10 @@ describe('sharing "By the numbers"', () => {
             '1,881 elected seats below the President',
         );
         expect(headlineEditable(numbers)).toBe(true);
+        // Its headline is a number: the dialog's usual words.
+        expect(headlineWording(numbers).hint).toBe(
+            'Keep it to the numbers, so the image stays neutral.',
+        );
         expect(dialogCopy(numbers)).toEqual({
             title: 'Share by the numbers',
             description:

@@ -123,7 +123,7 @@ export const foldParties = (
         : seats;
 
 /** The halo's width in pixels behind each county line, where a spec asks for one. */
-export const COUNTY_HALO_WIDTH = 2.2;
+const COUNTY_HALO_WIDTH = 2.2;
 
 export interface ViewMapContext {
     manifest: Record<string, string>;

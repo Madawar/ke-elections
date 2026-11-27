@@ -22,6 +22,7 @@ import {
     dialogCopy,
     filenameOf,
     headlineEditable,
+    headlineWording,
     headlineOf,
     inTheme,
     layoutOf,
@@ -621,6 +622,11 @@ describe('sharing "Five seats"', () => {
     it('comes in square and story, with an editable headline, its own copy, file name and component', () => {
         expect(sizesOf(card)).toEqual(['square', 'story']);
         expect(headlineEditable(card)).toBe(true);
+        // No numbers in its headline, so the dialog does not ask to keep to them.
+        expect(headlineWording(card)).toEqual({
+            hint: 'Keep it to the facts, so the image stays neutral.',
+            reset: 'Use the default again',
+        });
         expect(headlineOf(card)).toBe(FIVE_SEATS_HEADLINE);
         expect(shareCards([card]).map((c) => [c.key, c.label])).toEqual([
             ['fiveSeats', 'Five seats'],

@@ -263,7 +263,7 @@ const sourceHost = (url: string) => {
                                     }}</template>
                                 </span>
                                 <span class="text-muted-ink"
-                                    >{{ basisLabel(row.holder.basis) }}
+                                    >{{ basisLabel(row.holder.basis) || 'Since' }}
                                     {{ row.holder.startedOn.slice(0, 4) }}</span
                                 >
                                 <a

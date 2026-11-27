@@ -9,13 +9,14 @@ from here.
 | Task | What | State | Commit |
 |---|---|---|---|
 | A | The card system takes more kinds of card: one registry, sizes per card, any number of map slots, a map spec's own colouring, the "Card" choice as a list, fixed headlines | done | `fe2d018` |
-| B | "By the numbers" (mock-up 6), square and story, offered with nothing focused | done | see `git log` (`feat(export): "By the numbers" card…`) |
-| Review fixes | Slot images reach the card, one component per registry entry, a map-less card credits only the codes, skipped maps leave the cache, no other card's map while one's own is drawing, small numbers-card fixes | done | see `git log` (`fix(export): …`) |
-| C | "Top 10 counties for a group" (mock-up 8), square and story, from the national seat view (MP/MCA, one group highlighted) and the party profile | done | see `git log` (`feat(export): "Top 10 counties"…`) |
-| Top-10 fixes | The map in the bars' colour (no count scale, no key), rows that keep their size, the story's map centred under the rows | done | see `git log` (`fix(export): top-10 map…`) |
-| D | "Kenya, five ways" (mock-up 5), square and story, offered as "Five seats" with nothing focused | done | see `git log` (`feat(export): "Kenya, five ways"…`) |
-| Review fixes 2 | Top-10: ties by code tested against an index out of code order, "with any" when the list is complete, singular wordings tested, the name column gives way before the rows shrink. Five seats: the story three across, the key inside its width, one title gap, the caption's key line. National "County seats" shares the national cards; closing the dialog stops its queued maps | done | see `git log` (`fix(export): …` after `1e439f9`) |
-| E | "Who represents this ward" (mock-up 1), portrait and story, three locator maps (a frame with a marked unit, new in the map renderer), replacing the ward's leaders card | done | see `git log` (`feat(export): "Who represents this ward"…`) |
+| B | "By the numbers" (mock-up 6), square and story, offered with nothing focused | done | `aea8e79` |
+| Review fixes | Slot images reach the card, one component per registry entry, a map-less card credits only the codes, skipped maps leave the cache, no other card's map while one's own is drawing, small numbers-card fixes | done | `8f31d23` |
+| C | "Top 10 counties for a group" (mock-up 8), square and story, from the national seat view (MP/MCA, one group highlighted) and the party profile | done | `77c790b` |
+| Top-10 fixes | The map in the bars' colour (no count scale, no key), rows that keep their size, the story's map centred under the rows | done | `42167ce` |
+| D | "Kenya, five ways" (mock-up 5), square and story, offered as "Five seats" with nothing focused | done | `1e439f9` |
+| Review fixes 2 | Top-10: ties by code tested against an index out of code order, "with any" when the list is complete, singular wordings tested, the name column gives way before the rows shrink. Five seats: the story three across, the key inside its width, one title gap, the caption's key line. National "County seats" shares the national cards; closing the dialog stops its queued maps | done | `c6cc56e` |
+| E | "Who represents this ward" (mock-up 1), portrait and story, three locator maps (a frame with a marked unit, new in the map renderer), replacing the ward's leaders card | done | `97aa0b8` |
+| Final review fixes | Ward card: the story's papers never pass the footer (padding, gap, map column, then type give way), an unbroken ward name in the headline breaks after its hyphen (shared fallback), a sweep over the real unit index; basis words for all four bases and none for an unknown one; per-card headline hint; small cleanups | done | `b724f08`, then `fix(export): basis words…` (the commit that adds this row) |
 
 ### Task A: what did not change
 
@@ -138,8 +139,8 @@ Each one: what was decided, why, and what it costs if it is wrong.
 - **Ruling: a seat "has no approved holder" when no holder of that seat with a party has its
   code** (independents have the party IND); the bar's no-data part is that count, so the bar,
   `seatLegend` and the note agree. Superseded the earlier "any party or none" (review fix). It
-  changes no real number: `/data/seats.json` gives every holder a party (none is IND) — cost if
-  wrong: one filter in `numbersCard.ts`.
+  changes no real number: `/data/seats.json` gives every holder a party (no holder has a null
+  party; many are IND, 128 of them) — cost if wrong: one filter in `numbersCard.ts`.
 - **Ruling: singular wordings** — "1 seat has no approved holder yet"; the nominated members are
   named by what the data has: "nominated MPs", "nominated senators" or "nominated MPs and
   senators" ("1 nominated MP", "1 nominated senator") — cost if wrong: strings in `numbersNote`.
@@ -392,6 +393,63 @@ Each one: what was decided, why, and what it costs if it is wrong.
   4px across on the square, shows no fill under its own county line at either width; a ring like
   the ward card's would be the fix if the owner wants it — cost if wrong: `COUNTY_HALO_WIDTH`.
 
+- **Ruling: when no type scale fits, the ward card gives up room before type, in this order:
+  the seats' padding (from 0.7 to 0.35 of the label size), then the gap between the papers (to a
+  third), then the map column (from 25% to 17% of the paper, so a long party line gets the width
+  to stop wrapping), and only then the type, below its floor (to 30%)** — the padding is spread
+  over the five seats alike and costs the card no type and no map; the maps go last because they
+  are what places the ward. With the real data the padding alone is enough: 18 Bungoma stories take
+  a padding step (0.6 to 0.42 of the label): the nine that ran into the footer and nine more
+  that ended inside the space kept above it. They pad each seat about 11–13px above the title
+  (17–19 elsewhere) and end 22–30px above the footer line; no real ward reaches the gap, the map
+  column or the type step. The
+  leftover room still pads every seat alike, so a fitted card always ends at the same line —
+  cost if wrong: `TIGHTER`, `SCALE_LEAST` in `ballotsLayout.ts`.
+- **Ruling: the shared headline fallback (`fitHeadline`) never cuts a word**: when a word is
+  wider than the line at the least size, the headline is broken after a hyphen inside that word
+  ("Who represents" / "Shinoyi-Shikomari-" / "Esumeyia ward" on the story, at the full 74px), and
+  if a piece still does not fit, the size steps down (to 40% of the base) until it does. Only a
+  headline with more words than its lines hold (an edited one) is still cut, as before. The path
+  is reached only by a headline that did not fit whole, so every headline that fitted is laid out
+  as before: the square PNGs of `/?seat=mca`, `/county/47?seat=county_seats` and `/party/uda` are
+  byte-identical before and after. `headlineText` joins the lines back (no space after a hyphen
+  break); `balanced` leaves such lines alone — cost if wrong: `wrapAtHyphens`, `HEADLINE_LEAST`
+  in `viewLayout.ts`.
+- **Ruling: the committed sweep (`tests/js/export/ballotsSweep.test.ts`) lays out the 50 longest
+  ward names, the 50 longest "ward, constituency, county" lines and every tenth ward (about 240),
+  in both sizes**, not all 1,450: all of them take about five seconds with the overlap checks.
+  Holders are placeholders as long as the longest real name per seat (36, 33, 29, 38 and 36
+  characters; the lengths only are kept in `ballotsFixtures.ts`, the names built with a wide letter
+  in every word, so they measure wider than the real ones) and the widest real party line
+  ("NOPEU, National Ordinary People Empowerment Union") on all five seats. The leaders card's
+  default headline is swept for every county and constituency in all four sizes, as it shares
+  the fallback; nothing there was cut before or after — cost if wrong: the hardest wards are
+  picked by name length, so a short name that breaks badly could be missed.
+- **Ruling: `basisLabel` names the four bases the importer allows (`elected` "Elected",
+  `by_election` "By-election", `succession` "Succeeded", `nominated` "Nominated") and gives an
+  unknown basis no word ("")** — before, anything else read "Elected". The ward card then says
+  "Since August 2022" (nothing when there is no date either), the panel "Since 2022". The
+  panel's words for the three bases it can show are unchanged ("Elected 2022", …); only the
+  nominated seats carry `nominated`, and the panel does not list them — cost if wrong: one map in
+  `lib/leaders.ts`.
+- **Ruling: the dialog's line under an editable headline and its reset link come from the
+  registry (`headlineWording`)**: "Keep it to the facts, so the image stays neutral." / "Use the
+  default again" for the ward card and "Five seats", whose headlines have no numbers; every other
+  card keeps "Keep it to the numbers, so the image stays neutral." / "Use the numbers again"
+  (tested on the three older kinds and the numbers card) — cost if wrong: one field per entry.
+- **Ruling: "No approved data yet" and "No approved holder yet" stay different on purpose**:
+  "No approved data yet" is said where one seat's holder would be named (the ward card's row, the
+  panel's row, the leaders strip, the captions): what is missing is our approved record, not
+  necessarily a person. "No approved holder yet" counts seats ("N seats have no approved holder
+  yet.", the five-seats key beside its no-data colour), where "N seats have no approved data
+  yet" would read as if the count itself were unapproved. One exception kept from v0.3.0: the
+  panel's and leaders card's MCA summary say "no approved data yet 1" inside a list of party
+  counts, read as a row of that list — cost if wrong: strings in `numbersCard.ts` and
+  `fiveSeatsCard.ts`.
+- **Ruling: two ward names hold a double space in the gazette data ("Central  Ward",
+  "Kitutu   Central")**; the cards keep the data's spelling on one line (SVG collapses the spaces
+  when drawn) and the sweep compares headlines word by word — cost if wrong: none on the card.
+
 ## Parked minor findings
 
 - Task E: the map-mark tests (`viewMapMark.test.ts`) and the ward card's tests were written first
@@ -401,8 +459,9 @@ Each one: what was decided, why, and what it costs if it is wrong.
   should.
 - The ward card's MP and MCA maps are small on the story (about 120 px tall): the papers' height
   comes from their words, and the map fits the paper.
-- `leadersCardView` can still make a ward's "Leaders of <ward>" card (its tests use one); nothing
-  offers it any more.
+- ~~`leadersCardView` can still make a ward's "Leaders of <ward>" card (its tests use one); nothing
+  offers it any more.~~ Closed (final review): it is the generic path for any unit, so there is
+  nothing ward-specific to remove; only `Map.vue` decides what a ward is offered.
 
 - The dialog tests store the size as `JSON.stringify('square')`, which `useStorage` (a string
   default, stored raw) reads as unknown and replaces with the default, so those tests never
@@ -424,8 +483,28 @@ Each one: what was decided, why, and what it costs if it is wrong.
   leaders-card way~~: it was not offered there at all (`canShareView` was false). Now it offers
   "Five seats" and "By the numbers" (see the ruling).
 
+- The full sweep of all 1,450 real wards with the real holders is not committed (it needs the
+  seeded data, with real names); the committed one uses placeholders over the real unit index.
+- The "This view" card's headline ("MCA seats in <unit>: …") shares the fixed fallback but was
+  not swept over every unit; it can only change where it was cut before.
+
+## Final review: outcome
+
+The final review ran the ward card against all 1,450 real wards with the seeded holders in both
+sizes and found the story's papers running into the footer for nine Bungoma wards (1083, 1086,
+1087, 1088, 1097, 1100, 1104, 1115, 1117; 2–28px) and ward 1016's headline cut
+("Shinoyi-Shikomari-Esume…"); and `basisLabel` calling any unknown basis "Elected". Fixed in
+`b724f08` and the commit after it (see the rulings), each with a test that fails without it (the
+sweep, with the two fixes undone, reported 217 papers past the footer and the cut headline). The
+review's own sweep over the real data now reports nothing in either size: no paper past the
+footer, nothing cut, no text into a map, the headline and scope line inside the card. Downloaded
+from the running app and looked at: `/ward/1088` portrait and story, `/ward/1016` story (light).
+The seat view, leaders and party PNGs (square) are byte-identical before and after.
+
+Still parked for the owner: the top-10 story map's size, the five-seats story (three across, maps
+242 × 294), whether a listed county as small as Mombasa should get a ring on the top-10 map, and
+the ward card's small MP and MCA maps on the story.
+
 ## What is next
 
-All five tasks are done: a final review of the branch (the plan's "Review focus"), then the owner's
-look. Open for the owner: the top-10 story map's size, the five-seats story (now three across, maps
-242 × 294), and whether a listed county as small as Mombasa should get a ring on the top-10 map.
+Owner review, then a PR from `feature/share-formats` into `develop`.

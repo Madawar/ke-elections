@@ -83,11 +83,13 @@ const monthYear = (date: string): string | null => {
 /**
  * "Elected in August 2022", "By-election in November 2025", "Succeeded in March 2024": the
  * panel's word for the basis (`basisLabel`), then the month the holder started. Just the word when
- * the record has no date.
+ * the record has no date; "Since August 2022" for a basis with no word; null with neither.
  */
-export function holderSince(h: { basis: string; startedOn: string }): string {
+export function holderSince(h: { basis: string; startedOn: string }): string | null {
     const when = h.startedOn ? monthYear(h.startedOn) : null;
-    return when ? `${basisLabel(h.basis)} in ${when}` : basisLabel(h.basis);
+    const word = basisLabel(h.basis);
+    if (word) return when ? `${word} in ${when}` : word;
+    return when ? `Since ${when}` : null;
 }
 
 function rowOf(r: LeaderRow): BallotRow {

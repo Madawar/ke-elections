@@ -16,6 +16,7 @@ import {
     dialogCopy,
     filenameOf,
     headlineEditable,
+    headlineWording,
     inTheme,
     layoutOf,
     mapSlotsOf,
@@ -147,6 +148,21 @@ describe('ballotsCardView', () => {
         expect(holderSince({ basis: 'elected', startedOn: '2022-08-25' })).toBe(
             'Elected in August 2022',
         );
+    });
+
+    it('says each basis in its own word, and only the date for a basis it does not know', () => {
+        const since = (basis: string, startedOn = '2022-08-25') => holderSince({ basis, startedOn });
+        expect(since('elected')).toBe('Elected in August 2022');
+        expect(since('by_election', '2025-11-27')).toBe('By-election in November 2025');
+        expect(since('succession', '2024-03-02')).toBe('Succeeded in March 2024');
+        expect(since('nominated')).toBe('Nominated in August 2022');
+        expect(since('appointed')).toBe('Since August 2022');
+        // No date: the word alone, or nothing at all.
+        expect(since('elected', '')).toBe('Elected');
+        expect(since('appointed', '')).toBeNull();
+        // The first of a month stays in that month, whatever the time zone.
+        expect(since('elected', '2022-08-01')).toBe('Elected in August 2022');
+        expect(since('elected', '2022-08-01T00:00:00+03:00')).toBe('Elected in August 2022');
     });
 
     it('keeps a seat with no approved holder in its place, and says so: nothing is invented', () => {
@@ -599,6 +615,11 @@ describe('the ward card in the registry', () => {
     it('comes in portrait and story, with an editable headline, its own copy, file name, label and component', () => {
         expect(sizesOf(isukha)).toEqual(['portrait', 'story']);
         expect(headlineEditable(isukha)).toBe(true);
+        // No numbers in its headline, so the dialog does not ask to keep to them.
+        expect(headlineWording(isukha)).toEqual({
+            hint: 'Keep it to the facts, so the image stays neutral.',
+            reset: 'Use the default again',
+        });
         expect(dialogCopy(isukha)).toEqual({
             title: 'Share who represents this ward',
             description:

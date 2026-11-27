@@ -264,7 +264,7 @@ describe('sharing the leaders of a unit', () => {
         }
     });
 
-    it('offers the leaders of a constituency too, and nothing for all of Kenya', async () => {
+    it('offers the leaders of a constituency too, and for all of Kenya the national cards (no leaders)', async () => {
         const w = await mountPage('?seat=mca', constituency);
         w.findComponent(Legend).vm.$emit('share');
         await flushPromises();
