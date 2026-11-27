@@ -304,6 +304,44 @@ describe('UnitPanel: who represents the unit', () => {
         expect(wards[5].text()).toContain('No approved data yet');
     });
 
+    it('cites the MCA counts: their sources and the date the data describes', () => {
+        const w = mountAt('constituency', 290);
+        expect(w.get('[data-mca-source]').text()).toBe(
+            'Source: IEBC gazette notices, as of 16 July 2026',
+        );
+        // Another site is named with them.
+        const other = mount(UnitPanel, {
+            props: {
+                unit: leadersIndex.get('constituency', 290)!,
+                index: leadersIndex,
+                seats: {
+                    ...LEADERS_SEATS,
+                    holders: LEADERS_SEATS.holders.map((h) =>
+                        h.seat === 'mca' && h.code === 1448
+                            ? { ...h, source_url: 'https://countyassembly.example/x' }
+                            : h,
+                    ),
+                },
+                towns: [],
+            },
+        });
+        expect(other.get('[data-mca-source]').text()).toBe(
+            'Source: IEBC gazette notices and countyassembly.example, as of 16 July 2026',
+        );
+    });
+
+    it('links each MCA in the list to that record’s own source', async () => {
+        const w = mountAt('constituency', 290);
+        await w.get('[data-mca-summary] button[aria-expanded]').trigger('click');
+        const link = w.get('[data-mca-ward="1448"] a');
+        expect(link.attributes('href')).toBe(
+            'https://www.iebc.or.ke/uploads/resources/sample-mca.pdf',
+        );
+        expect(link.text()).toBe('iebc.or.ke');
+        // A ward with no MCA has no record to cite.
+        expect(w.find('[data-mca-ward="1450"] a').exists()).toBe(false);
+    });
+
     it('focuses a ward when its MCA’s name is pressed', async () => {
         const w = mountAt('constituency', 290);
         await w.get('[data-mca-summary] button[aria-expanded]').trigger('click');

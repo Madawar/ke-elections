@@ -84,16 +84,55 @@ describe('LeadersStrip ("Leaders here")', () => {
         const w = mountStrip();
         const name = w.get('[data-leader="governor"] button');
         expect(name.text()).toBe('Placeholder governor 47');
-        expect(name.classes()).toContain('min-h-11');
+        // 44px on touch screens; a dense row with a mouse.
+        expect(name.classes()).toContain('pointer-coarse:min-h-11');
+        expect(name.classes()).toContain('min-h-7');
         expect(name.attributes('aria-label')).toBe(
             'Placeholder governor 47, Governor: show in the panel',
         );
         await name.trigger('click');
         expect(w.emitted('pick')?.[0]).toEqual([ward[2]]);
-        // The row itself is dense: no 44px height on it.
+        // The row itself carries no height of its own: it is as tall as its name's target.
         expect(w.get('[data-leader="governor"]').classes()).not.toContain(
             'min-h-11',
         );
+    });
+
+    it('never lets two names’ targets overlap: no target reaches outside its own row', () => {
+        // A 44px target pulled into a 28px row with a negative margin would cover part of the
+        // next name, so a tap low on one person would open the next.
+        for (const b of mountStrip().findAll('[data-leader] button'))
+            expect(b.classes().filter((c) => /^-m[ytb]?-/.test(c))).toEqual([]);
+    });
+
+    it('never cuts a name: a long one takes a second line', () => {
+        const long = ward.map((r, i) =>
+            i === 0
+                ? {
+                      ...r,
+                      holder: {
+                          ...r.holder!,
+                          name: 'Placeholder With A Very Long Name Indeed Wa Kwanza',
+                      },
+                  }
+                : r,
+        );
+        const w = mountStrip(long);
+        const name = w.get('[data-leader="mca"] button');
+        expect(name.text()).toBe(
+            'Placeholder With A Very Long Name Indeed Wa Kwanza',
+        );
+        expect(name.classes()).toContain('break-words');
+        expect(w.find('.truncate').exists()).toBe(false);
+    });
+
+    it('says "Independent" for an independent, as the panel and the cards do', () => {
+        const w = mountStrip(rowsAt('ward', 1439));
+        expect(cells(w.get('[data-leader="mca"]'))).toEqual([
+            'MCA',
+            'Placeholder mca 1439',
+            'Independent',
+        ]);
     });
 
     it('is open on desktop and one line on a phone by default', () => {

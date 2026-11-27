@@ -16,7 +16,27 @@ no release. The release is done afterwards from another session.
 | 5b | Bigger card maps on the "Share this view" cards | done | same commit |
 | 5b | "Leaders of <unit>" and "County leaders in <county>" cards, in all four sizes | done | see `git log` (`feat(map): county leaders card and striped county seats view`) |
 | 5c | Striped "County seats" chip, map mode and legend | done | same commit |
-| 6 | MP outlines over MCA wards, badges, two-section legend, MP block on cards, MCA names on wards | not started | |
+| 6 | MP outlines over MCA wards, "MP: <ABBREV>" badges, the two-list legend, the MP block and MPs line on MCA cards, the MCA's name on the selected ward | done | `71f969a`, then the review fixes (see `git log`: `fix(leaders): review findings…`) |
+
+### Reviews
+
+Each task had one fresh review subagent (Opus 5.5), given the requirement sections, the diff and
+the screenshots. Neither found a Critical defect.
+
+- **Task 5 (commits `65333b4`, `a7a5ed3`, `3178ac6`).** Important findings, all fixed: the panel's
+  MCA counts and ward list had no sources; the legend box named "IEBC gazette notices" as the
+  source even when a leader in its strip came from another site; the strip's 44px name targets
+  overlapped; the map side of the County seats view had no test. Minors fixed: names cut in the
+  strip, "IND" instead of "Independent" there, a holder with no party drawn as a vacancy in the
+  stripes, the other card's headline showing for a moment after switching card in the dialog.
+  One finding is a question for the owner: see the ruling "only MCA cards … get the leaders strip".
+- **Task 6 (commit `71f969a`).** Important findings, all fixed: the outline band crossed narrow
+  constituencies into their neighbours with a whole county in view (Nairobi City); the badges
+  outlived and outshone the constituency names; the "MPs (outline)" list showed for all of Kenya
+  zoomed out, where no outline is drawn; a county card's MPs line could cost a leader row and
+  then not print, leaving the outlines on its map without a key. Minors fixed: the outlines'
+  highlight was remembered across visits, MP sources were missing from the card footer, the two
+  legend lists were not labelled for assistive technology, the name line was weak over a fill.
 
 ### How much bigger the card maps are (5b)
 
@@ -166,27 +186,93 @@ Each one: what was decided, why, and what it costs if it is wrong.
   bar**, with a no-data part for wards without an approved MCA — the plan asks for "an MCA mix
   bar with 'of N wards'" — cost if wrong: wording.
 
+- **Ruling: MCA names show on the selected ward only, and in a ward's hover tooltip** — the
+  plan's first rule (every ward large enough on screen, from zoom 11.5 or inside a focused
+  constituency) was built and looked at. In Mathare a small ward carried a three-line label
+  across its neighbours and the MP outline, and the unit directory has only bounding boxes to
+  judge "large enough" by, which a long thin ward passes. So the plan's own fallback applies.
+  Rural constituencies fit below the zoom where ward labels start (9.1), so they would not have
+  shown names either — cost if wrong: the size rule is in git history (`71f969a^..71f969a`,
+  `lib/map/wardLabels.ts`); it needs ward areas, not bounding boxes, to be safe.
+- **Ruling: the outlines have their own highlight** — the plan says both "the party highlight
+  applies to both layers" and "each section's rows toggle the highlight for its own layer". Each
+  list highlights its own layer; "Show all" clears both. The outlines' highlight lasts while the
+  MCA view does: it is not stored, and is not in the share link (a card made while it is on does
+  carry it) — cost if wrong: one shared list instead of two in `Map.vue`.
+- **Ruling: the outline is 4 to 5px from zoom 12, and a thin line (1 to 2px between half-pixel
+  ink edges) further out** — the plan's 4 to 5px, drawn inside every constituency with a whole
+  county in view, crossed narrow constituencies into their neighbours in Nairobi City and buried
+  the ward fills — cost if wrong: `OUTLINE_WIDTH` and `OUTLINE_EDGE` in `lib/map/style.ts`.
+- **Ruling: the band is drawn inside each constituency (`line-offset`)** — so on a shared border
+  each neighbour shows its own MP's colour on its own side. Inside a focused constituency it
+  starts clear of that constituency's own ink outline, which would otherwise cover it — cost if
+  wrong: none.
+- **Ruling: the badge is the second line of the constituency's own label** ("Westlands", then
+  "MP: ODM"), tried first; where the two lines do not fit, the plain name still shows. It comes
+  and goes with the names (zoom 6.6 to 10.3). A focused constituency keeps this label at any
+  zoom, so its outline is always named. A separate floating badge was built first: it outlived
+  the names and read like a ward label — cost if wrong: `seatLabelLayers` in `lib/map/style.ts`.
+- **Ruling: no outline, badge or "MPs (outline)" list while a ward is focused, or for all of
+  Kenya zoomed out past zoom 6.4** — a focused ward has no constituency around it on screen; at
+  national zoom the outlines are not drawn, so the legend does not list them — cost if wrong:
+  `outlinesOn` and `outlinesInView` in `Map.vue`.
+- **Ruling: a county's MCA card always prints its MPs line when its map has outlines** — it is
+  the outlines' key, so it wraps onto as many lines as it needs and is never dropped; when rows
+  and line together do not fit, the leader rows shorten ("+1 more at <link>"), not the line —
+  cost if wrong: `leadersStrip`.
+- **Ruling: the legend box's source line names the sources of everything in the box** — the seats
+  it counts, the leaders in its strip and the MPs of its outline list (IEBC gazette notices, then
+  any other site by name), instead of the fixed "IEBC gazette notices" it had since v0.2.0 —
+  cost if wrong: none; it is more accurate.
+- **Ruling: "Show MPs as outlines" is stored under `kem.mpOutlines`** (on unless switched off) —
+  cost if wrong: none.
+
 ## Parked minor findings
 
+- **For the owner to confirm:** only MCA cards carry the leaders strip (see the ruling). The
+  plan's "no duplication" sentence suggests Governor, Senator, Woman Rep and MP cards for a
+  county or a constituency might be meant to carry it too. `cardLeaders` already leaves the
+  card's own seat out, so it is one condition to change.
 - The legend box exists only while a colouring is on, so with "None" chosen there is no "Leaders
   here" strip. The panel still lists the leaders.
 - Labels over the stripes of a focused county are harder to read than over a flat fill (the
   label halo is the land colour). A darker halo in the County seats view would help.
-- The "Share image" (locator) card and the party card do not know the County seats view: they
-  draw their maps as before.
+- The "Share image" (locator) card and the party card do not know the County seats view or the
+  MP outlines: they draw their maps as before.
 - A fresh visitor who opens a ward or a constituency from Kenya with "None" chosen keeps "None"
   (`modeForFocus` only switches a mode that does not fit). The plan's "MCA is the default inside a
   constituency" holds only when the mode in use is a county seat.
+- With a county focused, its own ink outline covers part of the MP band of the constituencies on
+  the county's border. Offsetting the band further in would make it cross narrow constituencies.
+- The outline band is a `line-offset` of the constituency ring. In a constituency only a few
+  pixels across the two sides can still meet. A precomputed inner ring per constituency (a
+  mapshaper step in the boundary pipeline) would remove that for good.
+- The outlines' highlight is not in the share link (`?parties=` carries the fills' only).
+- The strip's short form keeps the first two rows: for a county, Governor and Senator, as the
+  plan says; for a constituency, MP and Governor ("+2 more").
+- `fitBlocks` in `leadersLayout.ts` returns its smallest attempt if nothing fits. The fixtures,
+  with long names and five rows, all fit; nothing guards a case that does not.
+- The square county leaders card puts the map beside the rows (for the type's sake), so a wide
+  county is drawn smaller there than on the other sizes.
+- The legend's heading stays "MCA seats in <unit> by party" while the box also lists MPs.
+- Stripes are 6px wide along the map (about 4px across the stripe) at a whole zoom, and up to
+  twice that between zooms. (The ruling above says "9px bands": that was the first size.)
+- No screenshot was taken of a county whose three leaders share one party (a solid fill); the
+  solid pattern is covered by tests only.
 
 ## Parked minors from the roadmap fixed on the way
 
 - **"The Mathare MP square leaves empty space around a small map"** (social export): fixed. The
   card map stopped zooming at 13, so a small urban constituency was drawn at about half its box.
   It may now zoom to 16 (`VIEW_MAP_MAX_ZOOM` in `lib/export/viewMap.ts`).
+- **Seat chips: "Phones show 'None' off-screen when MP or MCA is active"**: not fixed, and now
+  true of 1280 to 1535px desktops no longer (the chips moved under the search bar there).
 - **Legend height** (not on the list, found here): the open legend ran under the seat chips and
   the back button once the strip made it taller. It is now capped under them.
 
 ## What is next
 
-- Task 6.
+- The release, from another session. Nothing on this branch is merged, tagged or released.
+- The owner's answer on the leaders strip for non-MCA cards (first parked finding).
 - Bigger maps on the party card and the "Share image" card (see the ruling).
+- The parked minors above, when their code is next touched.

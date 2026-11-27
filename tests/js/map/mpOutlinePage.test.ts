@@ -8,12 +8,15 @@ vi.mock('@inertiajs/vue3', () => ({
     Head: defineComponent({ render: () => null }),
     router: { replace: vi.fn(), push: vi.fn() },
 }));
+/** The zoom the (mocked) map reports. */
+const mapZoom = vi.hoisted(() => ({ value: 5.5 }));
 vi.mock('@/components/map/MapView.vue', () => ({
     default: defineComponent({
         props: { colouring: { type: Object, required: true } },
         setup(_p, { expose }) {
             expose({
                 ready: false,
+                zoom: mapZoom.value,
                 setFocus: () => {},
                 setShowSurroundings: () => {},
                 setPadding: () => {},
@@ -220,6 +223,38 @@ describe('MP outlines over the MCA wards, on the page', () => {
         await ward.findComponent(BackButton).get('button').trigger('click');
         await flushPromises();
         expect(colouringOf(ward).outline?.colours.get(290)).toBe('#e07b24');
+    });
+
+    it('lists the MPs only when their outlines can be on screen: not for all of Kenya zoomed out', async () => {
+        // Nothing focused, the national view: the outlines fade in from zoom 6.4.
+        mapZoom.value = 5.5;
+        const out = await mountPage('?seat=mca');
+        expect(colouringOf(out).mode).toEqual({ kind: 'seat', seat: 'mca' });
+        expect(legendOf(out).props('outline')).toBeFalsy();
+        out.unmount();
+        mapZoom.value = 8;
+        const near = await mountPage('?seat=mca');
+        expect(legendOf(near).props('outline').title).toBe('MPs (outline)');
+        near.unmount();
+        // With a unit focused they are drawn at any zoom.
+        mapZoom.value = 5.5;
+        const focused = await mountPage('?seat=mca', at.county);
+        expect(legendOf(focused).props('outline').title).toBe('MPs (outline)');
+    });
+
+    it('forgets the outlines’ highlight when the MCA view is left, and across visits', async () => {
+        const w = await mountPage('?seat=mca', at.county);
+        legendOf(w).vm.$emit('toggleOutline', 'JP');
+        await flushPromises();
+        expect(colouringOf(w).outline?.colours.get(290)).toBe(T.faded);
+        expect(localStorage.getItem('km.onlyMp')).toBeNull();
+        const chip = (label: string) =>
+            w.findAll('[role="radio"]').find((r) => r.text().startsWith(label))!;
+        await chip('MP').trigger('click');
+        await chip('MCA').trigger('click');
+        await flushPromises();
+        expect(colouringOf(w).outline?.colours.get(290)).toBe('#e07b24');
+        expect(legendOf(w).props('outline').highlighted).toEqual([]);
     });
 
     it('turns the outlines off from the map settings, and remembers it', async () => {

@@ -79,15 +79,16 @@ function toggle() {
                     row.label
                 }}</span>
                 <template v-if="row.holder">
+                    <!-- The name is the one target: 44px tall on touch screens (the row grows with
+                         it, so no two targets overlap), a dense row with a mouse. Never cut:
+                         a long name takes a second line. -->
                     <button
                         type="button"
-                        class="-my-2 inline-flex min-h-11 min-w-0 flex-1 items-center text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
+                        class="inline-flex min-h-7 min-w-0 flex-1 items-center py-0.5 text-left break-words underline decoration-hairline underline-offset-4 hover:decoration-ink pointer-coarse:min-h-11"
                         :aria-label="`${row.holder.name}, ${row.label}: show in the panel`"
                         @click="emit('pick', row)"
                     >
-                        <span class="truncate" :title="row.holder.name">{{
-                            row.holder.name
-                        }}</span>
+                        {{ row.holder.name }}
                     </button>
                     <span
                         v-if="row.holder.party"
@@ -99,7 +100,7 @@ function toggle() {
                             class="size-2.5 rounded-[2px] border border-hairline"
                             :style="{ background: row.holder.colour }"
                             aria-hidden="true"
-                        />{{ row.holder.party }}
+                        />{{ row.holder.partyLabel }}
                     </span>
                 </template>
                 <span v-else class="flex-1 py-1 text-muted-ink"

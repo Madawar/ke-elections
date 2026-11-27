@@ -146,9 +146,17 @@ describe('the MP outline layers', () => {
         const line = layerOf(st, 'mp-outline');
         const edge = layerOf(st, 'mp-outline-edge');
         expect(edge.paint['line-color']).toBe(T.ink);
-        // Lighter while a whole county is in view, so the band does not bury its small wards.
-        expect(atZoom(line.paint['line-width'], 10)).toBeGreaterThanOrEqual(2.5);
-        expect(atZoom(line.paint['line-width'], 10)).toBeLessThan(4);
+        // A thin line while a whole county is in view: drawn inside each constituency, a wide
+        // band would cross a narrow one into its neighbour and bury the wards (Nairobi City).
+        for (const zoom of [8, 10, 11]) {
+            const w = atZoom(line.paint['line-width'], zoom);
+            const ew = atZoom(edge.paint['line-width'], zoom);
+            expect(w, `zoom ${zoom}`).toBeGreaterThanOrEqual(1);
+            expect(w, `zoom ${zoom}`).toBeLessThanOrEqual(2);
+            expect(ew, `zoom ${zoom}`).toBeLessThanOrEqual(3.2);
+            expect(ew - w, `zoom ${zoom}`).toBeGreaterThanOrEqual(1);
+            expect(atZoom(line.paint['line-offset'], zoom)).toBeCloseTo(ew / 2, 5);
+        }
         for (const zoom of [12, 13, 14, 15]) {
             const w = atZoom(line.paint['line-width'], zoom);
             expect(w, `zoom ${zoom}`).toBeGreaterThanOrEqual(4);
@@ -244,27 +252,64 @@ describe('the MP outline layers', () => {
 });
 
 describe('the "MP: <ABBREV>" badges', () => {
-    it('labels each constituency’s label point with its badge, "MP: no data" for the rest', () => {
-        const badge = layerOf(build(), 'labels-mp');
-        expect(badge.source).toBe('labels');
-        expect(badge.filter).toEqual(['==', ['get', 'level'], 'constituency']);
-        const text = matchOf(badge.layout['text-field']);
-        expect(text['290']).toBe('MP: ODM');
-        expect(text['287']).toBe('MP: Independent');
-        expect(text['*']).toBe('MP: no data');
+    const badge = (st = build()) => layerOf(st, 'labels-mp');
+    /** The sections of a `format` text field. */
+    const formatOf = (expr: unknown) => {
+        const e = expr as unknown[];
+        expect(e[0]).toBe('format');
+        return e.slice(1);
+    };
+
+    it('is the second line of each constituency’s own label: its name, then "MP: <ABBREV>"', () => {
+        expect(badge().source).toBe('labels');
+        expect(badge().filter).toEqual(['==', ['get', 'level'], 'constituency']);
+        const [name, , br, , text, opts] = formatOf(badge().layout['text-field']);
+        expect(name).toEqual(['get', 'name']);
+        expect(br).toBe('\n');
+        const badges = matchOf(text);
+        expect(badges['290']).toBe('MP: ODM');
+        expect(badges['287']).toBe('MP: Independent');
+        expect(badges['*']).toBe('MP: no data');
+        expect((opts as { 'font-scale': number })['font-scale']).toBeLessThan(1);
     });
 
-    it('gives way to the constituency names and the ward names: they are placed first', () => {
+    it('follows the label collision rules, and never costs a constituency its name', () => {
         const st = build();
-        // MapLibre places the layers on top first, so a layer lower in the list has less priority.
-        expect(order(st, 'labels-mp')).toBeLessThan(order(st, 'labels-constituency'));
-        expect(order(st, 'labels-mp')).toBeLessThan(order(st, 'labels-ward'));
-        expect(layerOf(st, 'labels-mp').layout['text-allow-overlap']).toBe(false);
+        // MapLibre places the layers on top first. The two-line label is tried first; where it
+        // does not fit, the plain name under it (placed later, at the same point) still shows.
+        expect(order(st, 'labels-mp')).toBeGreaterThan(
+            order(st, 'labels-constituency'),
+        );
+        expect(badge(st).layout['text-allow-overlap']).toBe(false);
+        expect(
+            layerOf(st, 'labels-constituency').layout['text-allow-overlap'],
+        ).toBe(false);
+        // Constituency labels outrank ward labels, with or without the badge.
+        expect(order(st, 'labels-mp')).toBeGreaterThan(order(st, 'labels-ward'));
     });
 
-    it('shows from the constituency zoom band, as the outlines do', () => {
-        expect(layerOf(build(), 'labels-mp').minzoom).toBeGreaterThanOrEqual(6.6);
-        expect(layerOf(build(), 'labels-mp').minzoom).toBeLessThanOrEqual(7.5);
+    it('comes and goes with the constituency names: the same zooms and the same fade', () => {
+        const names = layerOf(build(), 'labels-constituency') as Layer & {
+            maxzoom?: number;
+        };
+        const b = badge() as Layer & { maxzoom?: number };
+        expect(b.minzoom).toBe(names.minzoom);
+        expect(b.maxzoom).toBe(names.maxzoom);
+        expect(b.paint['text-opacity']).toEqual(names.paint['text-opacity']);
+        expect(b.layout['text-size']).toEqual(names.layout['text-size']);
+    });
+
+    it('stays at any zoom on a focused constituency, so its outline is always named there', () => {
+        const b = badge(
+            build({ focus: { level: 'constituency', code: 290 } }),
+        ) as Layer & { maxzoom?: number };
+        expect(b.maxzoom).toBeUndefined();
+        expect(b.paint['text-opacity']).toBe(1);
+        // Not for a focused county: its constituencies' labels keep their usual zooms.
+        const county = badge(
+            build({ focus: { level: 'county', code: 47 } }),
+        ) as Layer & { maxzoom?: number };
+        expect(county.maxzoom).toBe(10.3);
     });
 });
 
@@ -283,7 +328,7 @@ describe('the MCA’s name on the selected ward’s label', () => {
         expect(full(st).layout['text-field']).toBe('');
     };
 
-    it('adds a second, smaller, muted line under the ward’s name: the MCA and the party', () => {
+    it('adds a second, smaller line under the ward’s name: the MCA and the party', () => {
         const [name, nameOpts, br, , line, lineOpts] = formatOf(
             full().layout['text-field'],
         );
@@ -292,7 +337,11 @@ describe('the MCA’s name on the selected ward’s label', () => {
         expect(br).toBe('\n');
         expect(line).toBe('Placeholder mca 1448 (ODM)');
         expect((lineOpts as { 'font-scale': number })['font-scale']).toBeLessThan(1);
-        expect((lineOpts as { 'text-color': string })['text-color']).toBe(T.muted);
+        // In the label's own colour: the muted colour was too weak over a party fill.
+        expect(
+            (lineOpts as { 'text-color'?: string })['text-color'],
+        ).toBeUndefined();
+        expect(full().paint['text-color']).toBe(T.label);
         expect(full().filter).toEqual([
             'all',
             ['==', ['get', 'level'], 'ward'],

@@ -297,6 +297,23 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         expect(document.querySelector('[data-preview] [data-leader]')).toBeNull();
     });
 
+    it('puts the new card’s own headline on it at once, never the other card’s for a moment', async () => {
+        mount(ShareViewDialog, {
+            props: { open: true, view: county, leaders, context },
+            attachTo: document.body,
+        });
+        await settle();
+        cardOption('leaders')!.click();
+        // No waiting for the typing pause: the very next render has the leaders headline.
+        await nextTick();
+        await nextTick();
+        expect(
+            [...document.querySelectorAll('[data-preview] [data-headline]')]
+                .map((t) => t.textContent?.trim())
+                .join(' '),
+        ).toBe('County leaders in Nairobi City');
+    });
+
     it('has no card choice without a leaders card, or when it was opened for one', async () => {
         const plain = mount(ShareViewDialog, {
             props: { open: true, view: county, context },

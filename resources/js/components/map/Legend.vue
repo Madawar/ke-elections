@@ -2,7 +2,7 @@
 // The map legend box: its heading, the "Leaders here" strip, the rows (LegendRows.vue: a bar chart
 // with counts, a plain key without), and the source, "Show all" and "Share this view" under them.
 // In the MCA view with MP outlines it has two lists: "MPs (outline)" and "MCAs (fill)".
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import LeadersStrip from './LeadersStrip.vue';
 import LegendRows from './LegendRows.vue';
 import type { LeaderRow } from '@/lib/leaders';
@@ -49,6 +49,7 @@ const emit = defineEmits<{
     leader: [row: LeaderRow];
 }>();
 const open = defineModel<boolean>('open', { default: true });
+const uid = useId();
 
 // The collapsed chip shows the first few colours, largest first.
 const hasBars = computed(() => props.rows.some((r) => r.count !== undefined));
@@ -109,8 +110,15 @@ const sorted = computed(() =>
             />
             <template v-if="outline">
                 <!-- The MCA view: the MPs' outlines, then the MCAs' fills, each with its own counts -->
-                <section data-legend-section="outline" class="mb-1.5">
-                    <h4 class="flex items-center gap-1.5 py-1 font-semibold">
+                <section
+                    data-legend-section="outline"
+                    class="mb-1.5"
+                    :aria-labelledby="`${uid}-outline`"
+                >
+                    <h4
+                        :id="`${uid}-outline`"
+                        class="flex items-center gap-1.5 py-1 font-semibold"
+                    >
                         <span
                             class="inline-block size-3 shrink-0 rounded-[2px] border-[3px] border-muted-ink"
                             aria-hidden="true"
@@ -120,12 +128,16 @@ const sorted = computed(() =>
                         :rows="outline.rows"
                         :highlighted="outline.highlighted"
                         what="outlines"
+                        seat="MP"
                         @toggle="(key) => emit('toggleOutline', key)"
                         @party="(abbrev) => emit('party', abbrev)"
                     />
                 </section>
-                <section data-legend-section="fill">
-                    <h4 class="flex items-center gap-1.5 py-1 font-semibold">
+                <section data-legend-section="fill" :aria-labelledby="`${uid}-fill`">
+                    <h4
+                        :id="`${uid}-fill`"
+                        class="flex items-center gap-1.5 py-1 font-semibold"
+                    >
                         <span
                             class="inline-block size-3 shrink-0 rounded-[2px] bg-muted-ink"
                             aria-hidden="true"
@@ -134,6 +146,7 @@ const sorted = computed(() =>
                     <LegendRows
                         :rows="rows"
                         :highlighted="highlighted"
+                        seat="MCA"
                         @toggle="(key) => emit('toggle', key)"
                         @party="(abbrev) => emit('party', abbrev)"
                     />

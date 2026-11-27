@@ -12,6 +12,8 @@ const props = defineProps<{
     highlighted?: string[];
     /** What a row highlights, for its accessible name: "areas" (fills) or "outlines". */
     what?: string;
+    /** With two lists in one legend, which seat this one counts ("MP", "MCA"), for the spoken row. */
+    seat?: string;
 }>();
 const emit = defineEmits<{
     /** A row was pressed: switch that party's highlight on or off. */
@@ -51,7 +53,7 @@ const fullName = (r: LegendRow) =>
 const spoken = (r: LegendRow) =>
     r.count === undefined
         ? fullName(r)
-        : `${fullName(r)}: ${r.count} ${r.count === 1 ? 'seat' : 'seats'}, ${share(r.count).replace('<1%', 'less than 1 percent').replace('%', ' percent')}`;
+        : `${fullName(r)}: ${r.count} ${props.seat ? `${props.seat} ` : ''}${r.count === 1 ? 'seat' : 'seats'}, ${share(r.count).replace('<1%', 'less than 1 percent').replace('%', ' percent')}`;
 </script>
 
 <template>

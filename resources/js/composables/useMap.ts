@@ -68,7 +68,7 @@ export interface UseMapOptions {
 
 type Padding = { top: number; bottom: number; left: number; right: number };
 
-/** The label layers whose text a restyle updates, not only their paint. */
+/** The label layers whose text and zoom range a restyle updates, not only their paint. */
 const SEAT_LABEL_LAYERS = new Set(['labels-mp', 'labels-ward-mca']);
 
 /** MapLibre is loaded on demand so the first paint (and phones without WebGL2) never pay for it. */
@@ -233,6 +233,12 @@ export function useMap(
                     layer.id,
                     'text-field',
                     (layer.layout as { 'text-field'?: never })['text-field'],
+                );
+                // A focused constituency keeps its badge label at any zoom.
+                m.setLayerZoomRange(
+                    layer.id,
+                    (layer as { minzoom?: number }).minzoom ?? 0,
+                    (layer as { maxzoom?: number }).maxzoom ?? 24,
                 );
             }
         }

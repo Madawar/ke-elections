@@ -107,9 +107,19 @@ const generated = computed(() => headlineOf(base.value));
 const headlineInput = ref(generated.value);
 /** The card follows the typing after a short pause, so the map is not redrawn on every key. */
 const headlineTyped = refDebounced(headlineInput, 350);
-const headline = computed(
-    () => headlineTyped.value.trim().slice(0, HEADLINE_MAX) || generated.value,
-);
+/**
+ * The headline last set by the dialog itself (opening, or switching card): that one goes on the
+ * card at once. Only what the person types waits for the pause, so a card never carries the
+ * other card's headline while the pause runs.
+ */
+const setHeadline = ref(generated.value);
+const headline = computed(() => {
+    const text =
+        headlineInput.value === setHeadline.value
+            ? headlineInput.value
+            : headlineTyped.value;
+    return text.trim().slice(0, HEADLINE_MAX) || generated.value;
+});
 const edited = computed(() => headlineInput.value.trim() !== generated.value);
 
 const url = computed(() => siteUrl(base.value.path));
@@ -182,7 +192,7 @@ async function build() {
         url: url.value,
         mapAspect: mapAspect.value,
     });
-    const key = `${s}|${name}|${box.w}x${box.h}`;
+    const key = `${which.value}|${s}|${name}|${box.w}x${box.h}`;
     wantedKey = key;
     let pending = images.get(key);
     if (!pending) {
@@ -279,14 +289,18 @@ watch(
         images.clear();
         which.value = 'view';
         themeName.value = view.theme;
-        headlineInput.value = headlineOf(view);
+        setHeadline.value = headlineInput.value = headlineOf(view);
     },
 );
-// The other card has its own headline (and its own map: the images are per card).
-watch(which, () => {
-    images.clear();
-    headlineInput.value = headlineOf(base.value);
-});
+// The other card has its own headline. This runs as the choice changes, before the card is
+// built again, so the new card starts from its own headline (its map has its own cache key).
+watch(
+    which,
+    () => {
+        setHeadline.value = headlineInput.value = headlineOf(base.value);
+    },
+    { flush: 'sync' },
+);
 
 async function share() {
     if (!blob.value) return;
@@ -464,7 +478,7 @@ async function copyCaption() {
                                 v-if="edited"
                                 type="button"
                                 class="min-h-11 text-[14px] underline underline-offset-4"
-                                @click="headlineInput = generated"
+                                @click="setHeadline = headlineInput = generated"
                             >
                                 Use the numbers again
                             </button>

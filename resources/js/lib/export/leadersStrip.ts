@@ -4,7 +4,7 @@
 // line, so the card only draws them and tests can check that nothing overlaps.
 import { type LeaderRow, type LeaderSeat, leaderColour } from '@/lib/leaders';
 import type { Box, TextItem } from './layout';
-import { textWidth } from './text';
+import { textWidth, wrapText } from './text';
 
 export type StripText = TextItem & {
     role: 'seat' | 'name' | 'party' | 'since' | 'empty';
@@ -25,8 +25,11 @@ export interface LeadersStripLayout {
     rows: StripRowItem[];
     /** "+1 more at <link>", when there was no room for every row. */
     more: TextItem | null;
-    /** A county's MCA card: "MPs (outlines): ODM 8, UDA 4", under the rows. */
-    note: TextItem | null;
+    /**
+     * A county's MCA card: "MPs (outlines): ODM 8, UDA 4", under the rows. It is the key to the
+     * outlines on the card's map, so it is always printed whole, on as many lines as it needs.
+     */
+    note: TextItem[];
 }
 
 export interface LeadersStripInput {
@@ -143,18 +146,16 @@ export function leadersStrip({
         };
 
     // Every row; with no room for that, the first two and a count of the rest.
-    // The note takes a line of its own (it shrinks a little to fit, and is dropped rather than cut).
-    const noteSize = note
-        ? Math.max(
-              Math.round(small * 0.8),
-              Math.min(
-                  small,
-                  Math.floor((small * (w - lidW - gap)) / textWidth(note, small)),
-              ),
-          )
+    // The note is the key to the map's outlines: it is never dropped and never cut. It wraps on
+    // its commas' spaces, and its height comes out of the rows' room, not the other way round.
+    const noteSize = Math.round(small * 0.94);
+    const noteLead = Math.round(noteSize * 1.35);
+    const noteLines = note
+        ? wrapText(note, w - lidW - gap, noteSize)
+        : [];
+    const noteH = noteLines.length
+        ? noteLines.length * noteLead + Math.round(small * 0.2)
         : 0;
-    const noteFits = !!note && textWidth(note, noteSize) <= w - lidW - gap;
-    const noteH = noteFits ? Math.round(small * 1.5) : 0;
     let layout = arrange(rows);
     let more = 0;
     if (layout.lines * rowH + noteH > maxH && rows.length > 2) {
@@ -239,21 +240,17 @@ export function leadersStrip({
     });
     const rowsH = layout.lines * rowH;
     const moreH = more ? Math.round(small * 1.5) : 0;
-    // With the rows shortened there is no room for the note either.
-    const showNote = noteFits && !more;
     return {
-        box: { x, y, w, h: rowsH + moreH + (showNote ? noteH : 0) },
+        box: { x, y, w, h: rowsH + moreH + noteH },
         columns: cols,
         rows: items,
-        note: showNote
-            ? {
-                  x: x + lidW + gap,
-                  y: Math.round(y + rowsH + small * 1.05),
-                  text: note!,
-                  size: noteSize,
-                  tone: 'muted',
-              }
-            : null,
+        note: noteLines.map((text, i) => ({
+            x: x + lidW + gap,
+            y: Math.round(y + rowsH + moreH + noteSize * 0.95 + i * noteLead),
+            text,
+            size: noteSize,
+            tone: 'muted' as const,
+        })),
         more: more
             ? {
                   x: x + lidW + gap,

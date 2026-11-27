@@ -169,6 +169,30 @@ describe('the legend’s "Leaders here" strip follows the focus', () => {
         );
     });
 
+    it('names the sources of the leaders it lists in the box’s source line, not only the counted seats’', async () => {
+        const w = await mountPage('?seat=mca', at.constituency);
+        // Every record here is from IEBC or the gazette archive.
+        expect(w.findComponent(Legend).props('note')).toContain(
+            'Source: IEBC gazette notices, as of',
+        );
+        w.unmount();
+        // A Governor whose record comes from elsewhere is in the strip, so that site is named.
+        const original = seats.holders;
+        seats.holders = original.map((h) =>
+            h.seat === 'governor' && h.code === 47
+                ? { ...h, source_url: 'https://www.the-star.co.ke/news/x' }
+                : h,
+        );
+        try {
+            const other = await mountPage('?seat=mca', at.constituency);
+            expect(other.findComponent(Legend).props('note')).toContain(
+                'Source: IEBC gazette notices and the-star.co.ke, as of',
+            );
+        } finally {
+            seats.holders = original;
+        }
+    });
+
     it('caps the legend under the search bar, the chips and the back button, so the strip never runs under them', async () => {
         // A wide desktop: the chips sit beside the search bar (64px of controls), the back button
         // (52px) under them while a unit is focused, and the legend 24px off the bottom.

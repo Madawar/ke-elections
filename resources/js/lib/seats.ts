@@ -190,15 +190,17 @@ export function countySeatsColouring(
             const triple =
                 triples.get(h.code) ??
                 [opts.noData, opts.noData, opts.noData];
-            if (h.party) {
-                const show =
-                    !opts.only ||
-                    opts.only.size === 0 ||
-                    opts.only.has(h.party);
-                triple[i] = show
-                    ? (colours.get(h.party) ?? fallback(h.party))
-                    : opts.faded;
-            }
+            // A holder whose record names no party is still a holder, not a vacancy: the
+            // "Other" grey, as the panel and the cards draw them.
+            const show =
+                !opts.only ||
+                opts.only.size === 0 ||
+                (!!h.party && opts.only.has(h.party));
+            triple[i] = !show
+                ? opts.faded
+                : h.party
+                  ? (colours.get(h.party) ?? fallback(h.party))
+                  : OTHER;
             triples.set(h.code, triple);
         }
     });
@@ -319,6 +321,26 @@ export const legendTitle = (
     if (showing.length === 0) return base;
     return `${base}: showing ${showing.length > 3 ? `${showing.length} parties` : showing.join(', ')}`;
 };
+
+/**
+ * The source links of the holders a legend counts (the same holders as `seatLegend`), so the
+ * legend's source line names where its numbers come from.
+ */
+export function seatSources(
+    data: SeatsData,
+    seat: Holder['seat'] | typeof COUNTY_SEATS,
+    scope?: Set<number> | null,
+): string[] {
+    const counted = (s: Holder['seat']) =>
+        seat === COUNTY_SEATS
+            ? (COUNTY_SEAT_KEYS as readonly string[]).includes(s)
+            : s === seat;
+    return data.holders
+        .filter(
+            (h) => counted(h.seat) && h.party && (!scope || scope.has(h.code)),
+        )
+        .map((h) => h.source_url);
+}
 
 /**
  * Legend rows for a seat: parties holding it, largest first. With `scope`, only the seats whose

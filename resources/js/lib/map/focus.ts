@@ -34,10 +34,10 @@ const GEOMETRY_LAYERS = [
     'mp-outline',
 ] as const;
 const LABEL_LAYERS = [
-    'labels-mp',
     'labels-ward',
     'labels-ward-mca',
     'labels-constituency',
+    'labels-mp',
     'labels-county',
     'labels-province',
 ] as const;

@@ -48,7 +48,12 @@ import {
     NO_COLOURING,
     isSeatMode as isSeatColouring,
 } from '@/lib/map/colouring';
-import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
+import {
+    CONSTITUENCY_MIN_ZOOM,
+    FADE,
+    type MapLevel,
+    zoomOutTarget,
+} from '@/lib/map/levels';
 import {
     type RememberedModes,
     chipStepUp,
@@ -65,7 +70,12 @@ import {
     createFocusHistory,
     gatePopState,
 } from '@/lib/map/history';
-import { type LeaderRow, leadersFor, legendOmits } from '@/lib/leaders';
+import {
+    type LeaderRow,
+    leaderSources,
+    leadersFor,
+    legendOmits,
+} from '@/lib/leaders';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
@@ -90,6 +100,7 @@ import {
     mcaNameLines,
     mpOutline,
     seatColouring,
+    seatSources,
     withIndependentColour,
 } from '@/lib/seats';
 import {
@@ -339,11 +350,23 @@ const outlinesOn = computed(
         mpOutlines.value &&
         focusOf(selection.value)?.level !== 'ward',
 );
-// The outlines have their own highlight, apart from the ward fills'.
-const onlyMpParties = useStorage<string[]>('km.onlyMp', []);
+// The outlines have their own highlight, apart from the ward fills'. It lasts while the MCA view
+// does: it is not remembered across visits (a later visit would open with outlines faded and no
+// sign of why), and leaving the MCA view clears it.
+const onlyMpParties = ref<string[]>([]);
+watch(colourKey, (k) => {
+    if (k !== 'mca') onlyMpParties.value = [];
+});
+// With nothing focused the outlines only show from the constituency zoom band down (the style
+// fades them in over 6.4 to 7.2); the legend lists them only when they can be on screen.
+const outlinesInView = computed(
+    () =>
+        focusOf(selection.value) !== null ||
+        (mapRef.value?.zoom ?? 0) >= CONSTITUENCY_MIN_ZOOM - FADE,
+);
 /** The outlines' own legend: MP seats in the same scope, from the same function as every legend. */
 const mpLegend = computed(() => {
-    if (!outlinesOn.value || !index.value) return null;
+    if (!outlinesOn.value || !outlinesInView.value || !index.value) return null;
     const scope = legendScope(index.value, 'mp', focusOf(selection.value));
     return buildLegend(
         seats.value,
@@ -381,12 +404,23 @@ const legend = computed(() => {
     const scope = index.value
         ? legendScope(index.value, k, focusOf(selection.value))
         : null;
+    // The box's one source line also covers the leaders strip and the MP outlines' list.
+    const mpScope =
+        outlinesOn.value && index.value
+            ? legendScope(index.value, 'mp', focusOf(selection.value))
+            : null;
     return buildLegend(
         seats.value,
         k,
         scope && { codes: scope.codes, unitName: scope.unit.n },
         onlyParties.value,
         asOfText.value,
+        [
+            ...leaderSources(leadersHere.value),
+            ...(outlinesOn.value && outlinesInView.value
+                ? seatSources(seats.value, 'mp', mpScope?.codes)
+                : []),
+        ],
     );
 });
 /** A legend row was pressed: switch the parties it stands for on or off, each independently. */

@@ -573,6 +573,26 @@ describe('Legend: two lists in the MCA view (MP outlines and MCA fills)', () => 
         expect(w.emitted('party')).toEqual([['UDA']]);
     });
 
+    it('labels each list for assistive technology, and says which seat a row counts', () => {
+        const w = mountTwo();
+        for (const name of ['outline', 'fill']) {
+            const s = section(w, name);
+            const id = s.attributes('aria-labelledby');
+            expect(id, name).toBeTruthy();
+            expect(s.get('h4').attributes('id')).toBe(id);
+        }
+        expect(section(w, 'outline').get('[data-key="ODM"] .sr-only').text()).toBe(
+            'Orange Democratic Movement: 8 MP seats, 67 percent',
+        );
+        expect(section(w, 'fill').get('[data-key="ODM"] .sr-only').text()).toBe(
+            'Orange Democratic Movement: 13 MCA seats, 46 percent',
+        );
+        // One list: no seat word, as before.
+        expect(mountLegend().get('[data-key="ODM"] .sr-only').text()).toBe(
+            'Orange Democratic Movement: 13 seats, 46 percent',
+        );
+    });
+
     it('is one list, with no headings, in every other view', () => {
         const w = mountLegend();
         expect(w.find('[data-legend-section]').exists()).toBe(false);

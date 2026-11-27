@@ -2,11 +2,13 @@
 // how the heading and chip describe that. The page only wires this to the legend and the map.
 import { COUNTY_SEATS, type SeatKey, type SeatMode } from './map/colouring';
 import { OTHER, PROVINCE_TINTS } from './map/theme';
+import { sourceLine } from './export/format';
 import {
     INDEPENDENT,
     hasOwnColour,
     legendTitle,
     seatLegend,
+    seatSources,
     type SeatsData,
 } from './seats';
 
@@ -66,8 +68,19 @@ export function buildLegend(
     scope: { codes: Set<number>; unitName: string } | null,
     only: readonly string[],
     asOf: string | null = '',
+    /**
+     * Source links of whatever else the legend box shows with these counts (the "Leaders here"
+     * strip, the MP outlines' list), so its one source line covers all of it.
+     */
+    alsoShown: readonly string[] = [],
 ): LegendModel {
     const label = seat === COUNTY_SEATS ? COUNTY_SEATS_LABEL : SEAT_LABEL[seat];
+    // The sources of the holders counted here, and of the others in the box: IEBC gazette
+    // notices, then any other site by name.
+    const source = sourceLine([
+        ...seatSources(seats, seat, scope?.codes),
+        ...alsoShown,
+    ]);
     // "MP seats", but "County seats": the label already says seats.
     const subject = seat === COUNTY_SEATS ? label : `${label} seats`;
     const rows = seatLegend(seats, seat, scope?.codes);
@@ -118,7 +131,7 @@ export function buildLegend(
         highlighted: on.map((r) => r.key),
         showing,
         filtered: chosen.size > 0,
-        note: `${seat === COUNTY_SEATS ? `${COUNTY_SEATS_NOTE} ` : ''}${mapped.length ? '' : 'No approved holder for this seat yet. '}Elected 2022, with changes since. Source: IEBC gazette notices${asOf ? `, as of ${asOf}` : ''}`,
+        note: `${seat === COUNTY_SEATS ? `${COUNTY_SEATS_NOTE} ` : ''}${mapped.length ? '' : 'No approved holder for this seat yet. '}Elected 2022, with changes since. Source: ${source}${asOf ? `, as of ${asOf}` : ''}`,
     };
 }
 

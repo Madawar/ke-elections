@@ -94,6 +94,31 @@ describe('countySeatsColouring', () => {
         ]);
     });
 
+    it('draws a holder whose record names no party in the Other grey: a holder, not a vacancy', () => {
+        const partyless = {
+            ...data,
+            holders: data.holders.map((x) =>
+                x.code === 5 && x.seat === 'senator' ? { ...x, party: null } : x,
+            ),
+        };
+        const col = countySeatsColouring(partyless, {
+            noData: T.noData,
+            faded: T.faded,
+        });
+        expect(coloursOf(col.patterns!.get(5)!)).toEqual([AAA, low(OTHER), BBB]);
+        // With a highlight on, they fade like any holder outside it.
+        const faded = countySeatsColouring(partyless, {
+            noData: T.noData,
+            faded: T.faded,
+            only: new Set(['AAA']),
+        });
+        expect(coloursOf(faded.patterns!.get(5)!)).toEqual([
+            AAA,
+            low(T.faded),
+            low(T.faded),
+        ]);
+    });
+
     it('fades the stripes of the parties that are not highlighted', () => {
         const col = colouring(['BBB']);
         expect(coloursOf(col.patterns!.get(1)!)).toEqual([
@@ -202,7 +227,7 @@ describe('the "County seats" legend', () => {
         expect(legend.title).toBe('County seats across Kenya by party');
         expect(legend.chipLabel).toBe('County seats');
         expect(legend.note).toBe(
-            'Each county is striped by its Governor, Senator and Woman Rep. Elected 2022, with changes since. Source: IEBC gazette notices, as of 1 November 2026',
+            'Each county is striped by its Governor, Senator and Woman Rep. Elected 2022, with changes since. Source: example.org, as of 1 November 2026',
         );
     });
 

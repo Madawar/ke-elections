@@ -23,6 +23,7 @@ import {
     hasOwnColour,
     partyColours,
     seatLegend,
+    seatSources,
     withIndependentColour,
 } from '@/lib/seats';
 import { SEAT_TITLE } from '@/lib/search';
@@ -347,11 +348,15 @@ export function snapshotView({
     const mpLine = mpRows.length
         ? `MPs (outlines): ${mpRows.map((r) => `${r.label} ${r.count}`).join(', ')}`
         : null;
-    // The strip's holders are on the card too, so their sources join the footer's.
+    // The strip's holders are on the card too, and so are the MPs behind the outlines: their
+    // sources join the footer's.
+    const outlineScope = outline && focus ? legendScope(index, 'mp', focus) : null;
     const sourceUrls = [
         ...holdersInView.map((h) => h.source_url),
         ...leaderSources(leaders),
+        ...(outlineScope ? seatSources(seats, 'mp', outlineScope.codes) : []),
     ];
+
     return {
         kind: 'party',
         seat,

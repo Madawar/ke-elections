@@ -138,7 +138,7 @@ describe('a constituency’s MCA card: the MP block above the ward rows', () => 
     it('has no MPs line: its one MP is named', () => {
         expect(constituency.mpLine).toBeNull();
         for (const size of SIZES)
-            expect(layout(constituency, size).leaders!.note, size).toBeNull();
+            expect(layout(constituency, size).leaders!.note, size).toEqual([]);
     });
 });
 
@@ -158,55 +158,127 @@ describe('a county’s MCA card: the MPs line', () => {
         expect(county.mpLine).toBe('MPs (outlines): JP 1, ODM 1');
     });
 
-    it('prints the line under the strip’s rows, whole, without touching them', () => {
-        const textBox = (t: TextItem): Box => ({
-            x: t.x,
-            y: t.y - t.size * 0.8,
-            w: textWidth(t.text, t.size, (t.weight ?? 400) >= 600),
-            h: t.size,
-        });
-        const apart = (a: Box, b: Box) =>
-            a.x + a.w <= b.x + 0.5 ||
-            b.x + b.w <= a.x + 0.5 ||
-            a.y + a.h <= b.y + 0.5 ||
-            b.y + b.h <= a.y + 0.5;
+    const textBox = (t: TextItem): Box => ({
+        x: t.x,
+        y: t.y - t.size * 0.8,
+        w: textWidth(t.text, t.size, (t.weight ?? 400) >= 600),
+        h: t.size,
+    });
+    const apart = (a: Box, b: Box) =>
+        a.x + a.w <= b.x + 0.5 ||
+        b.x + b.w <= a.x + 0.5 ||
+        a.y + a.h <= b.y + 0.5 ||
+        b.y + b.h <= a.y + 0.5;
+    const noteOf = (strip: { note: TextItem[] }) =>
+        strip.note.map((t) => t.text).join(' ');
+
+    it('prints the line on every size and shape: the outlines on the map always have their key', () => {
         for (const size of SIZES)
             for (const aspect of [0.6, 1.05, 1.5, 2.3]) {
                 const strip = layout(county, size, aspect).leaders!;
-                if (!strip.note) continue;
-                expect(strip.note.text).toBe('MPs (outlines): JP 1, ODM 1');
-                const note = textBox(strip.note);
-                for (const t of strip.rows.flatMap((r) => r.texts))
-                    expect(apart(note, textBox(t)), `${size} ${aspect}`).toBe(true);
-                expect(note.y + note.h).toBeLessThanOrEqual(
-                    strip.box.y + strip.box.h + 0.5,
+                expect(noteOf(strip), `${size} ${aspect}`).toBe(
+                    'MPs (outlines): JP 1, ODM 1',
                 );
+                const others = [
+                    ...strip.rows.flatMap((r) => r.texts),
+                    ...(strip.more ? [strip.more] : []),
+                ].map(textBox);
+                for (const line of strip.note.map(textBox)) {
+                    for (const t of others)
+                        expect(apart(line, t), `${size} ${aspect}`).toBe(true);
+                    expect(line.y + line.h).toBeLessThanOrEqual(
+                        strip.box.y + strip.box.h + 0.5,
+                    );
+                    expect(line.x + line.w).toBeLessThanOrEqual(
+                        strip.box.x + strip.box.w + 0.5,
+                    );
+                }
             }
-        // It is there on the roomy sizes.
-        expect(layout(county, 'story').leaders!.note).not.toBeNull();
-        expect(layout(county, 'portrait').leaders!.note).not.toBeNull();
     });
 
-    it('drops the line rather than cut it, and when the rows themselves are shortened', () => {
-        const rows = leadersFor(index.get('county', 47)!, seats, index);
-        const base = {
-            x: 0,
-            y: 0,
-            w: 900,
-            maxH: 400,
-            rows,
-            font: 24,
-            link: 'example.org/county/47',
-            columns: 1 as const,
-        };
-        const long = `MPs (outlines): ${Array.from({ length: 30 }, (_, i) => `PARTY${i} 1`).join(', ')}`;
-        expect(leadersStrip({ ...base, note: long })!.note).toBeNull();
-        expect(leadersStrip({ ...base, note: 'MPs (outlines): ODM 8' })!.note?.text).toBe(
-            'MPs (outlines): ODM 8',
-        );
-        const short = leadersStrip({ ...base, maxH: 60, note: 'MPs (outlines): ODM 8' })!;
-        expect(short.more).not.toBeNull();
-        expect(short.note).toBeNull();
+    const rows = leadersFor(index.get('county', 47)!, seats, index);
+    const base = {
+        x: 0,
+        y: 0,
+        w: 900,
+        maxH: 400,
+        rows,
+        font: 24,
+        link: 'example.org/county/47',
+        columns: 1 as const,
+    };
+
+    it('wraps a long line (a county with many parties) rather than cut or drop it', () => {
+        const long = `MPs (outlines): ${Array.from({ length: 17 }, (_, i) => `PARTY${i} 1`).join(', ')}`;
+        const strip = leadersStrip({ ...base, note: long })!;
+        expect(strip.note.length).toBeGreaterThan(1);
+        expect(noteOf(strip)).toBe(long);
+        for (const t of strip.note) expect(t.text).not.toContain('…');
+        // Each line stands clear of the one above.
+        const boxes = strip.note.map(textBox);
+        for (let i = 1; i < boxes.length; i++)
+            expect(apart(boxes[i - 1], boxes[i])).toBe(true);
+    });
+
+    it('never costs a leader row for nothing: the rows shorten only when rows and line together do not fit, and the line still shows', () => {
+        const note = 'MPs (outlines): ODM 8';
+        const full = leadersStrip({ ...base, note })!;
+        expect(full.rows).toHaveLength(3);
+        const rowsOnly = leadersStrip(base)!.box.h;
+        // Room for the three rows but not for the line as well: the line is the map's key, so
+        // the rows give way ("+1 more"), and the line is printed under them.
+        const tight = leadersStrip({ ...base, maxH: rowsOnly + 4, note })!;
+        expect(tight.rows.map((r) => r.seat)).toEqual(['governor', 'senator']);
+        expect(tight.more?.text).toBe('+1 more at example.org/county/47');
+        expect(noteOf(tight)).toBe(note);
+        expect(apart(textBox(tight.more!), textBox(tight.note[0]))).toBe(true);
+        // With the room for both, nothing is shortened.
+        const roomy = leadersStrip({ ...base, maxH: full.box.h, note })!;
+        expect(roomy.rows).toHaveLength(3);
+        expect(roomy.more).toBeNull();
+        expect(noteOf(roomy)).toBe(note);
+        // And without a line the rows alone decide.
+        expect(leadersStrip({ ...base, maxH: rowsOnly })!.rows).toHaveLength(3);
+    });
+
+    it('names the MPs’ sources in the footer with the card’s own', () => {
+        const other = snapshotView({
+            seats: {
+                ...seats,
+                holders: seats.holders.map((h) =>
+                    h.seat === 'mp' && h.code === 289
+                        ? { ...h, source_url: 'https://www.parliament.go.ke/x' }
+                        : h,
+                ),
+            },
+            index,
+            seat: 'mca',
+            focus: { level: 'county', code: 47 },
+            only: [],
+            showSurroundings: false,
+            theme: 'dark',
+        });
+        expect(other.sources).toContain('parliament.go.ke');
+        // With the outlines off, the MPs are not on the card, and neither is their source.
+        expect(
+            snapshotView({
+                seats: {
+                    ...seats,
+                    holders: seats.holders.map((h) =>
+                        h.seat === 'mp' && h.code === 289
+                            ? { ...h, source_url: 'https://www.parliament.go.ke/x' }
+                            : h,
+                    ),
+                },
+                index,
+                seat: 'mca',
+                focus: { level: 'county', code: 47 },
+                only: [],
+                showSurroundings: false,
+                theme: 'dark',
+                mpOutlines: false,
+            }).sources,
+        ).not.toContain('parliament.go.ke');
     });
 
     it('is drawn on the card', () => {

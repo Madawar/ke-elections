@@ -8,10 +8,11 @@ import {
     useId,
     watch,
 } from 'vue';
-import { siteUrl } from '@/lib/export/format';
+import { formatAsOf, siteUrl, sourceLine } from '@/lib/export/format';
 import {
     type LeaderRow,
     leaderColour,
+    leaderSources,
     leadersFor,
     mcaSummary,
 } from '@/lib/leaders';
@@ -38,7 +39,7 @@ const emit = defineEmits<{
     party: [abbrev: string];
     share: [];
     shareView: [];
-    /** "Share as image" beside "Who represents": the unit's leaders card. */
+    /** "Share leaders" beside "Who represents": the unit's leaders card. */
     shareLeaders: [];
     'update:showSurroundings': [on: boolean];
 }>();
@@ -92,6 +93,12 @@ const profiled = computed(
 const rows = computed(() => leadersFor(props.unit, props.seats, props.index));
 /** A constituency's MCAs: one line of party counts that opens the list of its wards. */
 const mcas = computed(() => mcaSummary(props.unit, props.seats, props.index));
+/** Where the MCA counts come from, and the date the data describes: every number says both. */
+const mcaSource = computed(() => {
+    if (!mcas.value) return '';
+    const asOf = formatAsOf(props.seats.data_as_of ?? props.seats.as_of);
+    return `Source: ${sourceLine(leaderSources(mcas.value.rows))}${asOf ? `, as of ${asOf}` : ''}`;
+});
 const wardsOpen = ref(false);
 watch(
     () => props.unit,
@@ -196,7 +203,7 @@ const sourceHost = (url: string) => {
                     :aria-label="`Share the leaders of ${unit.n} as an image`"
                     @click="emit('shareLeaders')"
                 >
-                    Share as image
+                    Share leaders
                 </button>
             </div>
             <ul
@@ -306,6 +313,9 @@ const sourceHost = (url: string) => {
                                 />
                             </svg>
                         </button>
+                        <p data-mca-source class="pb-1.5 text-[12px] text-muted-ink">
+                            {{ mcaSource }}
+                        </p>
                         <ul v-if="wardsOpen" class="pb-1.5">
                             <li
                                 v-for="ward in mcas.rows"
@@ -345,6 +355,14 @@ const sourceHost = (url: string) => {
                                         aria-hidden="true"
                                     />{{ ward.holder.partyLabel }}
                                 </span>
+                                <a
+                                    v-if="ward.holder"
+                                    :href="ward.holder.sourceUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="text-[13px] text-muted-ink underline underline-offset-2"
+                                    >{{ sourceHost(ward.holder.sourceUrl) }}</a
+                                >
                             </li>
                         </ul>
                     </div>
