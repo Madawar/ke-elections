@@ -195,6 +195,7 @@ async function copyLink() {
                                 <span class="tabular-nums">{{ r.value }}</span>
                             </p>
                             <div
+                                v-if="!r.nominated"
                                 data-track
                                 class="mt-1.5 h-2.5 rounded-[2px] bg-hairline"
                                 aria-hidden="true"

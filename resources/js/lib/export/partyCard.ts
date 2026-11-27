@@ -23,6 +23,8 @@ export interface PartyCardRow {
     /** "20 of 47 (43%)", "5 of 17 constituencies (29%)", or "Held" for a seat that is one unit's. */
     value: string;
     single: boolean;
+    /** A nominated seat: its value is a count only, with no bar. */
+    nominated: boolean;
 }
 
 export interface PartyCardView {
@@ -79,6 +81,7 @@ export function partyCardFromProfile(
             share: r.share,
             value: r.value,
             single: r.single,
+            nominated: r.nominated,
         })),
         top: profile.topCounties,
         scope: profile.scope,
@@ -132,3 +135,7 @@ export const partyScopeLine = (
     card: Pick<PartyCardView, 'name'>,
 ): string => `${card.name}, seats held now`;
 
+
+/** The line under the card's map: what the highlighted wards are. The same for any scope. */
+export const partyMapCaption = (card: Pick<PartyCardView, 'abbrev'>): string =>
+    `Wards with a ${card.abbrev} MCA`;

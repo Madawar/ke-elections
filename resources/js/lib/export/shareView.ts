@@ -67,7 +67,7 @@ export const dialogCopy = (view: ShareableView) =>
         ? {
               title: 'Share party card',
               description:
-                  'The party’s seats across Kenya, with its numbers, sized for Instagram, stories or X.',
+                  `The party’s seats ${view.scope ? `in ${view.scope.name}` : 'across Kenya'}, with its numbers, sized for Instagram, stories or X.`,
           }
         : {
               title: 'Share this view',

@@ -11,6 +11,7 @@ import {
     partyScopeLine,
 } from '@/lib/export/partyCard';
 import { type PartyLayout, partyLayout } from '@/lib/export/partyLayout';
+import { dialogCopy } from '@/lib/export/shareView';
 import { VIEW_SIZES, type ViewSize, viewFilename } from '@/lib/export/sizes';
 import { textWidth } from '@/lib/export/text';
 import { HEADLINE_STRETCH, SPECS, type Box } from '@/lib/export/viewLayout';
@@ -101,7 +102,7 @@ describe('partyCardView', () => {
         expect(c.focus).toMatchObject({ level: 'county', code: 47, name: 'Nairobi City' });
         expect(c.focus!.b).toEqual(index.get('county', 47)!.b);
         expect(c.path).toBe('/party/uda?in=county-47');
-        expect(viewFilename(c, 'story')).toBe('kenya-electoral-map-mca-county-47-uda-story.png');
+        expect(viewFilename(c, 'story')).toBe('kenya-electoral-map-party-uda-county-47-story.png');
         expect(partyHeadline(card('UDA', PARTY_SEATS, 'dark', MATHARE))).toBe('UDA seats in Mathare');
         expect(card('UDA').focus).toBeNull();
         expect(card('UDA').top.length).toBeGreaterThan(0);
@@ -120,9 +121,19 @@ describe('partyCardView', () => {
         expect(partyCardView({ seats: PARTY_SEATS, abbrev: 'NOPE', theme: 'dark' })).toBeNull();
     });
 
+    it('words the share dialog by the card\'s scope', () => {
+        expect(dialogCopy(card('UDA')).description).toContain('The party’s seats across Kenya');
+        const county = dialogCopy(card('UDA', PARTY_SEATS, 'dark', NAIROBI)).description;
+        expect(county).toContain('The party’s seats in Nairobi City');
+        expect(county).not.toContain('across Kenya');
+        expect(dialogCopy(card('UDA', PARTY_SEATS, 'dark', MATHARE)).description).toContain(
+            'The party’s seats in Mathare',
+        );
+    });
+
     it('has the file name of a party card', () => {
         expect(viewFilename(card('UDA'), 'square')).toBe(
-            'kenya-electoral-map-mca-kenya-uda-square.png',
+            'kenya-electoral-map-party-uda-kenya-square.png',
         );
     });
 });
@@ -142,6 +153,7 @@ const textBox = (t: TextItem, stretch = 1): Box => {
 };
 const lines = (l: PartyLayout): TextItem[] => [
     l.scopeLine,
+    l.mapCaption,
     ...l.rows.flatMap((r) => [r.label, r.value]),
     ...(l.list ? [...l.list.title, ...l.list.items.flatMap((i) => [i.label, i.value])] : []),
 ];
@@ -167,6 +179,7 @@ describe('partyLayout', () => {
                 const blocks: [string, Box][] = [
                     ['headline', l.headline],
                     ['map', l.map],
+                    ['map caption', textBox(l.mapCaption)],
                     ['rows', l.rowsBox],
                     ['footer', l.footerBox],
                     ...(l.list ? [['list', l.list.box] as [string, Box]] : []),
@@ -214,6 +227,19 @@ describe('partyLayout', () => {
                 for (let i = 0; i < head.length; i++)
                     for (const b of boxes) expect(apart(head[i], b)).toBe(true);
             });
+
+    it('captions the map "Wards with a <party> MCA", under the map, on every size and scope', () => {
+        for (const [name, c] of cases)
+            for (const size of SIZES) {
+                const l = partyLayout(size, c, text(c));
+                const cap = textBox(l.mapCaption);
+                expect(l.mapCaption.text, `${name} ${size}`).toBe(`Wards with a ${c.abbrev} MCA`);
+                expect(l.mapCaption.x, `${name} ${size}`).toBe(l.map.x);
+                expect(cap.y, `${name} ${size}`).toBeGreaterThanOrEqual(l.map.y + l.map.h - 0.5);
+                expect(cap.x + cap.w, `${name} ${size}`).toBeLessThanOrEqual(l.map.x + l.map.w + 0.5);
+                expect(l.mapCaption.tone).toBe('muted');
+            }
+    });
 
     it('draws each bar as its share of that seat, in the party colour, on a track for the whole seat', () => {
         const c = card('UDA');
@@ -307,7 +333,12 @@ describe('PartyCard', () => {
             expect(wrapper.findAll('[data-row]'), size).toHaveLength(7);
             expect(wrapper.get('[data-row="governor"]').text()).toContain('Governors');
             expect(wrapper.get('[data-row="governor"]').text()).toContain('20 of 47 (43%)');
-            expect(wrapper.get('[data-row="nominated_senator"]').text()).toContain('Nominated Senators');
+            const nominated = wrapper.get('[data-row="nominated_senator"]');
+            expect(nominated.text()).toContain('Nominated Senators');
+            expect(nominated.text()).not.toContain(' of ');
+            expect(nominated.text()).not.toContain('%');
+            expect(nominated.find('[data-track]').exists()).toBe(false);
+            expect(nominated.find('[data-bar]').exists()).toBe(false);
             expect(t).toContain('Source: IEBC gazette notices');
             expect(t).toContain('Data as of 16 July 2026');
             expect(t).toContain('example.org/party/uda');
@@ -320,6 +351,13 @@ describe('PartyCard', () => {
         const bar = wrapper.get('[data-row="mp"] [data-bar]');
         expect(bar.attributes('fill')).toBe('#e8c547');
         expect(wrapper.get('[data-row="mp"] [data-track]').attributes('fill')).toBe(THEMES.dark.hairline);
+    });
+
+    it('prints the map caption under the map, scope-aware', () => {
+        expect(mount(PartyCard, { props: props() }).get('[data-map-caption]').text()).toBe('Wards with a UDA MCA');
+        const scoped = card('UDA', PARTY_SEATS, 'dark', NAIROBI);
+        const w = mount(PartyCard, { props: props({ view: scoped }) });
+        expect(w.get('[data-map-caption]').text()).toBe('Wards with a UDA MCA');
     });
 
     it('shows a placeholder where the map goes until it is drawn', () => {
@@ -355,7 +393,8 @@ describe('partyCaption', () => {
         expect(t).toContain('UDA seats across Kenya');
         expect(t).toContain('Governors: 20 of 47 (43%)');
         expect(t).toContain('MCAs: 517 of 1,450 (36%)');
-        expect(t).toContain('Nominated Senators: 9 of 20 (45%)');
+        expect(t).toContain('Nominated Senators: 9\n');
+        expect(t).not.toContain('Nominated Senators: 9 of');
         expect(t).toContain('Source: IEBC gazette notices, data as of 16 July 2026.');
         expect(t).toContain(URL);
         expect(t).toContain('#Kenya2027 #KenyaDecides');

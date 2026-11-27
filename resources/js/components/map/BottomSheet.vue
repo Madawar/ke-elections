@@ -66,9 +66,14 @@ const drag = ref<{
     startY: number;
     startPx: number;
     moved: boolean;
+    /** The press began on the handle button, whose click the captured pointer may never deliver. */
+    onHandle: boolean;
 } | null>(null);
 const dragPx = ref<number | null>(null);
-let suppressClick = false;
+// A pointer gesture the sheet has already acted on (a drag, or a tap on the handle): the click
+// that follows it, where one reaches the handle at all, is not a second tap.
+const CLICK_AFTER_POINTER_MS = 600;
+let handledAt = Number.NEGATIVE_INFINITY;
 
 function onPointerDown(e: PointerEvent) {
     // A button or link in the header (List, About, Done) gets its own tap: capturing the pointer
@@ -81,6 +86,7 @@ function onPointerDown(e: PointerEvent) {
         startY: e.clientY,
         startPx: snapPx(snap.value),
         moved: false,
+        onHandle: !!target?.closest('[data-sheet-handle]'),
     };
     (e.currentTarget as Element | null)?.setPointerCapture?.(e.pointerId);
 }
@@ -105,17 +111,22 @@ function onPointerUp(e: PointerEvent) {
         snap.value = SNAPS.reduce((best, s) =>
             Math.abs(snapPx(s) - px) < Math.abs(snapPx(best) - px) ? s : best,
         );
-        suppressClick = true;
+        handledAt = performance.now();
+    } else if (d.onHandle && e.type === 'pointerup') {
+        // Capturing the pointer on the drag area sends a mouse or pen click to the area, not to
+        // the handle button (the same thing that kept the header's buttons from working), so a
+        // tap is resized here, on release. Touch taps usually still click the button after this.
+        cycle();
+        handledAt = performance.now();
     }
     drag.value = null;
     dragPx.value = null;
 }
 
-function onHandleClick() {
-    if (suppressClick) {
-        suppressClick = false;
+function onHandleClick(e: MouseEvent) {
+    // detail is 0 for a keyboard click (Space), which no pointer gesture has handled.
+    if (e.detail > 0 && performance.now() - handledAt < CLICK_AFTER_POINTER_MS)
         return;
-    }
     cycle();
 }
 

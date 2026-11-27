@@ -123,6 +123,15 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
             >
                 {{ mapPlaceholder }}
             </text>
+            <text
+                data-map-caption
+                :x="layout.mapCaption.x"
+                :y="layout.mapCaption.y"
+                :font-size="layout.mapCaption.size"
+                :fill="theme.muted"
+            >
+                {{ layout.mapCaption.text }}
+            </text>
 
             <!-- One row per seat: its count and share over a bar, on a track for the whole seat -->
             <g v-for="row in layout.rows" :key="row.key" :data-row="row.key">
@@ -146,6 +155,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                     {{ row.value.text }}
                 </text>
                 <rect
+                    v-if="row.showTrack"
                     data-track
                     :x="row.track.x"
                     :y="row.track.y"

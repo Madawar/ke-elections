@@ -1,6 +1,6 @@
 // Checks the built service worker and web app manifest (R6: run after `npm run build`, as CI
 // does; fails loudly when the build output is missing rather than skipping).
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -42,10 +42,17 @@ describe('service worker', () => {
         );
         expect(
             urls.some((u) =>
-                /^build\/assets\/maplibre-gl-worker.*\.mjs$/.test(u),
+                /^build\/assets\/maplibre-gl-worker.*\.js$/.test(u),
             ),
         ).toBe(true);
         expect(urls.some((u) => u.endsWith('.woff2'))).toBe(true);
+    });
+
+    it('emits no .mjs file (servers send it as octet-stream, so the worker would not start)', () => {
+        const build = resolve(PUBLIC, 'build');
+        const files = readdirSync(build, { recursive: true }).map(String);
+        expect(files.length).toBeGreaterThan(0);
+        expect(files.filter((f) => f.endsWith('.mjs'))).toEqual([]);
     });
 
     it('only lists files that exist under public/', () => {

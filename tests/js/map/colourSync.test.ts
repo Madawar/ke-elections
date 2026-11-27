@@ -322,6 +322,71 @@ describe('the seat chips and the legend share one colour mode', () => {
             expect(checked(w)).toEqual(['Governor']);
         });
 
+        describe('what is saved for the next visit', () => {
+            const saved = () => localStorage.getItem('km.colour');
+
+            it('is the person\'s own choice at Kenya or a county, written when they choose', async () => {
+                const w = await mountPage();
+                expect(saved()).toBeNull();
+                await chip(w, 'Governor').trigger('click');
+                expect(saved()).toBe('governor');
+                await pick(w, NAIROBI);
+                await chip(w, 'MP').trigger('click');
+                expect(saved()).toBe('mp');
+            });
+
+            it('is not changed when drilling into a constituency switches the map to MCA on its own', async () => {
+                const w = await mountPage();
+                await chip(w, 'Governor').trigger('click');
+                await pick(w, NAIROBI);
+                await pick(w, MATHARE);
+                expect(checked(w)).toEqual(['MCA']);
+                expect(saved()).toBe('governor');
+                await pick(w, HOSPITAL);
+                expect(saved()).toBe('governor');
+            });
+
+            it('is not changed by a choice made inside a constituency or a ward', async () => {
+                const w = await mountPage();
+                await chip(w, 'Governor').trigger('click');
+                await pick(w, NAIROBI);
+                await pick(w, MATHARE);
+                await chip(w, 'MP').trigger('click');
+                expect(checked(w)).toEqual(['MP']);
+                expect(saved()).toBe('governor');
+            });
+
+            it('stays empty after drilling in without choosing anything, so the next visit opens plain Kenya', async () => {
+                const w = await mountPage();
+                await pick(w, NAIROBI);
+                await pick(w, MATHARE);
+                expect(saved()).toBeNull();
+            });
+
+            it('is not written by a link: /constituency/290?seat=governor', async () => {
+                const w = await mountPage('?seat=governor', {
+                    level: 'constituency',
+                    code: 290,
+                    name: 'Mathare',
+                });
+                expect(w.find('h1').text()).toBe('Mathare');
+                expect(saved()).toBeNull();
+                const k = await mountPage('?seat=mp');
+                expect(checked(k)).toEqual(['MP']);
+                expect(saved()).toBeNull();
+            });
+
+            it('is the colouring a visit opens with, read once and not followed across tabs', async () => {
+                localStorage.setItem('km.colour', 'mp');
+                const w = await mountPage();
+                expect(checked(w)).toEqual(['MP']);
+                localStorage.setItem('km.colour', 'governor');
+                window.dispatchEvent(new StorageEvent('storage', { key: 'km.colour' }));
+                await flushPromises();
+                expect(checked(w)).toEqual(['MP']);
+            });
+        });
+
         it('remembers a choice made inside a constituency', async () => {
             const w = await mountPage();
             await chip(w, 'Governor').trigger('click');

@@ -45,6 +45,8 @@ export const VIEW_SIZE_LABELS: Record<ViewSize, string> = {
 /** `kenya-electoral-map-mca-kenya-uda-odm-square.png`, `…-mp-county-47-story.mp4` */
 export function viewFilename(
     view: {
+        /** 'partyCard' names the file for the party, not for the MCA seats its map shows. */
+        kind?: string;
         seat: string;
         focus: { level: string; code: number } | null;
         only: readonly string[];
@@ -59,5 +61,8 @@ export function viewFilename(
         .slice(0, 4)
         .map((a) => a.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
         .join('-');
+    // `kenya-electoral-map-party-uda-county-47-square.png`
+    if (view.kind === 'partyCard')
+        return `kenya-electoral-map-party-${parties}-${where}-${size}.${ext}`;
     return `kenya-electoral-map-${view.seat.replace('_', '-')}-${where}${parties ? `-${parties}` : ''}-${size}.${ext}`;
 }

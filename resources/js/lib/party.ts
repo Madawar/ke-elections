@@ -35,7 +35,13 @@ export interface PartySeatRow {
     mapSeat: SeatKey | null;
     /** The seat is one unit's (a governor in a county): the row says held or not held. */
     single: boolean;
-    /** The row as the panel and the card print it: "20 of 47 (43%)", "5 of 17 constituencies (29%)", "Held". */
+    /**
+     * A nominated seat: a count only. The Constitution fixes the number of nominated seats
+     * (Art. 97(1)(c), 98(1)(b)-(d)) and the data's current holders are not that number, so there
+     * is no "of N", no percentage and no bar to print.
+     */
+    nominated: boolean;
+    /** The row as the panel and the card print it: "20 of 47 (43%)", "5 of 17 constituencies (29%)", "Held", "5". */
     value: string;
 }
 
@@ -63,7 +69,7 @@ export interface PartyProfile {
     colour: string;
     hasOwnColour: boolean;
     /**
-     * The 2022 coalition (ORPP); null when the data has none, or has no ORPP source for the party
+     * The 2022 coalition (ORPP); null when the data has none (or only "none", which is unknown), or has no ORPP source for the party
      * (every number shows its source). The coalition has no source column of its own yet, so the
      * party's ORPP source stands for it until one is added.
      */
@@ -215,7 +221,10 @@ export function partyProfile(
             share: shareOf(count, total),
             mapSeat,
             single,
-            value: single
+            nominated: mapSeat === null,
+            value: mapSeat === null
+                ? fmt(count)
+                : single
                 ? count > 0
                     ? 'Held'
                     : `Not held by ${key}`
@@ -228,7 +237,9 @@ export function partyProfile(
 
     const status = party.status?.trim();
     const sourceUrl = party.source_url || null;
-    const coalition = (sourceUrl && party.coalition_2022?.trim()) || null;
+    // "none" is the data's filler for a coalition nobody recorded, not a sourced finding: unknown.
+    const named = party.coalition_2022?.trim();
+    const coalition = sourceUrl && named && named.toLowerCase() !== 'none' ? named : null;
     const held = data.holders.filter((h) => h.party === key);
     const urls = held.map((h) => h.source_url);
 
@@ -237,7 +248,7 @@ export function partyProfile(
         name: party.name,
         colour,
         hasOwnColour: hasOwnColour(key, colour),
-        coalition: coalition?.toLowerCase() === 'none' ? 'None' : coalition,
+        coalition,
         formerNames: (party.former_names ?? []).map((f) => ({
             abbrev: f.abbrev,
             effectiveOn: f.effective_on,

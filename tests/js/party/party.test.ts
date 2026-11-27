@@ -72,11 +72,15 @@ describe('partyProfile', () => {
         expect([gov.count, gov.total, gov.share]).toEqual([20, 47, '43%']);
         // 20 + 22 + 21 + 119 + 517 = 699 of 47 + 47 + 47 + 290 + 1,450 = 1,881
         expect(p.elected).toEqual({ count: 699, total: 1881, share: '37%' });
+        // Nominated seats are a count only: the Constitution fixes the seats, not the data's
+        // current holders, so there is no "of N" or percentage to print.
         expect(p.rows.find((r) => r.seat === 'nominated_mp')).toMatchObject({
             count: 5,
-            total: 11,
-            share: '45%',
+            nominated: true,
+            value: '5',
         });
+        expect(p.rows.find((r) => r.seat === 'nominated_senator')!.value).toBe('9');
+        expect(p.rows.find((r) => r.seat === 'governor')!.nominated).toBe(false);
     });
 
     it('only the elected seats can be shown on the map', () => {
@@ -134,8 +138,8 @@ describe('partyProfile', () => {
         expect(partyProfile(PARTY_SEATS, 'UDA')!.coalition).toBe('Kenya Kwanza');
     });
 
-    it('shows a recorded "none" coalition as no 2022 coalition', () => {
-        expect(partyProfile(PARTY_SEATS, 'DP')!.coalition).toBe('None');
+    it('treats a "none" coalition as unknown: the data has no source for it, so no coalition is shown', () => {
+        expect(partyProfile(PARTY_SEATS, 'DP')!.coalition).toBeNull();
     });
 
     it('a party without a colour of its own is the grey "Other" and still has its seats', () => {

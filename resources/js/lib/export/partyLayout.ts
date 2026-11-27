@@ -7,6 +7,7 @@ import type { Box, FooterFonts, TextItem } from './layout';
 import {
     type PartyCardView,
     TOP_COUNTIES_TITLE,
+    partyMapCaption,
     partyScopeLine,
 } from './partyCard';
 import { VIEW_SIZES, type ViewSize } from './sizes';
@@ -28,6 +29,8 @@ export interface PartyRowItem {
     value: TextItem;
     /** The whole seat: every holder of it, whatever their party. */
     track: Box;
+    /** False for a nominated seat, which is a count only: no track, no bar (the space stays). */
+    showTrack: boolean;
     /** The party's share of it. */
     bar: Box;
 }
@@ -47,6 +50,8 @@ export interface PartyLayout {
     scopeLine: TextItem;
     /** Where the map of the party's MCA seats is drawn. */
     map: Box;
+    /** The line under the map saying what its highlighted wards are. */
+    mapCaption: TextItem;
     rowsBox: Box;
     rows: PartyRowItem[];
     /** Across Kenya: the counties where the party holds the most MCA seats. */
@@ -115,10 +120,11 @@ function rowsBlock(
                 tone: 'ink',
             },
             track,
+            showTrack: !r.nominated,
             bar: box(
                 track.x,
                 track.y,
-                r.count > 0 ? Math.max(3, Math.round(share * track.w)) : 0,
+                !r.nominated && r.count > 0 ? Math.max(3, Math.round(share * track.w)) : 0,
                 barH,
             ),
         };
@@ -189,6 +195,24 @@ function centred(avail: Box, aspect: number): Box {
     );
 }
 
+/** The caption's text size, and the height the map gives up to it. */
+const captionSize = (spec: Spec) => Math.max(16, Math.round(spec.row.label * 0.7));
+const captionHeight = (spec: Spec) => Math.round(captionSize(spec) * 1.6);
+
+/** The caption, left-aligned under the map and shrunk (to a floor) until it fits the map's width. */
+function mapCaptionFor(map: Box, card: PartyCardView, spec: Spec): TextItem {
+    const text = partyMapCaption(card);
+    let size = captionSize(spec);
+    while (size > 12 && textWidth(text, size, false) > map.w) size--;
+    return {
+        x: map.x,
+        y: Math.round(map.y + map.h + size * 1.15),
+        text,
+        size,
+        tone: 'muted',
+    };
+}
+
 export function partyLayout(
     size: ViewSize,
     card: PartyCardView,
@@ -199,6 +223,8 @@ export function partyLayout(
     const { pad, gap } = spec;
     const scope = partyScopeLine(card);
     const lid = strip(w, spec.stripH);
+    // Every map gives up this much height, under it, to its caption.
+    const cap = captionHeight(spec);
     const finish = (
         t: ReturnType<typeof titleBlock>,
         map: Box,
@@ -213,6 +239,7 @@ export function partyLayout(
         headlineLines: t.headlineLines,
         scopeLine: t.scopeLine,
         map,
+        mapCaption: mapCaptionFor(map, card, spec),
         rowsBox: block.box,
         rows: block.rows,
         list,
@@ -227,7 +254,7 @@ export function partyLayout(
         const footerBox = box(pad, h - pad * 0.7 - fh, w - 2 * pad, fh);
         const bodyBottom = Math.round(footerBox.y - gap * 0.75);
         const mapW = Math.round(
-            Math.min(w - 2 * pad - 700 - gap * 1.5, (bodyBottom - top) * text.mapAspect),
+            Math.min(w - 2 * pad - 700 - gap * 1.5, (bodyBottom - top - cap) * text.mapAspect),
         );
         const colX = Math.round(pad + mapW + gap * 1.5);
         const colW = w - pad - colX;
@@ -250,7 +277,7 @@ export function partyLayout(
                   spec,
               )
             : null;
-        return finish(t, box(pad, top, mapW, bodyBottom - top), block, footerBox, list);
+        return finish(t, box(pad, top, mapW, bodyBottom - top - cap), block, footerBox, list);
     }
 
     const innerW = w - pad - Math.max(pad, spec.insetRight ?? 0);
@@ -285,7 +312,7 @@ export function partyLayout(
             rowH,
             'top',
         );
-        const upper = box(pad, bodyTop, innerW, bodyBottom - rowsH - gap - bodyTop);
+        const upper = box(pad, bodyTop, innerW, bodyBottom - rowsH - gap - bodyTop - cap);
         if (!withList) return finish(t, upper, block, footerBox);
         const listW = Math.round(innerW * 0.58);
         const list = listBlock(
@@ -320,7 +347,12 @@ export function partyLayout(
     );
     const column = box(pad + rowsW + gap, bodyTop, innerW - rowsW - gap, body.h);
     if (!card.top.length)
-        return finish(t, centred(column, text.mapAspect), block, footerBox);
+        return finish(
+            t,
+            centred(box(column.x, column.y, column.w, column.h - cap), text.mapAspect),
+            block,
+            footerBox,
+        );
     // Across Kenya the column holds the map above and the top counties under it.
     const probe = listBlock(box(column.x, 0, column.w, 0), card, spec)!;
     const list = listBlock(
@@ -328,6 +360,6 @@ export function partyLayout(
         card,
         spec,
     );
-    const mapAvail = box(column.x, column.y, column.w, column.h - probe.box.h - gap);
+    const mapAvail = box(column.x, column.y, column.w, column.h - probe.box.h - gap - cap);
     return finish(t, centred(mapAvail, text.mapAspect), block, footerBox, list);
 }

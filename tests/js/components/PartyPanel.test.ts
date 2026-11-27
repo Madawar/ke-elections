@@ -41,7 +41,13 @@ describe('PartyPanel', () => {
         expect(row(w, 'governor').text()).toContain('20 of 47 (43%)');
         expect(row(w, 'mca').text()).toContain('517 of 1,450 (36%)');
         expect(row(w, 'nominated_mp').text()).toContain('Nominated MPs');
-        expect(row(w, 'nominated_mp').text()).toContain('5 of 11 (45%)');
+        // a count only: no "of N", no percentage, no bar
+        expect(row(w, 'nominated_mp').text()).toContain('5');
+        expect(row(w, 'nominated_mp').text()).not.toContain(' of ');
+        expect(row(w, 'nominated_mp').text()).not.toContain('%');
+        expect(row(w, 'nominated_senator').text()).not.toContain('%');
+        expect(row(w, 'nominated_mp').find('[data-bar]').exists()).toBe(false);
+        expect(row(w, 'nominated_mp').find('[data-track]').exists()).toBe(false);
         expect(row(w, 'elected').text()).toContain('Total elected seats');
         expect(row(w, 'elected').text()).toContain('699 of 1,881 (37%)');
     });
@@ -135,9 +141,18 @@ describe('PartyPanel', () => {
         expect(sourced).toContain('Registration: ORPP register, orpp.or.ke');
     });
 
-    it('shows a recorded "none" coalition and leaves out what the data does not have', () => {
-        expect(mountParty('DP').text()).toContain('2022 coalition');
-        expect(mountParty('DP').text()).toContain('None');
+    it('shows no coalition line and no coalition footer for a "none" coalition, but still shows a named one', () => {
+        const dp = mountParty('DP').text();
+        expect(dp).not.toContain('2022 coalition');
+        expect(dp).not.toContain('Coalition:');
+        expect(dp).not.toContain('None');
+        const uda = mountParty('UDA').text();
+        expect(uda).toContain('2022 coalition');
+        expect(uda).toContain('Kenya Kwanza');
+        expect(uda).toContain('Coalition: ORPP (2022)');
+    });
+
+    it('leaves out what the data does not have', () => {
         const bare = mountParty('BARE', {
             ...PARTY_SEATS,
             parties: [

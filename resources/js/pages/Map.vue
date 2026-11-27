@@ -196,7 +196,27 @@ const themePref = computed({
     set: (v) => updateAppearance(v),
 });
 
-const colourKey = useStorage<ColourKey>('km.colour', 'none');
+// The colouring a visit opens with is the person's own choice at Kenya or a county level, read
+// once. The focus switching the mode on its own (MCA inside a constituency) and a link's
+// ?seat= are not choices and are never saved (see chooseMode), so the next visit does not
+// open all of Kenya in ward-level colours.
+const COLOUR_STORAGE = 'km.colour';
+function savedColour(): ColourKey {
+    try {
+        const v = localStorage.getItem(COLOUR_STORAGE) as ColourKey | null;
+        return v && validSeatModes(null).includes(v) ? v : 'none';
+    } catch {
+        return 'none';
+    }
+}
+function saveColour(mode: ColourKey) {
+    try {
+        localStorage.setItem(COLOUR_STORAGE, mode);
+    } catch {
+        // Private windows and blocked storage: the choice just lasts for this visit.
+    }
+}
+const colourKey = ref<ColourKey>(savedColour());
 const onlyParties = useStorage<string[]>('km.only', []);
 const enabledOverlays = useStorage<string[]>(
     'km.overlays',
@@ -222,13 +242,18 @@ watch(unavailableSeats, (off) => {
 // What the person chose at each level (Kenya shares the county level's), so stepping back out
 // brings their choice back after the focus switched the mode on its own.
 const remembered = ref<RememberedModes>({});
-/** The person chose a mode: use it, and remember it for the level they are looking at. */
-function chooseMode(mode: ColourKey) {
+/**
+ * The person chose a mode: use it, and remember it for the level they are looking at. Only a
+ * choice made at Kenya or a county is saved for the next visit; a link's seat is not a choice
+ * (`save: false`).
+ */
+function chooseMode(mode: ColourKey, { save = true }: { save?: boolean } = {}) {
     const focus = focusOf(selection.value)?.level ?? null;
     // A mode that means nothing at this level (the province tint inside a constituency) is refused.
     if (!validSeatModes(focus).includes(mode)) return;
     colourKey.value = mode;
     remembered.value = { ...remembered.value, [rememberLevel(focus)]: mode };
+    if (save && rememberLevel(focus) === 'county') saveColour(mode);
 }
 /** The mode that fits the focus: the person's choice for that level, else one that fits. */
 function modeFor(unit: Unit | null): ColourKey {
@@ -303,7 +328,7 @@ watch(colourKey, (k) => {
 function applySharedView(data: SeatsData) {
     const { seat, parties } = parseViewQuery(location.search, data);
     if (seat) {
-        chooseMode(seat);
+        chooseMode(seat, { save: false });
         onlyParties.value = parties;
     }
     // Take only our own two parameters off the address; anything else (utm_…) stays.

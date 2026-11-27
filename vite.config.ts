@@ -100,8 +100,8 @@ export default defineConfig({
                     new URL('public', import.meta.url),
                 ),
                 globPatterns: [
-                    // .mjs: MapLibre's worker, which the map cannot draw without
-                    'build/**/*.{js,mjs,css,woff2}',
+                    // The MapLibre worker (a .js, see assetFileNames) is in here too
+                    'build/**/*.{js,css,woff2}',
                     'boundaries/*.{geojson,json}',
                     'glyphs/**/*.pbf',
                     'icons/*.{png,svg}',
