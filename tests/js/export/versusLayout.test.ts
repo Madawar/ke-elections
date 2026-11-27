@@ -111,6 +111,41 @@ describe('versusLayout', () => {
         }
     });
 
+    it('draws the bar’s parts in the key’s order, left to right, each as wide as its share of the seats', () => {
+        // Nairobi City's wards split unevenly over four placeholder parties: 40, 25, 12 and the rest.
+        const extra = ['P01', 'P02', 'P03', 'P04'].map((abbrev, i) => ({
+            abbrev,
+            name: `Placeholder party ${i + 1}`,
+            coalition_2022: null,
+            colour: ['#204060', '#a05020', '#30a070', '#8030a0'][i],
+        }));
+        const wards = [...legendScope(index, 'mca', { level: 'county', code: 47 })!.codes].sort((a, b) => a - b);
+        const partyOf = (k: number) => (k < 40 ? 'P01' : k < 65 ? 'P02' : k < 77 ? 'P03' : 'P04');
+        const seats: SeatsData = {
+            ...NUMBERS_SEATS,
+            parties: [...NUMBERS_SEATS.parties, ...extra],
+            holders: NUMBERS_SEATS.holders.map((h) =>
+                h.seat === 'mca' && wards.includes(h.code) ? { ...h, party: partyOf(wards.indexOf(h.code)) } : h,
+            ),
+        };
+        for (const size of SIZES) {
+            const card = view(1, 47, seats);
+            const hv = card.halves[1];
+            expect(hv.key.map((k) => k.key).slice(0, 4)).toEqual(['P01', 'P02', 'P03', 'P04']);
+            const bar = layout(card, size).halves[1].bar;
+            expect(bar.parts.map((p) => p.key)).toEqual(hv.key.map((k) => k.key));
+            const total = hv.key.reduce((n, k) => n + k.count, 0);
+            const room = bar.box.w - 3 * (bar.parts.length - 1);
+            bar.parts.forEach((p, i) => {
+                expect(Math.abs(p.w - (room * hv.key[i].count) / total), `${size} ${p.key}`).toBeLessThanOrEqual(1);
+                if (i) expect(p.x).toBe(bar.parts[i - 1].x + bar.parts[i - 1].w + 3);
+            });
+            expect(bar.parts[0].x).toBe(bar.box.x);
+            const last = bar.parts.at(-1)!;
+            expect(last.x + last.w).toBe(bar.box.x + bar.box.w);
+        }
+    });
+
     it('draws the leaders line as three items, each after its tick, apart, with no separator characters', () => {
         for (const size of SIZES) {
             const l = layout(view(47, 1), size);

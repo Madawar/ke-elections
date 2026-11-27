@@ -267,6 +267,15 @@ export function versusLayout(
     };
     const fits = (k: number) => {
         const t = typeAt(k);
+        // Each key entry and each county seat is one piece that never breaks: the widest of either
+        // half must fit the words' column, or it would run into the map (a vacant Woman Rep).
+        const widest = Math.max(
+            ...card.halves.flatMap((hv) => [
+                ...keyWidths(hv, t),
+                ...hv.leaders.map((l) => leaderWidth(l, t)),
+            ]),
+        );
+        if (widest > colW) return false;
         const r = rows(card, t, colW);
         if (story) return r.afterKey + r.leadersH <= halfH;
         const mapH = halfH - r.afterKey - r.leadersH - Math.round(t.leaders * 0.5);

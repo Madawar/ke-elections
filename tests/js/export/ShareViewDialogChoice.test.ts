@@ -267,6 +267,33 @@ describe('ShareViewDialog: a card with a choice of its own', () => {
         expect(headlineInput().value).toContain('MCA seats');
     });
 
+    it('keeps the pick when `remember` throws', async () => {
+        const card = choosing();
+        card.choice!.remember = () => {
+            throw new Error('storage full');
+        };
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+        open([card]);
+        await settle();
+        await pick('governor');
+        expect(make).toHaveBeenCalledWith('governor');
+        expect(select()!.value).toBe('governor');
+        expect(headlineInput().value).toContain('Governor seat in');
+        errors.mockRestore();
+    });
+
+    it('shows no select for a choice with no options, and the card still works', async () => {
+        const card = choosing();
+        card.choice = { ...card.choice!, options: [] };
+        open([card]);
+        await settle();
+        expect(select()).toBeNull();
+        expect(document.querySelector('label[for="view-card-choice"]')).toBeNull();
+        renders[0].resolve('data:image/png;base64,FIRST');
+        await settle();
+        expect(download().disabled).toBe(false);
+    });
+
     it('works with no `remember` at all', async () => {
         const card = choosing();
         delete card.choice!.remember;

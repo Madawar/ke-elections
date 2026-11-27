@@ -115,7 +115,12 @@ function choose(value: string) {
     const c = choice.value;
     if (!c) return;
     picks.value = { ...picks.value, [which.value]: value };
-    c.remember?.(value);
+    // Remembering is a convenience: a callback that throws must not undo the pick.
+    try {
+        c.remember?.(value);
+    } catch (error) {
+        console.error(error);
+    }
 }
 
 /**
@@ -603,7 +608,7 @@ async function copyCaption() {
                             </label>
                         </div>
                     </fieldset>
-                    <div v-if="choice" class="mb-3">
+                    <div v-if="choice && choice.options.length" class="mb-3">
                         <label
                             for="view-card-choice"
                             class="mb-1 block text-[15px] font-semibold"

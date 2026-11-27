@@ -294,7 +294,9 @@ describe('sharing the leaders of a unit', () => {
     });
 
     it('offers "County leaders" beside the view whenever a county is focused, whatever the seat mode', async () => {
-        for (const seat of ['governor']) {
+        // On MP and MCA "Side by side" comes after the leaders card; the leaders card is the same.
+        const after: Record<string, string> = { governor: '', mp: '|Side by side', mca: '|Side by side' };
+        for (const seat of ['governor', 'mp', 'mca']) {
             const w = await mountPage(`?seat=${seat}`, county);
             w.findComponent(Legend).vm.$emit('share');
             await flushPromises();
@@ -304,9 +306,10 @@ describe('sharing the leaders of a unit', () => {
                 'Nairobi City',
             );
             expect(dialog.attributes('data-share-cards'), seat).toBe(
-                'This view|County leaders',
+                `This view|County leaders${after[seat]}`,
             );
             w.unmount();
+            document.body.innerHTML = '';
         }
     });
 

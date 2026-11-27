@@ -42,8 +42,11 @@ const extra: Party[] = MANY.map((abbrev, i) => ({
     colour: `#${(0x284060 + i * 0x0b0a09).toString(16).padStart(6, '0')}`,
 }));
 
-/** Every county's units of each seat spread over the fourteen and IND, the first one empty; no senators. */
-function crowded(): SeatsData {
+/**
+ * Every county's units of each seat spread over the fourteen and IND, the first one empty; no
+ * Woman Rep (the longest label, vacant), or none of the three county seats.
+ */
+function crowded(countySeats: readonly string[] = ['governor', 'senator']): SeatsData {
     const holders: Holder[] = [];
     for (const seat of SEATS)
         for (const c of counties) {
@@ -66,7 +69,7 @@ function crowded(): SeatsData {
         ...NUMBERS_SEATS,
         parties: [...NUMBERS_SEATS.parties.filter((p) => !MANY.includes(p.abbrev)), ...extra],
         holders: [
-            ...NUMBERS_SEATS.holders.filter((h) => h.seat === 'governor' || h.seat === 'woman_rep'),
+            ...NUMBERS_SEATS.holders.filter((h) => countySeats.includes(h.seat)),
             ...holders,
         ],
     };
@@ -74,7 +77,8 @@ function crowded(): SeatsData {
 
 const CASES: [string, SeatsData][] = [
     ['the fixtures', NUMBERS_SEATS],
-    ['fourteen parties, a vacancy and no senators', crowded()],
+    ['fourteen parties, a vacancy and no woman reps', crowded()],
+    ['fourteen parties, a vacancy and none of the three county seats', crowded([])],
 ];
 
 describe('side by side, every county', () => {
@@ -108,7 +112,9 @@ describe('side by side, every county', () => {
         expect(card.halves[1].key.length).toBeGreaterThanOrEqual(16);
         expect(card.halves[1].key.map((k) => k.label)).toContain(MANY[0]);
         expect(card.halves[1].key.at(-1)!.key).toBe('none');
-        expect(card.halves[0].leaders[1].party).toBeNull();
+        expect(card.halves[0].leaders.map((l) => l.party === null)).toEqual([false, false, true]);
+        const empty = versusCardView({ seats: crowded([]), index, seat: 'mca', counties: [47, 1], theme: 'light' });
+        expect(empty.halves.flatMap((h) => h.leaders.map((l) => l.party))).toEqual(Array(6).fill(null));
         expect(MANY[0]).toBe('KADU-ASILI');
     });
 });

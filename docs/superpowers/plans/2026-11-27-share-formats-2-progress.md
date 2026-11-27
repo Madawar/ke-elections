@@ -258,7 +258,10 @@ Each one: what was decided, why, and what it costs if it is wrong.
   `half` in `versusCard.ts`.
 - **Ruling: a county seat whose holder has no party reads "No approved data yet"** on the leaders
   line, as a vacancy does (no name is shown, so a holder without a party would show nothing); no
-  holder in the data lacks a party — cost if wrong: one condition.
+  holder in the data lacks a party. It cannot be reached today: the server exports a holder with
+  no party as IND, so the card shows "Independent". If it ever could be reached, "Party not
+  recorded" would be the honest wording, not "No approved data yet" (there is a holder) — cost if
+  wrong: one condition.
 - **Ruling: the remembered pick is `km.versusWith` in `localStorage` (the code), read and written
   with try/catch in `versusCard.ts`**; the page passes it as the starting value through
   `versusCard(...)`, and the dialog calls `remember` — cost if wrong: one key.

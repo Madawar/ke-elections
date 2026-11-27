@@ -132,7 +132,8 @@ export interface MapSlot {
  * labelled select while the card is picked and knows nothing of what the values mean: it shows
  * `options`, starts on `value` (whose view is the card's `view`), and on a change shows
  * `make(value)` in place of the card's view and calls `remember(value)` when given, so the page
- * can keep the pick for next time.
+ * can keep the pick for next time. `value` must be one of `options`; a choice with no options is
+ * not shown.
  */
 export interface CardChoice {
     label: string;
