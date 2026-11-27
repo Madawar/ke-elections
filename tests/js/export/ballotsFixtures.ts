@@ -34,6 +34,9 @@ const PARTIES: Party[] = [
         'National Liberation and Reconstruction Party of the Republic of Kenya',
         null,
     ],
+    // The longest registered names among the parties that hold a seat (published values).
+    ['FORD-K', 'Forum for Restoration of Democracy-Kenya', null],
+    ['NOPEU', 'National Ordinary People Empowerment Union', null],
 ].map(([abbrev, name, colour]) => ({
     abbrev: abbrev as string,
     name: name as string,
@@ -102,3 +105,37 @@ export const BALLOT_SEATS = seatsWith([
 
 /** 45 characters, as the data might spell a long name. */
 export const LONG_NAME = 'Placeholder Firstname Middlename Longsurnames';
+
+/** 38 characters in five words: as long as the longest MP's name in the data. */
+export const MP_NAME_38 = 'Placeholder Mamesu Mamesu Mamesu Mames';
+
+/** Mukuyuni ward (Bungoma), where the real FORD-K papers ran into the footer on the story. */
+export const MUKUYUNI = 1088;
+/** Shinoyi-Shikomari-Esumeyia ward: one word wider than the story's headline line. */
+export const SHINOYI = 1016;
+
+/**
+ * The longest name per seat in the seeded data (characters, words), read from the data and kept
+ * here as numbers only: the sweep builds placeholder names this long, never the real ones.
+ */
+export const LONGEST_NAMES: Record<'governor' | 'senator' | 'woman_rep' | 'mp' | 'mca', [number, number]> = {
+    governor: [36, 4],
+    senator: [33, 4],
+    woman_rep: [29, 4],
+    mp: [38, 5],
+    mca: [36, 5],
+};
+
+/**
+ * A placeholder name `length` characters long in `words` words: "Placeholder Mamesu Mames…",
+ * with a wide letter in every word, so it measures at least as wide as a real name that long.
+ */
+export function placeholderName(length: number, words: number): string {
+    const rest = length - 'Placeholder'.length - (words - 1);
+    const out = ['Placeholder'];
+    for (let i = 0; i < words - 1; i++) {
+        const n = Math.floor(rest / (words - 1)) + (i < rest % (words - 1) ? 1 : 0);
+        out.push('Mamesurnamesurnamesurname'.slice(0, n));
+    }
+    return out.join(' ');
+}

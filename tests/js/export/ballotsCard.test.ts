@@ -23,16 +23,28 @@ import {
     sizesOf,
 } from '@/lib/export/shareView';
 import { textWidth } from '@/lib/export/text';
-import { HEADLINE_STRETCH, SPECS } from '@/lib/export/viewLayout';
+import { HEADLINE_STRETCH, SPECS, headlineText } from '@/lib/export/viewLayout';
 import { viewColouring } from '@/lib/export/viewMap';
 import { basisLabel, leadersFor } from '@/lib/leaders';
 import { ATTRIBUTION, SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { withIndependentColour } from '@/lib/seats';
 import {
+    ballotsFaults,
+    apart,
+    inside,
+    papersBottom,
+    seatTexts,
+    textBox,
+    within,
+} from './ballotsChecks';
+import {
     BALLOT_SEATS,
     ISUKHA_WEST,
     LONG_NAME,
+    MP_NAME_38,
+    MUKUYUNI,
     NGEI,
+    SHINOYI,
     index,
     placesOf,
     seatsWith,
@@ -178,28 +190,8 @@ describe('ballotsCardView', () => {
     });
 });
 
-const inside = (b: Box, w: number, h: number) =>
-    b.x >= -0.5 && b.y >= -0.5 && b.x + b.w <= w + 0.5 && b.y + b.h <= h + 0.5;
-const within = (b: Box, outer: Box) =>
-    b.x >= outer.x - 0.5 &&
-    b.y >= outer.y - 0.5 &&
-    b.x + b.w <= outer.x + outer.w + 0.5 &&
-    b.y + b.h <= outer.y + outer.h + 0.5;
-const apart = (a: Box, b: Box) =>
-    a.x + a.w <= b.x + 0.5 ||
-    b.x + b.w <= a.x + 0.5 ||
-    a.y + a.h <= b.y + 0.5 ||
-    b.y + b.h <= a.y + 0.5;
-const textBox = (t: TextItem, stretch = 1): Box => {
-    const w = textWidth(t.text, t.size, (t.weight ?? 400) >= 600) * stretch;
-    return { x: t.anchor === 'end' ? t.x - w : t.x, y: t.y - t.size * 0.8, w, h: t.size };
-};
 const layout = (c: BallotsCardView, size: (typeof SIZES)[number]) =>
     ballotsLayout(size, c, { headline: ballotsHeadline(c), url: URL });
-const seatTexts = (l: BallotsLayout) =>
-    l.papers.flatMap((p) =>
-        p.seats.flatMap((s) => [...s.title, ...s.name, ...s.party, ...(s.since ? [s.since] : [])]),
-    );
 
 const LONG = (() => {
     const data = seatsWith(
@@ -217,6 +209,18 @@ const CASES = {
     dark: card(ISUKHA_WEST, BALLOT_SEATS, 'dark'),
     long: LONG,
     vacant: card(ISUKHA_WEST, seatsWith(wardSeats(ISUKHA_WEST, {}, { senator: null, mp: null }))),
+    // Every seat FORD-K, whose party line wraps, and an MP's name that wraps too: the real
+    // Bungoma papers that ran into the footer on the story.
+    fordk: card(
+        MUKUYUNI,
+        seatsWith(
+            wardSeats(
+                MUKUYUNI,
+                { governor: 'FORD-K', senator: 'FORD-K', woman_rep: 'FORD-K', mp: 'FORD-K', mca: 'FORD-K' },
+                { mp: { name: MP_NAME_38 } },
+            ),
+        ),
+    ),
 };
 
 describe('ballotsLayout', () => {
@@ -396,6 +400,73 @@ describe('ballotsLayout', () => {
             for (const size of SIZES)
                 for (const t of seatTexts(layout(c, size)))
                     expect(t.size, `${name} ${size} ${t.text}`).toBeGreaterThanOrEqual(SPECS[size].footer.text - 1);
+    });
+
+    it('ends the last paper above the footer, in every case and size', () => {
+        for (const [name, c] of Object.entries(CASES))
+            for (const size of SIZES) {
+                const l = layout(c, size);
+                expect(papersBottom(l), `${name} ${size}`).toBeLessThanOrEqual(l.footerBox.y);
+                expect(ballotsFaults(l, size, { source: c.source, url: URL }), `${name} ${size}`).toEqual([]);
+            }
+    });
+
+    it('fits five FORD-K seats and a 38-character MP on the story by giving up padding, not type', () => {
+        expect(MP_NAME_38).toHaveLength(38);
+        expect(MP_NAME_38.split(' ')).toHaveLength(5);
+        const party = 'FORD-K, Forum for Restoration of Democracy-Kenya';
+        for (const size of SIZES) {
+            const l = layout(CASES.fordk, size);
+            const seats = l.papers.flatMap((p) => p.seats);
+            for (const s of seats) expect(s.party.map((t) => t.text).join(' '), size).toBe(party);
+            expect(seats[3].name.map((t) => t.text).join(' ')).toBe(MP_NAME_38);
+            // The type is the same as on a card with room to spare: only the room around it gave.
+            for (const t of seatTexts(l))
+                expect(t.size, `${size} ${t.text}`).toBeGreaterThanOrEqual(SPECS[size].footer.text);
+        }
+    });
+
+    it('as a last resort sets the type smaller rather than run a paper into the footer', () => {
+        const huge = `${LONG_NAME} ${LONG_NAME} ${LONG_NAME}`;
+        const c = card(
+            MUKUYUNI,
+            seatsWith(
+                wardSeats(
+                    MUKUYUNI,
+                    { governor: 'NOPEU', senator: 'NOPEU', woman_rep: 'NOPEU', mp: 'NOPEU', mca: 'NOPEU' },
+                    {
+                        governor: { name: huge },
+                        senator: { name: huge },
+                        woman_rep: { name: huge },
+                        mp: { name: huge },
+                        mca: { name: huge },
+                    },
+                ),
+            ),
+        );
+        for (const size of SIZES) {
+            const l = layout(c, size);
+            expect(papersBottom(l), size).toBeLessThanOrEqual(l.footerBox.y);
+            expect(ballotsFaults(l, size, { source: c.source, url: URL }), size).toEqual([]);
+            for (const s of l.papers.flatMap((p) => p.seats))
+                expect(s.name.map((t) => t.text).join(' ')).toBe(huge);
+        }
+    });
+
+    it('keeps a ward name with no space whole in the default headline: a break after a hyphen, never an ellipsis', () => {
+        const c = card(SHINOYI);
+        expect(ballotsHeadline(c)).toBe('Who represents Shinoyi-Shikomari-Esumeyia ward');
+        for (const size of SIZES) {
+            const l = layout(c, size);
+            const lines = l.headlineLines.map((t) => t.text);
+            for (const t of lines) expect(t, size).not.toContain('…');
+            expect(headlineText(l.headlineLines), size).toBe(ballotsHeadline(c));
+            for (const t of l.headlineLines)
+                expect(textBox(t, HEADLINE_STRETCH).x + textBox(t, HEADLINE_STRETCH).w, `${size} ${t.text}`).toBeLessThanOrEqual(
+                    size === 'story' ? 960 : l.w - 64,
+                );
+            expect(ballotsFaults(l, size, { source: c.source, url: URL }, ballotsHeadline(c)), size).toEqual([]);
+        }
     });
 });
 

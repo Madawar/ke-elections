@@ -10,7 +10,9 @@
 // A small map sits at the right of each paper, as tall as the paper allows. A name is never cut
 // or shortened: it steps down to NAME_FLOOR of its size, then wraps, and its paper grows. All
 // five seats use one type scale, the largest at which the papers fit the room; the room left over
-// pads every seat alike, up to PAD_MAX, so the papers stay evenly padded.
+// pads every seat alike, up to PAD_MAX, so the papers stay evenly padded. When even the smallest
+// scale does not fit, the room around the words gives way before the words do (see `TIGHTER`),
+// and only then does the type go below its floor: the papers never run into the footer.
 import {
     type BallotPaperKey,
     type BallotRow,
@@ -26,6 +28,7 @@ import {
     balanced,
     box,
     cardFrame,
+    headlineText,
     strip,
     titleBlock,
 } from './viewLayout';
@@ -82,7 +85,7 @@ export interface BallotsText {
     url: string;
 }
 
-export const VACANT = 'No approved data yet';
+const VACANT = 'No approved data yet';
 
 /** The type scales tried, largest first: every seat on the card uses the same one. */
 const SCALES = [1.12, 1.08, 1.04, 1, 0.96, 0.92, 0.88, 0.84, 0.8];
@@ -93,6 +96,35 @@ const PAD_MIN = 0.7;
 const PAD_MAX = 1.5;
 /** The map column's share of the paper's width. */
 const MAP_COL = 0.25;
+
+/** How the papers are spaced: seat padding (a share of the label size), paper gap, map column. */
+interface Room {
+    pad: number;
+    gap: number;
+    mapCol: number;
+}
+
+/**
+ * When the smallest scale does not fit, the room given up, in this order, at that scale: the
+ * seats' padding (to 0.35 of the label), then the gap between the papers (to a third), then the
+ * map column (to 0.17 of the paper), which gives the words more width, so a long party line
+ * ("FORD-K, Forum for Restoration of Democracy-Kenya") stops wrapping. Padding goes first: it is
+ * spread over the five seats alike and the card keeps its type and its maps; the maps go last, as
+ * they are what places the ward.
+ */
+const TIGHTER: Room[] = [
+    { pad: 0.6, gap: 1, mapCol: MAP_COL },
+    { pad: 0.5, gap: 1, mapCol: MAP_COL },
+    { pad: 0.42, gap: 1, mapCol: MAP_COL },
+    { pad: 0.35, gap: 1, mapCol: MAP_COL },
+    { pad: 0.35, gap: 2 / 3, mapCol: MAP_COL },
+    { pad: 0.35, gap: 1 / 3, mapCol: MAP_COL },
+    { pad: 0.35, gap: 1 / 3, mapCol: 0.22 },
+    { pad: 0.35, gap: 1 / 3, mapCol: 0.19 },
+    { pad: 0.35, gap: 1 / 3, mapCol: 0.17 },
+];
+/** The last resort, with all of `TIGHTER` given up: the type below its floor, down to this. */
+const SCALE_LEAST = 0.3;
 
 interface Fonts {
     label: number;
@@ -245,10 +277,11 @@ function papersAt(
     f: Fonts,
     pad: number,
     paperGap: number,
+    mapCol = MAP_COL,
 ): { papers: BallotPaperItem[]; bottom: number } {
     const edgeW = Math.round(f.label * 0.9);
     const inset = Math.round(f.label * 0.95);
-    const mapColW = Math.round(w * MAP_COL);
+    const mapColW = Math.round(w * mapCol);
     const textX = x + edgeW + inset;
     const textW = x + w - inset - mapColW - inset - textX;
     const papers: BallotPaperItem[] = [];
@@ -296,7 +329,7 @@ const LEAD = 'Who represents ';
  */
 function placeWhole(lines: TextItem[], w: number): TextItem[] {
     if (lines.length !== 2 || !lines[0].text.startsWith(LEAD.trim())) return lines;
-    const all = `${lines[0].text} ${lines[1].text}`;
+    const all = headlineText(lines);
     if (!all.startsWith(LEAD)) return lines;
     const rest = all.slice(LEAD.length);
     if (textWidth(rest, lines[1].size, true) > w) return lines;
@@ -320,28 +353,47 @@ export function ballotsLayout(
     const t = titleBlock(pad, top, innerW, spec, text.headline, scope);
     const bodyTop = Math.round(t.bottom + tight);
     const bodyBottom = Math.round(footerBox.y - tight);
-    const room = bodyBottom - bodyTop;
+    const space = bodyBottom - bodyTop;
     const paperGap = Math.round(spec.gap * 0.5);
     // No word on a paper smaller than the footer's text.
     const floor = spec.footer.text;
 
-    let chosen: { f: Fonts; pad: number } | null = null;
+    const at = (f: Fonts, r: Room) =>
+        papersAt(card, size, pad, innerW, bodyTop, f, Math.round(f.label * r.pad), Math.round(paperGap * r.gap), r.mapCol);
+    const fits = (f: Fonts, r: Room) => at(f, r).bottom <= bodyBottom;
+    const usual: Room = { pad: PAD_MIN, gap: 1, mapCol: MAP_COL };
+    let chosen: { f: Fonts; room: Room } | null = null;
     for (const scale of SCALES) {
         const f = fontsAt(size, scale, floor);
-        const p = Math.round(f.label * PAD_MIN);
-        if (papersAt(card, size, pad, innerW, bodyTop, f, p, paperGap).bottom <= bodyBottom) {
-            chosen = { f, pad: p };
+        if (fits(f, usual)) {
+            chosen = { f, room: usual };
             break;
         }
     }
-    const f = chosen?.f ?? fontsAt(size, SCALES.at(-1)!, floor);
-    let seatPad = chosen?.pad ?? Math.round(f.label * PAD_MIN);
+    if (!chosen) {
+        const f = fontsAt(size, SCALES.at(-1)!, floor);
+        const room = TIGHTER.find((r) => fits(f, r));
+        if (room) chosen = { f, room };
+    }
+    if (!chosen) {
+        // The last resort: the type below its floor, the room all given up, rather than overlap.
+        const room = TIGHTER.at(-1)!;
+        const last = SCALES.at(-1)!;
+        for (let scale = last - 0.02; scale >= SCALE_LEAST - 1e-9; scale -= 0.02) {
+            const f = fontsAt(size, scale, Math.round((floor * scale) / last));
+            chosen = { f, room };
+            if (fits(f, room)) break;
+        }
+    }
+    const { f, room } = chosen!;
+    const gap = Math.round(paperGap * room.gap);
+    let seatPad = Math.round(f.label * room.pad);
     // The room left over pads every seat alike (above and below), up to PAD_MAX.
-    const natural = papersAt(card, size, pad, innerW, bodyTop, f, seatPad, paperGap).bottom - bodyTop;
+    const natural = at(f, room).bottom - bodyTop;
     const seats = card.papers.reduce((n, p) => n + p.rows.length, 0);
-    const extra = Math.max(0, room - natural);
+    const extra = Math.max(0, space - natural);
     seatPad = Math.min(Math.round(f.label * PAD_MAX), seatPad + Math.floor(extra / (2 * seats)));
-    const { papers } = papersAt(card, size, pad, innerW, bodyTop, f, seatPad, paperGap);
+    const { papers } = papersAt(card, size, pad, innerW, bodyTop, f, seatPad, gap, room.mapCol);
 
     return {
         w,

@@ -314,9 +314,51 @@ export function breakHeadline(
     return wrapText(text, w, size, maxLines, true);
 }
 
+/** A line ends inside a word broken after its hyphen ("Shinoyi-Shikomari-"), not at a space. */
+const hyphenBreak = (line: string) => /[^\s-]-$/.test(line);
+
+/**
+ * The headline's words as one string again, from its lines: a line broken after a hyphen inside
+ * a word joins the next with no space.
+ */
+export const headlineText = (lines: { text: string }[]): string =>
+    lines.reduce(
+        (all, l, i) => (i === 0 ? l.text : hyphenBreak(lines[i - 1].text) ? all + l.text : `${all} ${l.text}`),
+        '',
+    );
+
+/**
+ * `text` on lines no wider than `w`, broken at spaces and, inside a word too wide for a line of
+ * its own, after its hyphens. Never cut: null when a piece is still too wide.
+ */
+function wrapAtHyphens(text: string, w: number, size: number): string[] | null {
+    const fits = (t: string) => textWidth(t, size, true) <= w;
+    const lines: string[] = [];
+    let line = '';
+    for (const word of text.split(/\s+/).filter(Boolean)) {
+        const pieces = fits(word) ? [word] : word.split(/(?<=[^\s-]-)(?=[^-])/);
+        pieces.forEach((piece, i) => {
+            const next = line ? `${line}${i ? '' : ' '}${piece}` : piece;
+            if (!line || fits(next)) line = next;
+            else {
+                lines.push(line);
+                line = piece;
+            }
+        });
+    }
+    if (line) lines.push(line);
+    return lines.every(fits) ? lines : null;
+}
+
+/** The least share of the base a headline steps down to so that a word too wide is not cut. */
+const HEADLINE_LEAST = 0.4;
+
 /**
  * The largest headline size (down to 78% of the base) that keeps the whole headline, broken
- * cleanly after its colon, within the usual lines; then any size that keeps it whole; then cut.
+ * cleanly after its colon, within the usual lines; then any size that keeps it whole. When one
+ * word is wider than the line (a ward named "Shinoyi-Shikomari-Esumeyia"), the word breaks after
+ * a hyphen, and if a piece still does not fit, the size steps down below the least until it does:
+ * no word is cut. Only a headline with too many words for its lines (an edited one) is cut.
  */
 function fitHeadline(
     headline: string,
@@ -339,6 +381,15 @@ function fitHeadline(
             const lines = breakHeadline(headline, w, size, maxLines);
             if (whole(lines) && ok(lines)) return { size, lines };
         }
+    // Only reached by a headline that did not fit whole: the cards' other headlines are unchanged.
+    const words = headline.split(/\s+/).filter(Boolean);
+    if (words.some((word) => textWidth(word, min, true) > w)) {
+        const least = Math.min(min, Math.round(spec.headline * HEADLINE_LEAST));
+        for (let size = spec.headline; size >= least; size -= size > min ? 2 : 1) {
+            const lines = wrapAtHyphens(headline, w, size);
+            if (lines && lines.length <= spec.headlineMax) return { size, lines };
+        }
+    }
     return {
         size: min,
         lines: breakHeadline(headline, w, min, spec.headlineMax),
@@ -350,7 +401,11 @@ function fitHeadline(
  * ("Where UDA holds the most MP" / "seats"): the same words, size and number of lines.
  */
 export function balanced(lines: TextItem[], w: number): TextItem[] {
-    if (lines.length < 2 || lines[lines.length - 1].text.includes(' '))
+    if (
+        lines.length < 2 ||
+        lines[lines.length - 1].text.includes(' ') ||
+        hyphenBreak(lines[lines.length - 2].text)
+    )
         return lines;
     const [a, b] = lines.slice(-2);
     const words = `${a.text} ${b.text}`.split(' ');
