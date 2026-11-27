@@ -318,3 +318,53 @@ area be multi-shaded in colour?"
     square and story.
   - Check the stripes are readable at phone size and the borders still read.
 - [ ] **Step 6:** Commit: `feat(map): county leaders card and striped county seats view`.
+
+### Task 6: MP outlines over MCA wards
+
+The owner asked on 2026-11-27: "In ward and constituency zooming, differentiating between an MP
+and MCA for the wards would be cool."
+
+**Requirements:**
+- **On the map, in MCA mode,** from the constituency zoom band and deeper (and in focus on a
+  county or constituency):
+  - Ward fills stay as the MCA's party colour.
+  - Each constituency gets a **thick outline in its MP's party colour**: a 4–5 px party-colour
+    line between two thin ink edges, so it reads even over wards of the same colour. It sits
+    above the ward fills and the ward lines, and below labels and the focused unit's outline.
+  - A small badge at the constituency label point: "MP: <ABBREV>". "MP: no data" if there's no
+    holder.
+  - The badges follow the label collision rules, so constituency names win where space is short.
+  - The MP outline colour comes from the same holder data, keyed by constituency code.
+  - The party highlight applies to both layers: a non-selected party's outlines and fills take
+    the faded token.
+  - A "Show MPs as outlines" switch in `LayersPanel`, on by default and remembered.
+- **Legend in that mode:** two sections.
+  - "MPs (outline)": counts and percentages of MP seats in the current scope.
+  - "MCAs (fill)": counts and percentages of MCA seats in the scope.
+  - Both come from `buildLegend` with the right seat key and scope.
+  - Each section's rows toggle the highlight for its own layer.
+- **Panel:** a ward's seat list shows its MCA and, under "Represented in Parliament by", the
+  constituency's MP. The data is already available.
+- **Export:**
+  - Constituency cards in MCA mode get an "MP: name exactly as the data spells it, party, since"
+    block above the ward rows.
+  - The card map is drawn the same layered way.
+  - County MCA cards show the MP outlines on their map, plus a compact "MPs: ODM 8, UDA 4, …" line
+    built from `buildLegend`.
+- **Tests:**
+  - The outline colour expression maps each constituency code to its MP's party colour, and to
+    faded when the party is not selected.
+  - The legend sections' counts equal the separate MP and MCA legends for the same scope.
+  - The badge text for a held seat and for no data.
+  - The constituency card has the MP block, with no overlap and safe zones holding.
+- **Playwright:**
+  - Nairobi City focused in MCA mode, then Mathare focused, then a ward selected, on phone and
+    desktop, light and dark.
+  - The Mathare card in square and story.
+  - Check that the outlines read against same-colour wards.
+- [ ] **Step 1:** Write the failing tests above.
+- [ ] **Step 2:** Run them. Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run `npm run test:js`, `types:check` and the Sail build. Expected: PASS.
+- [ ] **Step 5:** Playwright as listed above. Look at the shots.
+- [ ] **Step 6:** Commit: `feat(map): MP outlines over MCA wards, with both in the legend and cards`.
