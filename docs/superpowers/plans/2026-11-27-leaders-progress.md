@@ -4,8 +4,8 @@ Tasks 5 and 6 of `2026-11-27-map-controls.md`, with the owner's additions of 202
 is the running log: what is done (with commits), every ruling made on the way, parked minor
 findings and what is next. A later session can resume from here.
 
-**Rules for this branch:** push `feature/leaders` only. No merge into `develop` or `main`, no tag,
-no release. The release is done afterwards from another session.
+**Released as v0.3.0 on 27 November 2026.** The branch was built under "push `feature/leaders`
+only"; the owner then asked for the release in the same session.
 
 ## Status
 
@@ -292,7 +292,6 @@ Each one: what was decided, why, and what it costs if it is wrong.
 
 ## What is next
 
-- The release, from another session. Nothing on this branch is merged, tagged or released.
 - The owner's answer on the leaders strip for non-MCA cards (first parked finding).
 - Bigger maps on the party card and the "Share image" card (see the ruling).
 - The parked minors above, when their code is next touched.
