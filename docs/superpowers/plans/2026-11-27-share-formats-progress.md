@@ -12,7 +12,8 @@ from here.
 | B | "By the numbers" (mock-up 6), square and story, offered with nothing focused | done | see `git log` (`feat(export): "By the numbers" card…`) |
 | Review fixes | Slot images reach the card, one component per registry entry, a map-less card credits only the codes, skipped maps leave the cache, no other card's map while one's own is drawing, small numbers-card fixes | done | see `git log` (`fix(export): …`) |
 | C | "Top 10 counties for a group" (mock-up 8), square and story, from the national seat view (MP/MCA, one group highlighted) and the party profile | done | see `git log` (`feat(export): "Top 10 counties"…`) |
-| D | "Kenya, five ways" (mock-up 5) | not started | |
+| Top-10 fixes | The map in the bars' colour (no count scale, no key), rows that keep their size, the story's map centred under the rows | done | see `git log` (`fix(export): top-10 map…`) |
+| D | "Kenya, five ways" (mock-up 5), square and story, offered as "Five seats" with nothing focused | done | see `git log` (`feat(export): "Kenya, five ways"…`) |
 | E | "Who represents this ward" (mock-up 1) | not started | |
 
 ### Task A: what did not change
@@ -58,6 +59,15 @@ After the owner's look at Task C: the map is back to the plan (flat group colour
 on the county lines), the rows no longer shrink for a long "of N constituencies", and the story's
 map is centred with its caption under it (see the rulings). Downloaded again in the eight
 combinations and looked at; the seat view, leaders and party PNGs are still byte-identical.
+
+### Task D: how it was checked
+
+Downloaded from the running app (`/?seat=mca`, "Share this view", "Five seats") in square and
+story, light and dark, and looked at beside mock-up 5. The square follows the mock-up cell for
+cell; its maps are 242 × 294, all five one size and lined up. The story's maps are 171 × 208 (see
+the ruling). The five maps and the PNG were ready about 2.7 seconds after choosing the card, in
+each size (headless Chromium, software GL). The seat view, leaders and party PNGs are still
+byte-identical to the ones taken before this round.
 
 ## Rulings
 
@@ -212,6 +222,48 @@ Each one: what was decided, why, and what it costs if it is wrong.
   and size, broken where the two lines are most even), here only, as this headline is fixed and
   cannot be reworded by the person — cost if wrong: `balanced` in `topCountiesLayout.ts`.
 
+- **Ruling: the five-seats key is built from each seat's legend (`buildLegend`, all of Kenya)**:
+  every own-colour row of any of the five, with its seats added up over the five, most first,
+  ties by abbreviation (independents by "IND"), then "Other parties" when any legend has that row,
+  then "No approved holder yet" in the no-data colour when any seat has none (the maps draw those
+  seats in that colour, so the key names it) — tested both ways: every colour on the five maps is
+  named, and nothing is named that no map shows — cost if wrong: `groups` in `fiveSeatsCard.ts`.
+- **Ruling: the key holds at most 14 entries (two columns of seven); past that the parties with the
+  fewest seats are folded into "Other parties" on the maps as well (`ViewMapSpec.fold` draws them
+  in the Other grey), never the independents, and the line under the key adds "The N with the
+  fewest are drawn as Other parties."** The real data has 12 entries, so nothing is folded today.
+  The key's type is never below the card's small text (`callout.sub`); when the key needs more
+  height than a map cell (the story), its row is made taller and every map a little smaller, all
+  five still one size — cost if wrong: `KEY_MAX` in `fiveSeatsCard.ts`.
+- **Ruling: the five maps draw no ward lines** (`ViewMapSpec.wardLines: false`) — at these sizes
+  (about zoom 5) the ward lines would not be drawn anyway (they start at zoom 8.6), so this only
+  says it; county lines are kept. Looked at, zoomed: the MCA map reads as its fills, with the grey
+  that is really "Other parties" — cost if wrong: one field.
+- **Ruling: the five County-seat maps are plain party fills per seat**, the seat view's own
+  colouring (`viewColouring` of that seat with nothing highlighted; tested equal), not the striped
+  "County seats" mode — cost if wrong: none.
+- **Ruling: the headline is editable** (the plan fixes only the top-10 headline), with "Kenya’s
+  five elected seats, by party" as the default. It goes on one line when it fits there at 84% of
+  the usual size or more (the square: 50px), as in the mock-up; otherwise the usual two lines with
+  no word alone on the last (the story) — `balanced` moved from the top-10 layout to `viewLayout`
+  for this — cost if wrong: `ONE_LINE` in `fiveSeatsLayout.ts`.
+- **Ruling: the story keeps the plan's two across, three down**, and its maps are 171 × 208: the
+  three rows, the key's 12 entries at the story's small text (26px) and the safe zones leave no
+  more height (body 365 to 1286; three headers of 60, two gaps of 25, the key row 333). Most of
+  each cell's width is empty. A larger story map would need a different arrangement (for example
+  the key across the full width under the grid); left for the owner — cost if wrong: `GRID` in
+  `fiveSeatsLayout.ts`.
+- **Ruling: the key's note is broken into even lines** ("Parties in order of seats" / "held
+  across all five") so no word sits alone — cost if wrong: `evenLines`.
+- **Ruling: the dialog copy is "Share five seats" / "All five elected seats on one card, each map
+  coloured by party, sized for Instagram or stories."; the file is
+  `kenya-electoral-map-five-seats-<size>.png`; the Instagram caption gives the scope, one line per
+  seat as "By the numbers" writes it, "Party colours, in order of seats held across all five:
+  UDA, ODM, …", the source; X is the shared `xCaption`; the slot keys are the seat keys** — cost if
+  wrong: strings.
+- **Ruling: the card's sources are the five seats' holders** (as the plan says; no nominated
+  members are counted here) — cost if wrong: one line.
+
 ## Parked minor findings
 
 - The dialog tests store the size as `JSON.stringify('square')`, which `useStorage` (a string
@@ -228,9 +280,18 @@ Each one: what was decided, why, and what it costs if it is wrong.
 - `npm run check` (vp check) reports formatting issues in 118 files across the repository,
   as it did before this branch; not fixed here.
 
+- "Woman Reps" and its "47 seats" sit a little further apart than the other titles: the text
+  measure over-estimates that bold run slightly.
+- Task D's tests were all written before its code, but run against it only once the modules
+  existed (the first run would have failed on the missing imports).
+- On the national "County seats" view with nothing focused, "Share this view" goes to the leaders
+  card path (`shareLeaders`), which has no card for all of Kenya; "Five seats" is not offered
+  there. Unchanged from before.
+
 ## What is next
 
-Task D: "Kenya, five ways" (mock-up 5): five map slots (one per seat) and one shared key, square
-and story, offered as "Five seats" in the national view's "Card" choice (between "This view" and
-"By the numbers"). The registry entry's `component` and `maps` now carry everything a new card
-needs; the dialog hands every card `mapImages` by slot key.
+Task E: "Who represents this ward" (mock-up 1): five ballot papers for one ward, portrait and
+story, three locator map slots, replacing the ward's leaders card; "Share leaders" in a ward's
+panel opens it and "Share this view" lists "This view" and "Who represents". The owner may also
+want to decide on the top-10 story map's size and the five-seats story arrangement (see the
+rulings).

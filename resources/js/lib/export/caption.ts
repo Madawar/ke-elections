@@ -1,5 +1,10 @@
 // The text that goes with a shared view: the headline, the numbers behind it, the source with
 // its date, the link and the tags. Instagram and TikTok allow 2,200 characters; X allows 280.
+import {
+    FIVE_SEATS_HEADLINE,
+    type FiveSeatsCardView,
+    fiveSeatsScope,
+} from './fiveSeatsCard';
 import { formatAsOf } from './format';
 import {
     type LeadersCardView,
@@ -238,6 +243,33 @@ export function topCountiesCaption(
         `${scope.lead} ${scope.list}`,
         ...card.rows.map(topCountiesRowLine),
         ...(note ? ['', note] : []),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "Kenya, five ways": the headline, the scope, one line per seat (as "By the
+ * numbers" writes it), the key in its order, the source with its date, the link and the tags. On X
+ * only the headline, source, link and tags fit.
+ */
+export function fiveSeatsCaption(
+    card: FiveSeatsCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = FIVE_SEATS_HEADLINE,
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    return [
+        clip(headline, 300),
+        '',
+        `${fiveSeatsScope(card)}.`,
+        ...card.rows.map(numbersRowLine),
+        '',
+        `Party colours, in order of seats held across all five: ${card.key.map((k) => k.label).join(', ')}.`,
         '',
         sourceText(card, 10),
         url,

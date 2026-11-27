@@ -6,6 +6,7 @@
 import type { Component } from 'vue';
 import {
     captionFor,
+    fiveSeatsCaption,
     leadersCaption,
     numbersCaption,
     partyCaption,
@@ -13,12 +14,20 @@ import {
     type CaptionPlatform,
 } from './caption';
 import {
+    FIVE_SEATS_HEADLINE,
+    type FiveSeatsCardView,
+    fiveSeatsCardView,
+    fiveSeatsSpec,
+} from './fiveSeatsCard';
+import { type FiveSeatsLayout, fiveSeatsLayout } from './fiveSeatsLayout';
+import {
     type LeadersCardView,
     leadersCardView,
     leadersHeadline,
 } from './leadersCard';
 import { type LeadersLayout, leadersLayout } from './leadersLayout';
 import {
+    BALLOT_ORDER,
     type NumbersCardView,
     numbersCardView,
     numbersHeadline,
@@ -43,6 +52,7 @@ import {
     seatsInTheme,
     withTheme,
 } from './viewState';
+import FiveSeatsCard from '@/components/export/FiveSeatsCard.vue';
 import LeadersCard from '@/components/export/LeadersCard.vue';
 import NumbersCard from '@/components/export/NumbersCard.vue';
 import PartyCard from '@/components/export/PartyCard.vue';
@@ -57,13 +67,15 @@ export type ShareableView =
     | PartyCardView
     | LeadersCardView
     | NumbersCardView
-    | TopCountiesCardView;
+    | TopCountiesCardView
+    | FiveSeatsCardView;
 export type ShareLayout =
     | ViewLayout
     | PartyLayout
     | LeadersLayout
     | NumbersLayout
-    | TopCountiesLayout;
+    | TopCountiesLayout
+    | FiveSeatsLayout;
 export type ShareKind = ShareableView['kind'];
 
 /** What a layout is laid out for besides the card: its headline, link and map shape. */
@@ -293,6 +305,40 @@ const TOP_COUNTIES: CardKind<TopCountiesCardView> = {
     component: TopCountiesCard,
 };
 
+const FIVE_SEATS: CardKind<FiveSeatsCardView> = {
+    key: 'fiveSeats',
+    // Five maps and a key: square for feeds, story for TikTok and Reels.
+    sizes: ['square', 'story'],
+    editableHeadline: true,
+    label: () => 'Five seats',
+    headline: () => FIVE_SEATS_HEADLINE,
+    caption: fiveSeatsCaption,
+    layout: fiveSeatsLayout,
+    // One map per seat, in ballot order: that seat across Kenya, as the seat view colours it.
+    maps: (layout: FiveSeatsLayout, view) =>
+        BALLOT_ORDER.map((seat, i) => ({
+            key: seat,
+            box: layout.maps[i].box,
+            spec: fiveSeatsSpec(view, seat),
+        })),
+    aspect: () => viewMapAspect({ focus: null } as ViewMapSpec),
+    copy: () => ({
+        title: 'Share five seats',
+        description:
+            'All five elected seats on one card, each map coloured by party, sized for Instagram or stories.',
+    }),
+    // Taken again from the seats in that theme, so independents follow it.
+    inTheme: (view, theme, ctx) =>
+        fiveSeatsCardView({
+            seats: seatsInTheme(ctx.seats, theme),
+            index: ctx.index,
+            theme,
+            sample: view.sample,
+        }),
+    filename: (_view, size) => `kenya-electoral-map-five-seats-${size}.png`,
+    component: FiveSeatsCard,
+};
+
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
 
 const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
@@ -301,6 +347,7 @@ const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
     leaders: LEADERS_CARD,
     numbers: NUMBERS_CARD,
     topCounties: TOP_COUNTIES,
+    fiveSeats: FIVE_SEATS,
 };
 
 // TypeScript cannot follow a union of views to the matching entry, so this one lookup says it.

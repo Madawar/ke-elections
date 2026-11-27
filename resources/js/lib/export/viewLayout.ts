@@ -345,6 +345,34 @@ function fitHeadline(
     };
 }
 
+/**
+ * The headline's last two lines broken where they are most even, when the last is a lone word
+ * ("Where UDA holds the most MP" / "seats"): the same words, size and number of lines.
+ */
+export function balanced(lines: TextItem[], w: number): TextItem[] {
+    if (lines.length < 2 || lines[lines.length - 1].text.includes(' '))
+        return lines;
+    const [a, b] = lines.slice(-2);
+    const words = `${a.text} ${b.text}`.split(' ');
+    const width = (t: string) => textWidth(t, a.size, true);
+    let best: [string, string] | null = null;
+    for (let k = 1; k < words.length; k++) {
+        const pair: [string, string] = [
+            words.slice(0, k).join(' '),
+            words.slice(k).join(' '),
+        ];
+        if (pair.some((t) => width(t) > w)) continue;
+        if (!best || Math.max(...pair.map(width)) < Math.max(...best.map(width)))
+            best = pair;
+    }
+    if (!best) return lines;
+    return [
+        ...lines.slice(0, -2),
+        { ...a, text: best[0] },
+        { ...b, text: best[1] },
+    ];
+}
+
 /** Headline (shrinking a little before it wraps badly or cuts) and the scope line under it. */
 export function titleBlock(
     x: number,

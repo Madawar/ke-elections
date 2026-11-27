@@ -46,7 +46,25 @@ export type ViewMapSpec = Pick<
      * counties filled in one colour (the top-10 map) still shows, in either theme.
      */
     haloCountyLines?: boolean;
+    /** Parties drawn in the "Other" grey, as a card's key folds them into "Other parties". */
+    fold?: readonly string[];
+    /** False: no ward lines, even on an MCA map (a small map of all 1,450 wards). */
+    wardLines?: boolean;
 };
+
+/** The seats with these parties' colours unset, so everything draws them in the "Other" grey. */
+export const foldParties = (
+    seats: SeatsData,
+    fold: readonly string[],
+): SeatsData =>
+    fold.length
+        ? {
+              ...seats,
+              parties: seats.parties.map((p) =>
+                  fold.includes(p.abbrev) ? { ...p, colour: null } : p,
+              ),
+          }
+        : seats;
 
 /** The halo's width in pixels behind each county line, where a spec asks for one. */
 export const COUNTY_HALO_WIDTH = 3.2;
@@ -65,6 +83,7 @@ export function viewColouring(
     theme: MapTheme,
 ): Colouring {
     if (view.colouring) return view.colouring;
+    if (view.fold?.length) seats = foldParties(seats, view.fold);
     const tokens = {
         noData: theme.noData,
         faded: theme.faded,
@@ -132,6 +151,7 @@ export function viewStyle(
     // only kept where they carry the colouring (MCA seats) or the unit is a constituency or
     // smaller, so a county or all of Kenya reads as its seats, not as a mesh.
     const wardLines =
+        view.wardLines !== false &&
         !view.stripes &&
         (SEAT_LEVEL[view.seat] === 'ward' ||
             view.focus?.level === 'constituency' ||

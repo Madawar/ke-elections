@@ -16,7 +16,7 @@ import type { UnitIndex } from '@/lib/units';
 import { sourceLine, sourceParts } from './format';
 
 /** The five elected seats below the President, in ballot order. */
-const BALLOT_ORDER: readonly SeatKey[] = [
+export const BALLOT_ORDER: readonly SeatKey[] = [
     'governor',
     'senator',
     'woman_rep',
