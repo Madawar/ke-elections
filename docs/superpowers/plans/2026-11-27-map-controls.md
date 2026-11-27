@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+
+> **Status (2026-11-27):** Tasks 1–4 shipped in v0.2.0. Tasks 5 and 6 are not built yet. Their
+> owner additions are also still to build: the leaders card, the striped county view, bigger card
+> maps, the MCA-card leaders strip, the "Leaders here" legend strip, MP outlines and MCA names on
+> wards. All of this continues on a new branch from this plan. Task 5 should start with
+> `leadersFor()`.
+
 **Goal:**
 - Switching seat types is one tap, on the map.
 - Tapping drills down from county to constituency to ward.

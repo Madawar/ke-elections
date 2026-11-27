@@ -1,6 +1,6 @@
 # Roadmap and open decisions
 
-Last updated 2026-11-26, when `feature/people-search-focus` was finished into `develop`. This is
+Last updated 2026-11-27, when v0.2.0 (`feature/map-controls`, Tasks 1–4) was released. This is
 the committed record of what comes next. Local execution ledgers are gitignored and deleted when
 a feature finishes.
 
@@ -24,15 +24,28 @@ a feature finishes.
   - Seat-mix bars, per-constituency mix rows, and a "who holds what" list. Single-seat cards show
     the holder.
 
-## Queue, in order (owner priorities as of 2026-11-26)
-1. ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
+- **Releases:** v0.1.0 and v0.1.1 (worker fix) on 27 Nov 2026, live at https://ke-elections.madawar.app
+  (Forge, deployed from `main`).
+- **Map controls** (`2026-11-27-map-controls.md`, Tasks 1–4, v0.2.0):
+  - Seat chips on the map, and one-tap drill-down.
+  - Seat view follows the focus level.
+  - Back button and phone back, with the outside-tap hint.
+  - Party profiles scoped to a county or constituency, with a party card.
+  - Onboarding tour and tips.
+
+## Queue, in order (owner priorities as of 2026-11-27)
+0. **Next branch: leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with their
+   owner additions).
+1. **Share formats the owner picks** from the eight mock-ups
+   (https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj). The suggestion is 1, 5 and 6 first.
+- ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
    added once the pocketbook data lands.
 2. **Voter guide, "How elections work".** English first, then a reviewed Kiswahili version.
    - Built on the infographic card system, so each section can export as a carousel or story.
    - Draft content, for the **owner to review before the build**, is in
      `docs/research/voter-guide/` (`guide-en.md`, `slides-en.md`, `facts.csv`: 128 facts, 118
      verified, 7 partial, 3 unverified).
-3. **Task 3B map controls.** The spec is in `2026-11-26-people-search-focus.md`, Task 3, items
+- ~~Task 3B map controls~~ **Done in v0.2.0.** The spec is in `2026-11-26-people-search-focus.md`, Task 3, items
    (b), (c) and (g). It goes on its own branch:
    - (b) Seat chips on top of the map; the owner chose this placement.
    - (g) A back button, the browser and phone back gesture, and the new outside-tap rule (no-op,
