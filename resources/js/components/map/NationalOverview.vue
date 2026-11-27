@@ -18,6 +18,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
     colourBy: [seat: 'governor' | 'mp' | 'senator' | 'woman_rep'];
+    /** A party's name was pressed: open its profile (the abbreviation). */
+    party: [abbrev: string];
     share: [];
     shareView: [];
 }>();
@@ -57,6 +59,10 @@ const highlightName = computed(() => {
     return props.seats.parties.find((p) => p.abbrev === abbrev)?.name ?? abbrev;
 });
 const governors = computed(() => seatLegend(props.seats, 'governor'));
+/** Independents are not a party; a party the data does not describe has no profile. */
+const profiled = computed(
+    () => new Set(props.seats.parties.map((p) => p.abbrev).filter((a) => a !== 'IND')),
+);
 const hasData = computed(() => props.seats.holders.length > 0);
 </script>
 
@@ -148,7 +154,17 @@ const hasData = computed(() => props.seats.holders.length > 0);
                             :style="{ background: g.colour }"
                             aria-hidden="true"
                         />
-                        <span>{{ g.name }}</span
+                        <button
+                            v-if="profiled.has(g.abbrev)"
+                            type="button"
+                            data-party
+                            class="-my-3 inline-flex min-h-11 items-center text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
+                            :aria-label="`${g.name}: all seats`"
+                            @click="emit('party', g.abbrev)"
+                        >
+                            {{ g.name }}
+                        </button>
+                        <span v-else>{{ g.name }}</span
                         ><span class="ml-auto text-muted-ink tabular-nums">{{
                             g.seats
                         }}</span>

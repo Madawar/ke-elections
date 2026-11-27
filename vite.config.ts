@@ -137,7 +137,7 @@ export default defineConfig({
                         // Only the public map pages: never admin, account or login pages.
                         urlPattern: ({ request, url }) =>
                             request.mode === 'navigate' &&
-                            /^\/((county|constituency|ward)\/\d+)?$/.test(
+                            /^\/((county|constituency|ward)\/\d+|party\/[a-z0-9]+(-[a-z0-9]+)*)?$/i.test(
                                 url.pathname,
                             ),
                         handler: 'NetworkFirst',

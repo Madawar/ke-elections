@@ -22,6 +22,8 @@ export interface LegendRow {
     last?: boolean;
     /** How many parties a grouped row stands for ("Other parties (9)" in accessible text). */
     parties?: number;
+    /** The party abbreviation whose profile the row opens; none for "Other parties" and independents. */
+    party?: string;
 }
 
 export const SEAT_LABEL: Record<SeatKey, string> = {
@@ -71,12 +73,17 @@ export function buildLegend(
     const shown = rows.filter((r) => hasOwnColour(r.abbrev, r.colour));
     const folded = rows.filter((r) => !shown.includes(r));
     const other = folded.reduce((n, r) => n + r.seats, 0);
+    const profiled = new Set(seats.parties.map((p) => p.abbrev));
     const mapped: LegendRow[] = shown.map((r) => ({
         key: r.abbrev,
         label: r.abbrev === INDEPENDENT ? 'Independent' : r.abbrev,
         name: r.name,
         colour: r.colour,
         count: r.seats,
+        // Independents are not a party, so they have no profile.
+        ...(r.abbrev !== INDEPENDENT && profiled.has(r.abbrev)
+            ? { party: r.abbrev }
+            : {}),
     }));
     if (other)
         mapped.push({

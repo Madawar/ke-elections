@@ -29,8 +29,8 @@ export function centreOn(
 }
 
 export const SIDE_PANEL_WIDTH = 380;
-/** The open legend's width, and the gap that keeps a unit clear of it (w-72 in Legend.vue). */
-export const LEGEND_WIDTH = 288;
+/** The open legend's width, and the gap that keeps a unit clear of it (w-80 in Legend.vue). */
+export const LEGEND_WIDTH = 320;
 const LEGEND_GAP = 16;
 /** Where the legend's left edge is on desktop, just right of the side panel (md:left-[396px]). */
 const LEGEND_LEFT = SIDE_PANEL_WIDTH + 16;

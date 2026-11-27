@@ -103,4 +103,31 @@ describe('NationalOverview seating charts', () => {
         });
         expect(highlights(w)[0]).toBe('IND');
     });
+
+    describe('party names open the party profile', () => {
+        const governors: SeatsData = {
+            ...seats,
+            parties: [
+                ...seats.parties,
+                { abbrev: 'IND', name: 'Independent', coalition_2022: null, colour: null },
+            ],
+            holders: [
+                ...seats.holders,
+                { ...seats.holders[0], seat: 'governor', level: 'county', code: 1, party: 'AAA' },
+                { ...seats.holders[0], seat: 'governor', level: 'county', code: 2, party: 'IND' },
+            ],
+        };
+
+        it('lists each governing party as a button that emits its abbreviation', async () => {
+            const w = mount(NationalOverview, { props: { seats: governors } });
+            const buttons = w.findAll('button[data-party]');
+            expect(buttons.map((b) => b.text())).toEqual(['Alpha']);
+            expect(buttons[0].attributes('aria-label')).toBe('Alpha: all seats');
+            expect(buttons[0].classes()).toContain('min-h-11');
+            await buttons[0].trigger('click');
+            expect(w.emitted('party')).toEqual([['AAA']]);
+            // Independents are still listed, as plain text
+            expect(w.text()).toContain('Independent');
+        });
+    });
 });

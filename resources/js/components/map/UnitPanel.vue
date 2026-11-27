@@ -29,6 +29,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
     go: [unit: Unit];
+    /** A party's name was pressed: open its profile (the abbreviation). */
+    party: [abbrev: string];
     share: [];
     shareView: [];
     'update:showSurroundings': [on: boolean];
@@ -74,6 +76,17 @@ const colours = computed(() => partyColours(props.seats));
 const partyName = computed(
     () => new Map(props.seats.parties.map((p) => [p.abbrev, p.name])),
 );
+/** Parties the data describes have a profile; independents are not a party and have none. */
+const profiled = computed(
+    () =>
+        new Set(
+            props.seats.parties
+                .map((p) => p.abbrev)
+                .filter((a) => a !== 'IND'),
+        ),
+);
+const partyLabel = (party: string | null) =>
+    party === 'IND' ? 'Independent' : (partyName.value.get(party ?? '') ?? party);
 const rows = computed(() =>
     seatsFor(props.unit.l).map((seat) => ({
         seat,
@@ -210,13 +223,19 @@ const sourceHost = (url: string) => {
                                         }"
                                         aria-hidden="true"
                                     />
-                                    {{
-                                        holder.party === 'IND'
-                                            ? 'Independent'
-                                            : (partyName.get(
-                                                  holder.party ?? '',
-                                              ) ?? holder.party)
-                                    }}
+                                    <button
+                                        v-if="holder.party && profiled.has(holder.party)"
+                                        type="button"
+                                        data-party
+                                        class="-my-3.5 inline-flex min-h-11 items-center text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
+                                        :aria-label="`${partyLabel(holder.party)}: all seats`"
+                                        @click="emit('party', holder.party)"
+                                    >
+                                        {{ partyLabel(holder.party) }}
+                                    </button>
+                                    <template v-else>{{
+                                        partyLabel(holder.party)
+                                    }}</template>
                                 </span>
                                 <span class="text-muted-ink"
                                     >{{

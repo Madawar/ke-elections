@@ -151,4 +151,48 @@ describe('UnitPanel', () => {
         await wrapper.setProps({ showSurroundings: true });
         expect(toggle.attributes('aria-checked')).toBe('true');
     });
+
+    describe('party names open the party profile', () => {
+        const withParties: SeatsData = {
+            ...seats,
+            parties: [
+                { abbrev: 'ODM', name: 'Orange Democratic Movement', coalition_2022: null, colour: '#f80' },
+                { abbrev: 'IND', name: 'Independent', coalition_2022: null, colour: null },
+            ],
+            holders: [
+                ...seats.holders,
+                { ...holder('governor', 'Test Independent'), code: 2, party: 'IND' },
+            ],
+        };
+        const mountWith = (data: SeatsData, unit: Unit = county) =>
+            mount(UnitPanel, {
+                props: { unit, index, seats: data, towns: [] },
+            });
+
+        it('is a button that emits the abbreviation', async () => {
+            const wrapper = mountWith(withParties);
+            const buttons = wrapper.findAll('button[data-party]');
+            expect(buttons).toHaveLength(3);
+            expect(buttons[0].text()).toBe('Orange Democratic Movement');
+            expect(buttons[0].attributes('aria-label')).toBe(
+                'Orange Democratic Movement: all seats',
+            );
+            expect(buttons[0].classes()).toContain('min-h-11');
+            await buttons[0].trigger('click');
+            expect(wrapper.emitted('party')).toEqual([['ODM']]);
+        });
+
+        it('is plain text for an independent, who is not a party', () => {
+            const two: Unit = { l: 'county', c: 2, n: 'Kwale', p: null, b: box };
+            const wrapper = mountWith(withParties, two);
+            expect(wrapper.find('button[data-party]').exists()).toBe(false);
+            expect(wrapper.text()).toContain('Independent');
+        });
+
+        it('is plain text for a party the data has no profile for', () => {
+            const wrapper = mountWith(seats);
+            expect(wrapper.find('button[data-party]').exists()).toBe(false);
+            expect(wrapper.text()).toContain('ODM');
+        });
+    });
 });

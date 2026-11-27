@@ -1,7 +1,9 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
-import { snapshotView } from '@/lib/export/viewState';
+import { partyCardView } from '@/lib/export/partyCard';
+import { seatsInTheme, snapshotView } from '@/lib/export/viewState';
+import { PARTY_SEATS } from '../party/partyFixtures';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
 
 // Map drawing is a deferred we resolve by hand; rasterising returns a PNG at once.
@@ -114,6 +116,84 @@ describe('ShareViewDialog', () => {
         expect(document.body.textContent).toContain(
             'The map could not be drawn on this device',
         );
+        wrapper.unmount();
+    });
+});
+
+describe('ShareViewDialog with a party card', () => {
+    const card = partyCardView({
+        seats: seatsInTheme(PARTY_SEATS, 'dark'),
+        abbrev: 'UDA',
+        theme: 'dark',
+    })!;
+    const partyContext = { ...context, seats: PARTY_SEATS };
+    const textarea = () =>
+        document.querySelector<HTMLTextAreaElement>('#view-caption')!;
+
+    beforeEach(() => {
+        renders.length = 0;
+        localStorage.setItem('km.viewSize', JSON.stringify('square'));
+    });
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    it('is the same dialog, titled for the party card, with the party card drawn in it', async () => {
+        const wrapper = mount(ShareViewDialog, {
+            props: { view: card, context: partyContext, open: true },
+            attachTo: document.body,
+        });
+        await settle();
+        expect(document.body.textContent).toContain('Share party card');
+        const svg = document.querySelector('[data-preview] svg')!;
+        expect(svg.textContent).toContain('UDA seats across Kenya');
+        expect(svg.querySelectorAll('[data-row]')).toHaveLength(7);
+        // The map of the party's MCA seats is drawn at the size of its box on the card.
+        expect(renders).toHaveLength(1);
+        expect(renders[0].size).toMatch(/^\d+x\d+$/);
+        renders[0].resolve('data:image/png;base64,SQ');
+        await settle();
+        expect(download().disabled).toBe(false);
+        wrapper.unmount();
+    });
+
+    it('writes the caption with the numbers, source, link and tags', async () => {
+        const wrapper = mount(ShareViewDialog, {
+            props: { view: card, context: partyContext, open: true },
+            attachTo: document.body,
+        });
+        await settle();
+        const t = textarea().value;
+        expect(t).toContain('UDA seats across Kenya');
+        expect(t).toContain('Governors: 20 of 47 (43%)');
+        expect(t).toContain('/party/uda');
+        expect(t).toContain('#Kenya2027');
+        wrapper.unmount();
+    });
+
+    it('offers every size and both themes, and redraws the card for a size', async () => {
+        const wrapper = mount(ShareViewDialog, {
+            props: { view: card, context: partyContext, open: true },
+            attachTo: document.body,
+        });
+        await settle();
+        renders[0].resolve('data:image/png;base64,SQ');
+        await settle();
+        await pick('story');
+        await settle();
+        expect(document.querySelector('[data-preview] svg')?.getAttribute('viewBox')).toBe('0 0 1080 1920');
+        expect(document.querySelectorAll('input[name="view-size"]')).toHaveLength(4);
+        expect(document.querySelectorAll('input[name="view-theme"]')).toHaveLength(2);
+        wrapper.unmount();
+    });
+
+    it('does not offer the seat view\'s "rows" hint', async () => {
+        const wrapper = mount(ShareViewDialog, {
+            props: { view: card, context: partyContext, open: true },
+            attachTo: document.body,
+        });
+        await settle();
+        expect(document.querySelector('[data-rows-hint]')).toBeNull();
         wrapper.unmount();
     });
 });

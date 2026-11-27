@@ -3,28 +3,51 @@
 // app's Back button, the zoom-out control, or zooming out of the unit) that lands on the entry just
 // before this one goes back to it, so Back never walks to the same unit twice and Back from Kenya
 // leaves the site. A step up to anywhere else pushes (the person's) or replaces (a zoom's).
+//
+// A party's profile (`/party/uda`) is another state of the same page: opening it pushes an entry
+// that remembers the focus it was opened over, closing it goes back to the entry it was opened
+// from, and Back or Forward onto it reopens it over that focus.
 import type { FocusSelection } from './focus';
-import { parseUnitPath, unitPath } from './urls';
+import {
+    type PartyScope,
+    parsePartyPath,
+    parseUnitPath,
+    partyPath,
+    unitPath,
+} from './urls';
 
 /**
  * Why the focus changed:
  * - 'user': the person chose a unit (a tap, a search pick, a link in the panel).
  * - 'up': the person stepped up (the Back button or the zoom-out control).
  * - 'zoom': their zooming out stepped the focus up.
+ * - 'close': they closed a party's profile; the focus is the same, so the camera stays.
  */
-export type HistoryCause = 'user' | 'up' | 'zoom';
+export type HistoryCause = 'user' | 'up' | 'zoom' | 'close';
 
 /** How a restored focus should reach the camera: a zoom must not snap the camera mid-pinch. */
 export interface RestoreOptions {
     fit: boolean;
+    /** Set when the entry is a party's profile: its abbreviation in lower case. */
+    party?: string;
+    /** What the profile's numbers cover (null: all of Kenya); set with `party`. */
+    partyScope?: PartyScope;
 }
 
 /** What the history needs from the browser, so it can be tested without one. */
 export interface FocusHistoryPort {
     /** The address bar's path now. */
     path(): string;
-    push(path: string, focus: FocusSelection | null): void;
-    replace(path: string, focus: FocusSelection | null): void;
+    push(
+        path: string,
+        focus: FocusSelection | null,
+        party?: { abbrev: string; scope: PartyScope },
+    ): void;
+    replace(
+        path: string,
+        focus: FocusSelection | null,
+        party?: { abbrev: string; scope: PartyScope },
+    ): void;
     /** Go back one entry (history.back()). */
     back(): void;
     /** Listen for the browser going back or forward; returns the way to stop listening. */
@@ -33,11 +56,17 @@ export interface FocusHistoryPort {
     ): () => void;
 }
 
-/** The focus an address stands for: null for the home page, undefined for a page that is not ours. */
+/**
+ * The focus an address stands for: null for the home page (and for a party's page, which says
+ * nothing about the focus), undefined for a page that is not ours.
+ */
 export function focusFromPath(path: string): FocusSelection | null | undefined {
-    if (path === '/') return null;
+    if (path === '/' || parsePartyPath(path)) return null;
     return parseUnitPath(path) ?? undefined;
 }
+
+/** The party (lower-case abbreviation) a party page's address names; null for any other path. */
+export const partyFromPath = (path: string) => parsePartyPath(path)?.abbrev ?? null;
 
 const pathFor = (focus: FocusSelection | null) =>
     focus ? unitPath(focus.level, focus.code) : '/';
@@ -47,17 +76,21 @@ export function createFocusHistory(
     /** The browser went back or forward to an entry of ours: show this focus (null: all of Kenya). */
     onRestore: (focus: FocusSelection | null, options: RestoreOptions) => void,
 ) {
-    // The paths of this page's own entries and where we are among them. Kept here, not read back
-    // from the address bar: the browser applies a push a moment later, and the entries before
-    // `stack[0]` (the page the person came from) are not ours.
-    let stack = [port.path()];
+    // This page's own entries (their path and the focus they show) and where we are among them.
+    // Kept here, not read back from the address bar: the browser applies a push a moment later,
+    // and the entries before `stack[0]` (the page the person came from) are not ours.
+    const first = port.path();
+    let stack: { path: string; focus: FocusSelection | null }[] = [
+        { path: first, focus: focusFromPath(first) ?? null },
+    ];
     let at = 0;
     // Backs we asked for that the browser has not answered yet (each answer is not a new choice).
     const pending: RestoreOptions[] = [];
 
     const stopListening = port.onPopState((event) => {
         const path = port.path();
-        const focus = focusFromPath(path);
+        const party = parsePartyPath(path);
+        let focus = focusFromPath(path);
         if (focus === undefined) return;
         // Inertia would put the page back from its saved copy and rebuild it, and the map with it.
         // (This runs first because the gate is installed before Inertia: see `installPopStateGate`.)
@@ -65,34 +98,67 @@ export function createFocusHistory(
         const asked = pending.shift();
         if (!asked) {
             // Back or forward by the person: one entry either way, else start over from here.
-            if (path === stack[at - 1]) at--;
-            else if (path === stack[at + 1]) at++;
+            if (path === stack[at - 1]?.path) at--;
+            else if (path === stack[at + 1]?.path) at++;
             else {
-                stack = [path];
+                stack = [{ path, focus }];
                 at = 0;
             }
         }
-        onRestore(focus, asked ?? { fit: true });
+        // A profile is shown over the focus it was opened over, which its address does not say.
+        if (party) focus = stack[at]?.focus ?? null;
+        onRestore(focus, {
+            ...(asked ?? { fit: true }),
+            ...(party && { party: party.abbrev, partyScope: party.scope }),
+        });
         // The entry keeps the page Inertia saved for it; this brings Inertia's own copy in line.
-        port.replace(path, focus);
+        if (party) port.replace(path, focus, party);
+        else port.replace(path, focus);
     });
 
     return {
         record(focus: FocusSelection | null, cause: HistoryCause) {
             const path = pathFor(focus);
-            if (path === stack[at]) return;
-            if (cause !== 'user' && path === stack[at - 1]) {
+            if (path === stack[at].path) return;
+            if (cause !== 'user' && path === stack[at - 1]?.path) {
                 at--;
-                pending.push({ fit: cause !== 'zoom' });
+                // Only the person's step up fits the camera to the unit it returns to.
+                pending.push({ fit: cause === 'up' });
                 port.back();
             } else if (cause === 'zoom') {
-                stack[at] = path;
+                stack[at] = { path, focus };
                 port.replace(path, focus);
             } else {
-                stack = [...stack.slice(0, at + 1), path];
+                stack = [...stack.slice(0, at + 1), { path, focus }];
                 at++;
                 port.push(path, focus);
             }
+        },
+        /** The person opened a party's profile over `focus`: one entry, which remembers the focus. */
+        openParty(
+            abbrev: string,
+            focus: FocusSelection | null,
+            scope: PartyScope = null,
+        ) {
+            const path = partyPath(abbrev, scope);
+            if (path === stack[at].path) return;
+            stack = [...stack.slice(0, at + 1), { path, focus }];
+            at++;
+            port.push(path, focus, { abbrev: abbrev.toLowerCase(), scope });
+        },
+        /** The profile's scope switch: the same entry, now with the new scope in its address. */
+        setPartyScope(
+            abbrev: string,
+            focus: FocusSelection | null,
+            scope: PartyScope,
+        ) {
+            const path = partyPath(abbrev, scope);
+            if (path === stack[at].path) return;
+            stack[at] = { path, focus: stack[at].focus ?? focus };
+            port.replace(path, stack[at].focus, {
+                abbrev: abbrev.toLowerCase(),
+                scope,
+            });
         },
         /** Where we are among this page's entries (0 is the first: Back from there leaves). */
         get index() {

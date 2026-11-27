@@ -153,4 +153,115 @@ describe('SearchBox', () => {
             wrapper.findAll('[role="presentation"]').map((h) => h.text()),
         ).toEqual(['Places']);
     });
+
+    describe('parties', () => {
+        const parties = [
+            {
+                abbrev: 'UDA',
+                name: 'United Democratic Alliance',
+                coalition_2022: null,
+                colour: null,
+                former_names: [{ abbrev: 'PDR', effective_on: null }],
+            },
+            {
+                abbrev: 'ODM',
+                name: 'Orange Democratic Movement',
+                coalition_2022: null,
+                colour: null,
+            },
+            {
+                abbrev: 'IND',
+                name: 'Independent',
+                coalition_2022: null,
+                colour: null,
+            },
+        ];
+
+        it('lists a Parties group after Places and People', async () => {
+            const wrapper = mount(SearchBox, {
+                props: { index, holders, parties },
+            });
+            await type(wrapper, 'democratic');
+            expect(
+                wrapper.findAll('[role="presentation"]').map((h) => h.text()),
+            ).toEqual(['Parties']);
+            expect(
+                wrapper.findAll('[role="option"]').map((o) => o.text()),
+            ).toEqual([
+                expect.stringContaining('Orange Democratic Movement'),
+                expect.stringContaining('United Democratic Alliance'),
+            ]);
+        });
+
+        it('finds a party by its abbreviation and says what the row is', async () => {
+            const wrapper = mount(SearchBox, {
+                props: { index, holders, parties },
+            });
+            await type(wrapper, 'uda');
+            const [row] = wrapper.findAll('[role="option"]');
+            expect(row.text()).toContain('UDA');
+            expect(row.text()).toContain('United Democratic Alliance');
+            expect(row.text()).toContain('party');
+        });
+
+        it('finds a party by a former name and shows it', async () => {
+            const wrapper = mount(SearchBox, {
+                props: { index, holders, parties },
+            });
+            await type(wrapper, 'pdr');
+            const [row] = wrapper.findAll('[role="option"]');
+            expect(row.text()).toContain('UDA');
+            expect(row.text()).toContain('formerly PDR');
+        });
+
+        it('never lists the independents', async () => {
+            const wrapper = mount(SearchBox, {
+                props: { index, holders, parties },
+            });
+            await type(wrapper, 'independent');
+            expect(wrapper.findAll('[role="option"]')).toHaveLength(0);
+        });
+
+        it('emits pickParty with the abbreviation on Enter, and not pick or pickPerson', async () => {
+            const wrapper = mount(SearchBox, {
+                props: { index, holders, parties },
+            });
+            await type(wrapper, 'odm');
+            await wrapper.get('input').trigger('keydown', { key: 'Enter' });
+            expect(wrapper.emitted('pickParty')).toEqual([['ODM']]);
+            expect(wrapper.emitted('pick')).toBeUndefined();
+            expect(wrapper.emitted('pickPerson')).toBeUndefined();
+        });
+
+        it('mixes with the other groups: places, people, then parties', async () => {
+            const withKenya = [
+                ...parties,
+                {
+                    abbrev: 'CHA',
+                    name: 'Changa Party',
+                    coalition_2022: null,
+                    colour: null,
+                },
+            ];
+            const wrapper = mount(SearchBox, {
+                props: { index, holders, parties: withKenya },
+            });
+            await type(wrapper, 'cha');
+            expect(
+                wrapper.findAll('[role="presentation"]').map((h) => h.text()),
+            ).toEqual(['Places', 'People', 'Parties']);
+        });
+
+        it('says it searches parties too', () => {
+            const wrapper = mount(SearchBox, {
+                props: { index, holders, parties },
+            });
+            expect(wrapper.get('input').attributes('placeholder')).toBe(
+                'Search a place, person or party',
+            );
+            expect(wrapper.get('label').text()).toBe(
+                'Search places, people and parties',
+            );
+        });
+    });
 });

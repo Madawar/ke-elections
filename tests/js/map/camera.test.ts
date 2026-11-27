@@ -89,7 +89,7 @@ describe('mapPadding with the legend open', () => {
             viewport,
             legendOpen: true,
         });
-        // The legend spans x 396 to 652 (288 wide) beside the side panel.
+        // The legend spans x 396 to 716 (320 wide) beside the side panel.
         expect(open.left).toBeGreaterThanOrEqual(396 + LEGEND_WIDTH);
         expect(open.left).toBeGreaterThan(closed.left);
         expect(open.right).toBe(closed.right);
@@ -116,7 +116,7 @@ describe('mapPadding with the legend open', () => {
     });
 
     it('clears the legend whenever that leaves a unit at least 320px wide', () => {
-        for (const width of [1100, 1440]) {
+        for (const width of [1200, 1440]) {
             const v = { width, height: 900 };
             const open = mapPadding({
                 desktop: true,

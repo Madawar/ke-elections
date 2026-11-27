@@ -84,7 +84,7 @@ export interface ViewLayout {
     footerFonts: FooterFonts;
 }
 
-interface Spec {
+export interface Spec {
     pad: number;
     /** Room kept clear at the top and bottom (story apps draw their own controls there). */
     safeTop: number;
@@ -125,7 +125,7 @@ interface Spec {
  */
 type Arrangement = 'side' | 'stack' | 'mapCallouts' | 'tall';
 
-const SPECS: Record<ViewSize, Spec> = {
+export const SPECS: Record<ViewSize, Spec> = {
     square: {
         pad: 60,
         safeTop: 0,
@@ -205,7 +205,7 @@ const SPECS: Record<ViewSize, Spec> = {
     },
 };
 
-const box = (x: number, y: number, w: number, h: number): Box => ({
+export const box = (x: number, y: number, w: number, h: number): Box => ({
     x,
     y,
     w,
@@ -214,8 +214,12 @@ const box = (x: number, y: number, w: number, h: number): Box => ({
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
 
-/** The six ballot colours across the top, the shared seat's lid drawn deeper. */
-function strip(w: number, h: number, seat: ViewState['seat']): StripSegment[] {
+/** The six ballot colours across the top, the shared seat's lid drawn deeper (none: all alike). */
+export function strip(
+    w: number,
+    h: number,
+    seat?: ViewState['seat'],
+): StripSegment[] {
     const keys = Object.keys(SEAT_COLOURS) as (keyof typeof SEAT_COLOURS)[];
     const segW = w / keys.length;
     return keys.map((k, i) => ({
@@ -296,7 +300,7 @@ function fitHeadline(
 }
 
 /** Headline (shrinking a little before it wraps badly or cuts) and the scope line under it. */
-function titleBlock(
+export function titleBlock(
     x: number,
     top: number,
     w: number,
@@ -338,10 +342,10 @@ function titleBlock(
 }
 
 /** Height the footer needs at this width (footerBlock lays it out from the top of its box). */
-function footerHeight(
+export function footerHeight(
     w: number,
     fonts: FooterFonts,
-    view: ViewState,
+    view: Pick<ViewState, 'source' | 'asOf'>,
     url: string,
 ): number {
     const { bottom } = footerBlock(box(0, 0, w, 0), fonts, {

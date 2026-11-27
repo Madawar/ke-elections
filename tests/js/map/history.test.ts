@@ -4,6 +4,7 @@ import {
     createFocusHistory,
     focusFromPath,
     gatePopState,
+    partyFromPath,
     installPopStateGate,
 } from '@/lib/map/history';
 
@@ -17,19 +18,23 @@ function fakePort(start = '/') {
     let listener: ((e: { stopImmediatePropagation(): void }) => void) | null =
         null;
     const calls: string[] = [];
+    /** What each push and replace was given besides the path: the focus and the party. */
+    const args: unknown[][] = [];
     const stop = vi.fn();
     const fire = () => listener?.({ stopImmediatePropagation: stop });
     const port: FocusHistoryPort = {
         path: () => entries[at],
-        push: (p) => {
+        push: (p, ...rest) => {
             entries.splice(at + 1);
             entries.push(p);
             at++;
             calls.push(`push ${p}`);
+            args.push(rest);
         },
-        replace: (p) => {
+        replace: (p, ...rest) => {
             entries[at] = p;
             calls.push(`replace ${p}`);
+            args.push(rest);
         },
         back: () => {
             calls.push('back');
@@ -45,6 +50,7 @@ function fakePort(start = '/') {
     return {
         port,
         calls,
+        args,
         stop,
         entries,
         position: () => at,
@@ -76,10 +82,24 @@ describe('focusFromPath', () => {
         expect(focusFromPath('/ward/1')).toEqual({ level: 'ward', code: 1 });
     });
 
+    it('reads a party page as no unit focus, and tells the party apart', () => {
+        expect(focusFromPath('/party/uda')).toBeNull();
+        expect(focusFromPath('/party/wdm-k/')).toBeNull();
+        expect(partyFromPath('/party/uda')).toBe('uda');
+        expect(partyFromPath('/party/wdm-k/')).toBe('wdm-k');
+        expect(partyFromPath('/county/47')).toBeNull();
+        expect(partyFromPath('/')).toBeNull();
+    });
+
     it('leaves any other page alone', () => {
         expect(focusFromPath('/dashboard')).toBeUndefined();
         expect(focusFromPath('/county/0')).toBeUndefined();
         expect(focusFromPath('/settings/profile')).toBeUndefined();
+        expect(focusFromPath('/party')).toBeUndefined();
+        expect(focusFromPath('/party/')).toBeUndefined();
+        expect(focusFromPath('/party/a_b')).toBeUndefined();
+        expect(focusFromPath('/party/uda/extra')).toBeUndefined();
+        expect(focusFromPath('/partyline/uda')).toBeUndefined();
     });
 });
 
@@ -243,6 +263,159 @@ describe('createFocusHistory', () => {
         expect(f.listening()).toBe(true);
         h.dispose();
         expect(f.listening()).toBe(false);
+    });
+});
+
+describe('a party profile is a state of the map page', () => {
+    const nairobi = { level: 'county' as const, code: 47 };
+    const restore = vi.fn();
+    let f: ReturnType<typeof fakePort>;
+    beforeEach(() => {
+        restore.mockClear();
+        f = fakePort('/');
+    });
+
+    it('opening a profile pushes /party/{abbrev} with the focus it was opened over and the party', () => {
+        const h = createFocusHistory(f.port, restore);
+        h.record(nairobi, 'user');
+        f.calls.length = 0;
+        f.args.length = 0;
+        h.openParty('UDA', nairobi);
+        expect(f.calls).toEqual(['push /party/uda']);
+        expect(f.args[0]).toEqual([nairobi, { abbrev: 'uda', scope: null }]);
+        // Opening the same one again adds nothing; another party is another entry.
+        h.openParty('UDA', nairobi);
+        expect(f.calls).toHaveLength(1);
+        h.openParty('ODM', nairobi);
+        expect(f.calls).toEqual(['push /party/uda', 'push /party/odm']);
+    });
+
+    it('Back from a profile shows the focus it was opened over, without moving the camera', () => {
+        const h = createFocusHistory(f.port, restore);
+        h.record(nairobi, 'user');
+        h.openParty('UDA', nairobi);
+        restore.mockClear();
+        f.go(1); // the phone's Back: /county/47
+        expect(restore).toHaveBeenCalledTimes(1);
+        expect(restore).toHaveBeenLastCalledWith(nairobi, { fit: true });
+        expect(f.stop).toHaveBeenCalledTimes(1);
+        // Forward again: the profile, over the same focus.
+        f.go(2);
+        expect(restore).toHaveBeenLastCalledWith(nairobi, {
+            fit: true,
+            party: 'uda',
+            partyScope: null,
+        });
+    });
+
+    it('closing a profile goes back to the entry it was opened from, and keeps the camera', () => {
+        const h = createFocusHistory(f.port, restore);
+        h.record(nairobi, 'user');
+        h.openParty('UDA', nairobi);
+        f.calls.length = 0;
+        h.record(nairobi, 'close');
+        expect(f.calls[0]).toBe('back');
+        expect(restore).toHaveBeenLastCalledWith(nairobi, { fit: false });
+        expect(f.position()).toBe(1);
+        expect(f.entries).toEqual(['/', '/county/47', '/party/uda']);
+    });
+
+    it('closing a profile opened from the home page goes back to the home page', () => {
+        const h = createFocusHistory(f.port, restore);
+        h.openParty('ODM', null);
+        h.record(null, 'close');
+        expect(f.position()).toBe(0);
+        expect(restore).toHaveBeenLastCalledWith(null, { fit: false });
+    });
+
+    it('closing a deep-linked profile adds the map entry rather than leaving the site', () => {
+        f = fakePort('/party/uda');
+        const h = createFocusHistory(f.port, restore);
+        h.record(null, 'close');
+        expect(f.calls).toEqual(['push /']);
+    });
+
+    it('a unit chosen over a profile is a new entry, and Back returns to the profile', () => {
+        const h = createFocusHistory(f.port, restore);
+        h.openParty('UDA', null);
+        h.record(nairobi, 'user');
+        expect(f.entries).toEqual(['/', '/party/uda', '/county/47']);
+        f.go(1);
+        expect(restore).toHaveBeenLastCalledWith(null, { fit: true, party: 'uda', partyScope: null });
+    });
+
+    it('after a deep link, the focus of a restored profile is all of Kenya', () => {
+        f = fakePort('/county/47');
+        const h = createFocusHistory(f.port, restore);
+        h.openParty('UDA', nairobi);
+        f.pop('/party/odm'); // an entry we did not make
+        expect(restore).toHaveBeenLastCalledWith(null, { fit: true, party: 'odm', partyScope: null });
+        expect(h.index).toBe(0);
+    });
+
+    it('still leaves popstate to Inertia for pages that merely look like a party page', () => {
+        createFocusHistory(f.port, restore);
+        for (const path of ['/party', '/party/', '/party/a_b', '/partyline/uda', '/settings/party/uda']) {
+            f.pop(path);
+            expect(restore, path).not.toHaveBeenCalled();
+            expect(f.stop, path).not.toHaveBeenCalled();
+        }
+    });
+
+    it('the scope is part of the entry: opened over a county it carries ?in=, and comes back with Back and Forward', () => {
+        const county = { level: 'county' as const, code: 47 };
+        const h = createFocusHistory(f.port, restore);
+        h.record(nairobi, 'user');
+        h.openParty('UDA', nairobi, county);
+        expect(f.entries).toEqual(['/', '/county/47', '/party/uda?in=county-47']);
+        expect(f.args.at(-1)).toEqual([nairobi, { abbrev: 'uda', scope: county }]);
+        f.go(1);
+        f.go(2);
+        expect(restore).toHaveBeenLastCalledWith(nairobi, {
+            fit: true,
+            party: 'uda',
+            partyScope: county,
+        });
+    });
+
+    it('switching the scope replaces the entry in place and keeps the focus it was opened over', () => {
+        const county = { level: 'county' as const, code: 47 };
+        const h = createFocusHistory(f.port, restore);
+        h.record(nairobi, 'user');
+        h.openParty('UDA', nairobi, county);
+        f.calls.length = 0;
+        h.setPartyScope('UDA', nairobi, null);
+        expect(f.calls).toEqual(['replace /party/uda']);
+        expect(f.entries).toEqual(['/', '/county/47', '/party/uda']);
+        expect(f.position()).toBe(2);
+        h.setPartyScope('UDA', nairobi, null);
+        expect(f.calls).toHaveLength(1);
+        // Back still shows the unit the profile was opened over
+        f.go(1);
+        expect(restore).toHaveBeenLastCalledWith(nairobi, { fit: true });
+    });
+
+    it('a deep link with a scope restores it', () => {
+        f = fakePort('/party/uda?in=constituency-290');
+        createFocusHistory(f.port, restore);
+        f.pop('/party/odm?in=county-1');
+        expect(restore).toHaveBeenLastCalledWith(null, {
+            fit: true,
+            party: 'odm',
+            partyScope: { level: 'county', code: 1 },
+        });
+    });
+
+    it('replaces the profile entry in place when the browser returns to it, so Inertia matches', () => {
+        const h = createFocusHistory(f.port, restore);
+        h.record(nairobi, 'user');
+        h.openParty('UDA', nairobi);
+        f.go(1);
+        f.calls.length = 0;
+        f.args.length = 0;
+        f.go(2);
+        expect(f.calls).toEqual(['replace /party/uda']);
+        expect(f.args[0]).toEqual([nairobi, { abbrev: 'uda', scope: null }]);
     });
 });
 

@@ -15,10 +15,11 @@ import {
     DialogTitle,
 } from 'reka-ui';
 import { computed, nextTick, ref, shallowRef, watch } from 'vue';
+import PartyCard from './PartyCard.vue';
 import ViewCard from './ViewCard.vue';
-import { captionFor } from '@/lib/export/caption';
 import { CARD_FONTS } from '@/lib/export/fonts';
 import { siteUrl } from '@/lib/export/format';
+import type { ViewLayout } from '@/lib/export/viewLayout';
 import { FontLoadError, svgToPng } from '@/lib/export/rasterize';
 import {
     canShareFiles,
@@ -32,21 +33,26 @@ import {
     viewFilename,
 } from '@/lib/export/sizes';
 import {
+    type ShareableView,
+    captionOf,
+    dialogCopy,
+    headlineOf,
+    inTheme,
+    isPartyCard,
+    layoutOf,
+    mapBoxOf,
+} from '@/lib/export/shareView';
+import {
     type ViewMapContext,
     renderViewMap,
     viewMapAspect,
 } from '@/lib/export/viewMap';
-import { viewLayout } from '@/lib/export/viewLayout';
-import {
-    type ViewState,
-    headlineFor,
-    seatsInTheme,
-    withTheme,
-} from '@/lib/export/viewState';
+import { seatsInTheme } from '@/lib/export/viewState';
 import { THEMES, type ThemeName } from '@/lib/map/theme';
 
 const props = defineProps<{
-    view: ViewState;
+    /** A seat view ("Share this view") or a party card. */
+    view: ShareableView;
     context: ViewMapContext;
 }>();
 const open = defineModel<boolean>('open', { default: false });
@@ -60,11 +66,21 @@ const size = computed<ViewSize>({
 const themeName = ref<ThemeName>(props.view.theme);
 const theme = computed(() => THEMES[themeName.value]);
 const shown = computed(() =>
-    withTheme(props.view, themeName.value, props.context),
+    inTheme(props.view, themeName.value, props.context),
 );
+/** The two kinds of card each have their own component; these narrow `shown` for the template. */
+const seatView = computed(() => {
+    const v = shown.value;
+    return isPartyCard(v) ? null : v;
+});
+const partyCard = computed(() => {
+    const v = shown.value;
+    return isPartyCard(v) ? v : null;
+});
+const copy = computed(() => dialogCopy(props.view));
 
 const HEADLINE_MAX = 120;
-const generated = computed(() => headlineFor(props.view));
+const generated = computed(() => headlineOf(props.view));
 const headlineInput = ref(generated.value);
 /** The card follows the typing after a short pause, so the map is not redrawn on every key. */
 const headlineTyped = refDebounced(headlineInput, 350);
@@ -75,7 +91,7 @@ const edited = computed(() => headlineInput.value.trim() !== generated.value);
 
 const url = computed(() => siteUrl(props.view.path));
 const caption = computed(() =>
-    captionFor(
+    captionOf(
         shown.value,
         url.value,
         size.value === 'x' ? 'x' : 'instagram',
@@ -85,19 +101,21 @@ const caption = computed(() =>
 const mapAspect = computed(() => viewMapAspect(props.view));
 /** When this size has no room for every row, say how many it lists and which size lists all. */
 const rowsHint = computed(() => {
+    const v = seatView.value;
+    if (!v) return '';
     const at = (s: ViewSize) =>
-        viewLayout(s, shown.value, {
+        layoutOf(s, v, {
             headline: headline.value,
             url: url.value,
             mapAspect: mapAspect.value,
-        });
+        }) as ViewLayout;
     const here = at(size.value);
     if (!here.rowsMore) return '';
-    const all = shown.value.mix.rows.length;
+    const all = v.mix.rows.length;
     const fits = SIZES.filter((s) => !at(s).rowsMore).map(
         (s) => VIEW_SIZE_LABELS[s],
     );
-    return `This size lists ${here.mixRows.length} of the ${all} ${shown.value.mix.rowWord}.${fits.length ? ` ${fits.join(' and ')} ${fits.length === 1 ? 'lists' : 'list'} them all.` : ''}`;
+    return `This size lists ${here.mixRows.length} of the ${all} ${v.mix.rowWord}.${fits.length ? ` ${fits.join(' and ')} ${fits.length === 1 ? 'lists' : 'list'} them all.` : ''}`;
 });
 const filename = computed(() => viewFilename(props.view, size.value));
 
@@ -136,11 +154,11 @@ async function build() {
     status.value = 'drawing';
     message.value = 'Drawing the card…';
     blob.value = null;
-    const box = viewLayout(s, shown.value, {
+    const box = mapBoxOf(s, shown.value, {
         headline: headline.value,
         url: url.value,
         mapAspect: mapAspect.value,
-    }).map;
+    });
     const key = `${s}|${name}|${box.w}x${box.h}`;
     wantedKey = key;
     let pending = images.get(key);
@@ -227,7 +245,7 @@ watch(
     (view) => {
         images.clear();
         themeName.value = view.theme;
-        headlineInput.value = headlineFor(view);
+        headlineInput.value = headlineOf(view);
     },
 );
 
@@ -273,11 +291,10 @@ async function copyCaption() {
                             class="text-[20px] leading-tight font-semibold"
                             style="font-variation-settings: 'wdth' 100"
                         >
-                            Share this view
+                            {{ copy.title }}
                         </DialogTitle>
                         <DialogDescription class="text-[14px] text-muted-ink">
-                            The map as it is now, with its numbers, sized for
-                            Instagram, stories or X.
+                            {{ copy.description }}
                         </DialogDescription>
                     </div>
                     <DialogClose
@@ -388,8 +405,20 @@ async function copyCaption() {
                         data-preview
                         class="mt-3 flex justify-center rounded-md border border-hairline bg-ground p-2 [&>svg]:h-auto [&>svg]:max-h-[46dvh] [&>svg]:w-auto [&>svg]:max-w-full"
                     >
+                        <PartyCard
+                            v-if="partyCard"
+                            :view="partyCard"
+                            :size="size"
+                            :headline="headline"
+                            :map-image="mapImage"
+                            :map-placeholder="mapStatus"
+                            :map-aspect="mapAspect"
+                            :url="url"
+                            :theme="theme"
+                        />
                         <ViewCard
-                            :view="shown"
+                            v-else-if="seatView"
+                            :view="seatView"
                             :size="size"
                             :headline="headline"
                             :map-image="mapImage"

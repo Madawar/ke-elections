@@ -398,4 +398,54 @@ describe('Legend as a bar chart', () => {
             'bg-ink',
         );
     });
+
+    describe('party details', () => {
+        const withProfiles = rows.map((r) =>
+            r.key === 'other' ? r : { ...r, party: r.key },
+        );
+        const row = (wrapper: ReturnType<typeof mountLegend>, key: string) =>
+            wrapper.get(`li[data-key="${key}"]`);
+
+        it('gives each party its own "<name>: all seats" button, apart from the highlight toggle', async () => {
+            const wrapper = mountLegend({ rows: withProfiles });
+            const li = row(wrapper, 'UDA');
+            const toggle = li.get('[aria-pressed]');
+            const details = li.get(
+                '[aria-label="United Democratic Alliance: all seats"]',
+            );
+            expect(details.element).not.toBe(toggle.element);
+            // Neither button contains the other, so a tap on one never reaches the other.
+            expect(toggle.element.contains(details.element)).toBe(false);
+            expect(details.element.contains(toggle.element)).toBe(false);
+            await details.trigger('click');
+            expect(wrapper.emitted('party')).toEqual([['UDA']]);
+            expect(wrapper.emitted('toggle')).toBeUndefined();
+            await toggle.trigger('click');
+            expect(wrapper.emitted('toggle')).toEqual([['UDA']]);
+            expect(wrapper.emitted('party')).toHaveLength(1);
+        });
+
+        it('is a 44px-wide target, and 44px tall on touch screens', () => {
+            const details = row(mountLegend({ rows: withProfiles }), 'ODM').get(
+                '[data-party-details]',
+            );
+            expect(details.classes()).toContain('w-11');
+            expect(details.classes()).toContain('pointer-coarse:min-h-11');
+            expect(details.attributes('type')).toBe('button');
+        });
+
+        it('has none for Other parties or for rows with no profile', () => {
+            const wrapper = mountLegend({ rows: withProfiles });
+            expect(row(wrapper, 'other').find('[data-party-details]').exists()).toBe(false);
+            const plain = mountLegend();
+            expect(plain.find('[data-party-details]').exists()).toBe(false);
+        });
+
+        it('keeps the highlighted row pressed state on the toggle only', () => {
+            const wrapper = mountLegend({ rows: withProfiles, highlighted: ['UDA'] });
+            const li = row(wrapper, 'UDA');
+            expect(li.get('[aria-pressed]').attributes('aria-pressed')).toBe('true');
+            expect(li.get('[data-party-details]').attributes('aria-pressed')).toBeUndefined();
+        });
+    });
 });

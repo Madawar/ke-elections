@@ -1,6 +1,6 @@
 // Name search over the unit directory. Matching is on normalised name tokens; results carry
 // their ancestors so the UI can show "Huruma, Mathare, Nairobi City".
-import type { Holder } from './seats';
+import { INDEPENDENT, type Holder, type Party } from './seats';
 import type { Level, Unit, UnitIndex } from './units';
 
 export interface SearchResult {
@@ -70,6 +70,60 @@ export function searchUnits(
         unit,
         ancestors: index.ancestors(unit.l, unit.c),
     }));
+}
+
+export interface PartyResult {
+    party: Party;
+    /** The former abbreviation that matched, when the party was found by it rather than by its own. */
+    formerName: string | null;
+}
+
+/** Every token of the query starts some token of the text. */
+const tokensMatch = (text: string, queryTokens: string[]) => {
+    const tokens = text.split(' ');
+    return queryTokens.every((q) => tokens.some((t) => t.startsWith(q)));
+};
+
+/**
+ * Parties by abbreviation, then by a former abbreviation (a rename), then by name. The abbreviation
+ * ranks first so "uda" finds UDA, not every "United Democratic ..." party. Independents are not a
+ * party and are never offered.
+ */
+export function searchParties(
+    parties: Party[],
+    query: string,
+    limit = 6,
+): PartyResult[] {
+    const q = normalise(query);
+    if (q === '' || limit <= 0) return [];
+    const queryTokens = q.split(' ');
+
+    const hits: (PartyResult & { rank: number; name: string })[] = [];
+    for (const party of parties) {
+        if (party.abbrev === INDEPENDENT) continue;
+        const abbrev = normalise(party.abbrev);
+        const name = normalise(party.name);
+        const former = (party.former_names ?? []).find((f) =>
+            tokensMatch(normalise(f.abbrev), queryTokens),
+        );
+        let rank: number | null = null;
+        let formerName: string | null = null;
+        if (abbrev === q) rank = 0;
+        else if (abbrev.startsWith(q) || tokensMatch(abbrev, queryTokens)) rank = 1;
+        else if (former) {
+            rank = 2;
+            formerName = former.abbrev;
+        } else if (name.startsWith(q)) rank = 3;
+        else if (tokensMatch(name, queryTokens)) rank = 4;
+        if (rank !== null) hits.push({ party, formerName, rank, name });
+    }
+    hits.sort(
+        (a, b) =>
+            a.rank - b.rank ||
+            a.name.localeCompare(b.name) ||
+            a.party.abbrev.localeCompare(b.party.abbrev),
+    );
+    return hits.slice(0, limit).map(({ party, formerName }) => ({ party, formerName }));
 }
 
 export interface PersonResult {

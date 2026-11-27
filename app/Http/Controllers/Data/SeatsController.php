@@ -18,7 +18,7 @@ class SeatsController
 {
     public function __invoke(): JsonResponse
     {
-        $parties = Party::query()->orderBy('abbrev')->get();
+        $parties = Party::query()->with('aliases')->orderBy('abbrev')->get();
 
         /** @var array<int, string> $abbrevById */
         $abbrevById = [];
@@ -30,6 +30,11 @@ class SeatsController
                 'name' => $p->name,
                 'coalition_2022' => $p->coalition_2022,
                 'colour' => $p->display_colour,
+                'status' => $p->status,
+                'source_url' => $p->source_url,
+                // Former abbreviations (a rename), oldest first, for the party's page and search.
+                'former_names' => $p->aliases->sortBy('effective_on')->values()
+                    ->map(fn ($a) => ['abbrev' => $a->alias, 'effective_on' => $a->effective_on?->format('Y-m-d')])->all(),
             ];
         }
 
@@ -59,7 +64,7 @@ class SeatsController
         }
 
         if (array_filter($bySeat, fn (array $counts) => isset($counts[Party::INDEPENDENT])) !== []) {
-            $partyList[] = ['abbrev' => Party::INDEPENDENT, 'name' => 'Independent', 'coalition_2022' => null, 'colour' => null];
+            $partyList[] = ['abbrev' => Party::INDEPENDENT, 'name' => 'Independent', 'coalition_2022' => null, 'colour' => null, 'status' => null, 'source_url' => null, 'former_names' => []];
         }
 
         $totals = [];

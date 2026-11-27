@@ -85,6 +85,8 @@ describe('service worker', () => {
         expect(sw).toMatch(/NetworkFirst\(\{cacheName:"pages"/);
         // pages: only the public map routes, so admin and account pages are never saved
         expect(sw).toContain('(county|constituency|ward)');
+        // and a party's page (/party/uda) is one of them
+        expect(sw).toContain('party\\/[a-z0-9]+');
         expect(sw).toMatch(/NetworkFirst\(\{cacheName:"seats"/);
         expect(sw).toContain('importScripts("/sw-reset-pages.js")');
         expect(

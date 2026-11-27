@@ -14,6 +14,7 @@ import Legend from '@/components/map/Legend.vue';
 import MapControls from '@/components/map/MapControls.vue';
 import MapView from '@/components/map/MapView.vue';
 import NationalOverview from '@/components/map/NationalOverview.vue';
+import PartyPanel from '@/components/map/PartyPanel.vue';
 import OutsideHint, {
     hintText,
     markHintUsed,
@@ -38,6 +39,7 @@ import {
 import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
 import {
     type RememberedModes,
+    chipStepUp,
     modeForFocus,
     rememberLevel,
     validSeatModes,
@@ -57,11 +59,11 @@ import { fileUrl } from '@/lib/map/style';
 import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { formatAsOf } from '@/lib/export/format';
-import {
-    type ViewState,
-    parseViewQuery,
-    snapshotView,
-} from '@/lib/export/viewState';
+import { partyCardView } from '@/lib/export/partyCard';
+import type { ShareableView } from '@/lib/export/shareView';
+import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
+import { type PartyScope, findParty, scopeFor } from '@/lib/party';
+import { parsePartyPath } from '@/lib/map/urls';
 import {
     type SeatsData,
     EMPTY_SEATS,
@@ -87,7 +89,8 @@ type ServerUnit = {
     name: string;
     ancestors: { level: string; code: number; name: string }[];
 } | null;
-const props = defineProps<{ unit: ServerUnit }>();
+type ServerParty = { abbrev: string; name: string } | null;
+const props = defineProps<{ unit: ServerUnit; party?: ServerParty }>();
 
 // ---- data -------------------------------------------------------------------------------
 const manifest = ref<Record<string, string> | null>(null);
@@ -148,6 +151,12 @@ onMounted(async () => {
                 animate: false,
             });
         focusHistory = createFocusHistory(historyPort, restoreFocus);
+        // A /party/{abbrev} link opens that party's profile (one the data does not have shows the map).
+        if (props.party)
+            showParty(
+                props.party.abbrev,
+                parsePartyPath(location.pathname + location.search)?.scope,
+            );
         fetch(fileUrl(m, 'towns.geojson'))
             .then((r) => r.json())
             .then(
@@ -326,6 +335,10 @@ const legendBoxOpen = computed(
 // What a person picked in search points at: a seat row in the unit panel, or a party in the overview.
 const highlightSeat = ref<string | undefined>();
 const highlightParty = ref<string | undefined>();
+// The party whose profile fills the panel (its abbreviation), if any. The focus behind it stays.
+const partyAbbrev = ref<string | null>(null);
+// What its numbers cover: a county or a constituency, or all of Kenya (null).
+const partyScope = ref<PartyScope>(null);
 
 // With a unit selected the map shows only that unit; this keeps the rest faintly in view instead.
 const SURROUNDINGS_KEY = 'kem.showSurroundings';
@@ -380,6 +393,8 @@ function selectUnit(
     tip.value = null;
     highlightSeat.value = undefined;
     highlightParty.value = undefined;
+    // Choosing a place leaves a party's profile; restoreFocus shows one again where it belongs.
+    partyAbbrev.value = null;
     legendOpen.value = legendOpenAfterSelect(legendOpen.value, {
         desktop: isDesktop.value,
         wasFocused: selection.value !== null,
@@ -406,6 +421,88 @@ function selectUnit(
     announce.value = announceSelection(unit, ancestors);
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+// ---- party profile ------------------------------------------------------------------------
+const partyTitle = (abbrev: string, scope: PartyScope) => {
+    const party = findParty(seats.value, abbrev);
+    const where = scope && index.value?.get(scope.level, scope.code)?.n;
+    return party
+        ? `${party.name} (${party.abbrev})${where ? ` in ${where}` : ''} — Kenya Electoral Map`
+        : null;
+};
+/**
+ * Show a party's profile in the panel, without touching the history. The scope is a county or a
+ * constituency of the data (anything else is all of Kenya). False for an unknown party.
+ */
+function showParty(abbrev: string, scope: PartyScope = null): boolean {
+    const party = findParty(seats.value, abbrev);
+    if (!party) return false;
+    const known = scope && index.value?.get(scope.level, scope.code);
+    view.value = 'unit';
+    partyAbbrev.value = party.abbrev;
+    partyScope.value = known ? scope : null;
+    document.title =
+        partyTitle(party.abbrev, partyScope.value) ?? document.title;
+    announce.value = `${party.name}: seats held now${known ? ` in ${known.n}` : ''}.`;
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+    return true;
+}
+/**
+ * The person opened a party's profile (legend, a seat row, the overview or search): one history
+ * entry. Its numbers cover the focus: the county or constituency shown, a ward's constituency, or
+ * Kenya when nothing is focused.
+ */
+function openParty(abbrev: string) {
+    const focus = focusOf(selection.value);
+    const scope = index.value ? scopeFor(index.value, focus) : null;
+    if (!showParty(abbrev, scope) || !partyAbbrev.value) return;
+    focusHistory?.openParty(partyAbbrev.value, focus, partyScope.value);
+}
+/** The profile's scope switch: the same entry, a different place. */
+function setPartyScope(scope: PartyScope) {
+    const abbrev = partyAbbrev.value;
+    if (!abbrev) return;
+    partyScope.value = scope;
+    document.title = partyTitle(abbrev, scope) ?? document.title;
+    focusHistory?.setPartyScope(abbrev, focusOf(selection.value), scope);
+}
+/** The person closed the profile: back to the entry it was opened from, the camera where it is. */
+function closeParty() {
+    if (!partyAbbrev.value) return;
+    partyAbbrev.value = null;
+    document.title = selection.value
+        ? `${selection.value.n} ${selection.value.l.charAt(0).toUpperCase()}${selection.value.l.slice(1)} — Kenya Electoral Map`
+        : 'Kenya Electoral Map';
+    recordHistory(focusOf(selection.value), 'close');
+}
+/**
+ * "Show on map" on a seat row: colour the map by that seat and highlight the party, leaving the
+ * focus where it is. A seat held above the focus (a governor inside a constituency) goes up to the
+ * unit that holds it, the same step the seat chips take.
+ */
+function showPartyOnMap(seat: SeatKey) {
+    const abbrev = partyAbbrev.value;
+    if (!abbrev) return;
+    const stepUp = chipStepUp(focusOf(selection.value)?.level ?? null, seat);
+    if (stepUp) onChipStepUp(seat, stepUp);
+    else {
+        chooseMode(seat);
+        closeParty();
+    }
+    onlyParties.value = [abbrev];
+    announce.value = `Showing ${SEAT_LABEL[seat]} seats held by ${findParty(seats.value, abbrev)?.name ?? abbrev} on the map.`;
+}
+function shareParty() {
+    const abbrev = partyAbbrev.value;
+    if (!abbrev) return;
+    sharedView.value = partyCardView({
+        seats: seats.value,
+        abbrev,
+        theme: theme.value,
+        index: index.value ?? undefined,
+        scope: partyScope.value,
+    });
 }
 
 // The person zoomed out of the focused unit: the focus (and the panel) move up to its parent, and
@@ -487,19 +584,32 @@ function serverUnitOf(focus: FocusSelection | null): ServerUnit {
         ),
     };
 }
-const visit = (url: string, focus: FocusSelection | null) => ({
+function serverPartyOf(slug: string | undefined): ServerParty {
+    const party = slug ? findParty(loadedSeats.value, slug) : undefined;
+    return party ? { abbrev: party.abbrev, name: party.name } : null;
+}
+const visit = (
+    url: string,
+    focus: FocusSelection | null,
+    party?: { abbrev: string },
+) => ({
     url,
     props: (current: Record<string, unknown>) => ({
         ...current,
         unit: serverUnitOf(focus),
+        party: serverPartyOf(party?.abbrev),
     }),
     preserveState: true,
     preserveScroll: true,
 });
 const historyPort: FocusHistoryPort = {
-    path: () => location.pathname,
-    push: (url, focus) => router.push(visit(url, focus)),
-    replace: (url, focus) => router.replace(visit(url, focus)),
+    // A party's address carries its scope after the ?; the others are the path alone.
+    path: () =>
+        parsePartyPath(location.pathname)
+            ? location.pathname + location.search
+            : location.pathname,
+    push: (url, focus, party) => router.push(visit(url, focus, party)),
+    replace: (url, focus, party) => router.replace(visit(url, focus, party)),
     back: () => window.history.back(),
     onPopState: gatePopState,
 };
@@ -510,12 +620,17 @@ function recordHistory(
     if (cause !== 'none') focusHistory?.record(focus, cause);
 }
 /** The browser went back or forward to one of our entries: show its focus and fit the camera to it. */
-function restoreFocus(focus: FocusSelection | null, { fit }: RestoreOptions) {
+function restoreFocus(
+    focus: FocusSelection | null,
+    { fit, party, partyScope: scope }: RestoreOptions,
+) {
     const unit = focus
         ? (index.value?.get(focus.level, focus.code) ?? null)
         : null;
     // Going back because of a zoom must not snap the camera away from where the person's fingers are.
     selectUnit(unit, { history: 'none', fit, recentre: fit });
+    // An entry for a party's profile shows it over the focus it was opened over.
+    if (party) showParty(party, scope);
 }
 function zoomOut() {
     if (!index.value) return;
@@ -676,8 +791,16 @@ function onHover(p: Picked | null, point: { x: number; y: number }) {
         : null;
 }
 
-const title = computed(() => (panelUnit.value ? panelUnit.value.n : 'Kenya'));
+const partyName = computed(() =>
+    partyAbbrev.value
+        ? (findParty(seats.value, partyAbbrev.value)?.name ?? partyAbbrev.value)
+        : null,
+);
+const title = computed(
+    () => partyName.value ?? (panelUnit.value ? panelUnit.value.n : 'Kenya'),
+);
 const subtitle = computed(() => {
+    if (partyName.value) return 'Political party';
     const u = panelUnit.value;
     if (!u) return '47 counties, 290 constituencies, 1,450 wards';
     const parent = index.value
@@ -688,7 +811,9 @@ const subtitle = computed(() => {
         : LEVEL_NAME[u.l].replace(/^./, (c) => c.toUpperCase());
 });
 const headTitle = computed(() =>
-    props.unit
+    props.party
+        ? `${props.party.name} (${props.party.abbrev})`
+        : props.unit
         ? `${props.unit.name} ${props.unit.level.charAt(0).toUpperCase()}${props.unit.level.slice(1)}`
         : '',
 );
@@ -706,7 +831,7 @@ function shareUnit() {
 const isSeatMode = computed(
     () => colourKey.value !== 'none' && colourKey.value !== 'province',
 );
-const sharedView = shallowRef<ViewState | null>(null);
+const sharedView = shallowRef<ShareableView | null>(null);
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
@@ -766,8 +891,10 @@ const showView = (v: typeof view.value) => {
             <SearchBox
                 :index="index"
                 :holders="seats.holders"
+                :parties="seats.parties"
                 @pick="(u) => selectUnit(u)"
                 @pick-person="onPickPerson"
+                @pick-party="openParty"
             />
             <button
                 type="button"
@@ -879,6 +1006,7 @@ const showView = (v: typeof view.value) => {
                 @toggle="toggleParty"
                 @clear="onlyParties = []"
                 @share="shareView"
+                @party="openParty"
             />
         </div>
 
@@ -920,6 +1048,14 @@ const showView = (v: typeof view.value) => {
                         type="button"
                         class="min-h-11 px-2 text-[14px] underline underline-offset-4"
                         @click="view = 'unit'"
+                    >
+                        Done
+                    </button>
+                    <button
+                        v-else-if="partyAbbrev"
+                        type="button"
+                        class="min-h-11 px-2 text-[14px] underline underline-offset-4"
+                        @click="closeParty"
                     >
                         Done
                     </button>
@@ -990,8 +1126,19 @@ const showView = (v: typeof view.value) => {
                 @pick="(u) => selectUnit(u)"
             />
             <template v-else-if="index">
+                <PartyPanel
+                    v-if="partyAbbrev"
+                    :seats="seats"
+                    :abbrev="partyAbbrev"
+                    :index="index"
+                    :scope="partyScope"
+                    :focus="focusOf(selection)"
+                    @scope="setPartyScope"
+                    @show="showPartyOnMap"
+                    @share="shareParty"
+                />
                 <UnitPanel
-                    v-if="panelUnit"
+                    v-else-if="panelUnit"
                     :unit="panelUnit"
                     :index="index"
                     :seats="seats"
@@ -1000,6 +1147,7 @@ const showView = (v: typeof view.value) => {
                     v-model:show-surroundings="showSurroundings"
                     :can-share-view="isSeatMode"
                     @go="(u) => selectUnit(u)"
+                    @party="openParty"
                     @share="shareUnit"
                     @share-view="shareView"
                 />
@@ -1009,6 +1157,7 @@ const showView = (v: typeof view.value) => {
                     :highlight-party="highlightParty"
                     :can-share-view="isSeatMode"
                     @colour-by="chooseMode"
+                    @party="openParty"
                     @share="exportNational = true"
                     @share-view="shareView"
                 />
