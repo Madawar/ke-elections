@@ -11,6 +11,7 @@ import {
     type FiveSeatsCardView,
     fiveSeatsScope,
 } from './fiveSeatsCard';
+import { type CoverCardView, coverHeadline, coverScope } from './coverCard';
 import { formatAsOf } from './format';
 import {
     type LeadersCardView,
@@ -420,6 +421,32 @@ export function versusCaption(
                 .map((l) => `${l.label}: ${l.party ? l.party.label : VERSUS_EMPTY.toLowerCase()}`)
                 .join('. ')}.`,
         ]),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for the county carousel (its cover's): the headline, the seats spelled out, the
+ * county's MCAs by party as the cover's map colours them, the source, the link and the tags.
+ */
+export function coverCaption(
+    card: CoverCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = coverHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    return [
+        clip(headline, 300),
+        '',
+        coverScope(card),
+        ...(card.mcas.length
+            ? [`MCAs by party: ${card.mcas.map((m) => `${m.label} ${fmt(m.count)}`).join(', ')}.`]
+            : []),
         '',
         sourceText(card, 10),
         url,

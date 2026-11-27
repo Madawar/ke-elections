@@ -293,12 +293,23 @@ export interface FooterInput {
 
 const BRAND = 'Kenya Electoral Map';
 
+/**
+ * A slide's page text in the footer. Where it sits right beside the link (`joins`: just before
+ * or just after it), it is drawn in the link's own text element, `gap` apart, so the space
+ * between them is the renderer's and not an estimate of the link's width; its `x` is where the
+ * estimate puts it, for the layout's checks.
+ */
+export interface FooterPage extends TextItem {
+    joins: 'before' | 'after' | null;
+    gap: number;
+}
+
 /** The footer's lines: source and date, the attribution, then the site name and deep link. */
 export function footerBlock(
     area: Box,
     fonts: FooterFonts,
     input: FooterInput,
-): { rule: number; lines: TextItem[]; page: TextItem | null; bottom: number } {
+): { rule: number; lines: TextItem[]; page: FooterPage | null; bottom: number } {
     const lines: TextItem[] = [];
     const lead = (s: number) => s * 1.35;
     let y = area.y + Math.round(fonts.text * 0.7);
@@ -337,31 +348,41 @@ export function footerBlock(
     const brandW = textWidth(BRAND, fonts.url, true);
     const brandFits =
         brandW + textWidth(url, urlSize, true) + fonts.url * 1.5 <= area.w;
-    // A slide's page text sits on this line too, so the footer is no taller for it: beside the
-    // link after the brand; where the three do not fit, in the brand's place; where even the page
-    // text and the link do not, the link shrinks to make room (down to its floor, then without its
-    // query). A card outside a series takes none of these steps.
-    let page: TextItem | null = null;
+    // A slide's page text sits on this line too, so the footer is no taller for it, and the link
+    // keeps its size: between the brand and the link where the three fit; else right after the
+    // link, which then starts the line as it does on a card whose brand does not fit (the brand
+    // gives way); only where even the page text and the link do not fit side by side does the
+    // link shrink to make room (down to its floor, then without its query), the page text first.
+    // A card outside a series takes none of these steps.
+    let page: FooterPage | null = null;
     let showBrand = brandFits;
     let linkText = url;
     let linkSize = urlSize;
+    let linkAtEnd = brandFits;
     if (input.page) {
         const text = input.page;
         const gap = Math.round(fonts.url * 0.6);
-        const pageW = (s: number) => textWidth(text, s, false);
+        const pageW = textWidth(text, urlSize, false);
         const urlW = textWidth(url, urlSize, true);
-        const muted = { y, text, weight: 400, tone: 'muted' as const };
-        if (brandFits && brandW + fonts.url * 1.5 + pageW(urlSize) + gap + urlW <= area.w) {
-            page = { ...muted, x: Math.round(area.x + area.w - urlW - gap), size: urlSize, anchor: 'end' };
+        const muted = { y, text, size: urlSize, weight: 400, tone: 'muted' as const, gap };
+        if (brandFits && brandW + fonts.url * 1.5 + pageW + gap + urlW <= area.w) {
+            page = { ...muted, x: Math.round(area.x + area.w - urlW - gap), anchor: 'end', joins: 'before' };
+        } else if (urlW + gap + pageW <= area.w) {
+            // Right after the link, which starts the line as it does when the brand does not fit:
+            // the link keeps its size, and the brand gives way when it was on the line.
+            showBrand = false;
+            linkAtEnd = false;
+            page = { ...muted, x: Math.round(area.x + urlW + gap), anchor: 'start', joins: 'after' };
         } else {
             showBrand = false;
-            const room = area.w - pageW(urlSize) - gap;
+            linkAtEnd = true;
+            const room = area.w - pageW - gap;
             linkSize = fitFontSize(url, room, urlSize, floor, true);
             if (textWidth(url, linkSize, true) > room) {
                 linkText = url.replace(/[?#].*$/, '').replace(/\/$/, '');
                 linkSize = fitFontSize(linkText, room, urlSize, floor, true);
             }
-            page = { ...muted, x: area.x, size: linkSize, anchor: 'start' };
+            page = { ...muted, x: area.x, size: linkSize, anchor: 'start', joins: null };
         }
     }
     if (showBrand)
@@ -373,7 +394,7 @@ export function footerBlock(
             weight: 600,
             tone: 'ink',
         });
-    const end = showBrand || !!page;
+    const end = linkAtEnd;
     lines.push({
         x: end ? area.x + area.w : area.x,
         y,

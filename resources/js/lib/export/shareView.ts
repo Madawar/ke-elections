@@ -13,6 +13,7 @@ import { type BallotsLayout, ballotsLayout } from './ballotsLayout';
 import {
     ballotsCaption,
     captionFor,
+    coverCaption,
     fiveSeatsCaption,
     leadersCaption,
     numbersCaption,
@@ -22,6 +23,13 @@ import {
     versusCaption,
     type CaptionPlatform,
 } from './caption';
+import {
+    type CoverCardView,
+    coverCardView,
+    coverHeadline,
+    coverSpec,
+} from './coverCard';
+import { type CoverLayout, coverLayout } from './coverLayout';
 import {
     FIVE_SEATS_HEADLINE,
     type FiveSeatsCardView,
@@ -73,9 +81,11 @@ import {
     type ViewState,
     headlineFor,
     seatsInTheme,
+    snapshotView,
     withTheme,
 } from './viewState';
 import BallotsCard from '@/components/export/BallotsCard.vue';
+import CoverCard from '@/components/export/CoverCard.vue';
 import FiveSeatsCard from '@/components/export/FiveSeatsCard.vue';
 import LeadersCard from '@/components/export/LeadersCard.vue';
 import NumbersCard from '@/components/export/NumbersCard.vue';
@@ -98,7 +108,8 @@ export type ShareableView =
     | FiveSeatsCardView
     | BallotsCardView
     | TilesCardView
-    | VersusCardView;
+    | VersusCardView
+    | CoverCardView;
 export type ShareLayout =
     | ViewLayout
     | PartyLayout
@@ -108,7 +119,8 @@ export type ShareLayout =
     | FiveSeatsLayout
     | BallotsLayout
     | TilesLayout
-    | VersusLayout;
+    | VersusLayout
+    | CoverLayout;
 export type ShareKind = ShareableView['kind'];
 
 /** What a layout is laid out for besides the card: its headline, link and map shape. */
@@ -534,6 +546,35 @@ const VERSUS: CardKind<VersusCardView> = {
     component: VersusCard,
 };
 
+const COVER: CardKind<CoverCardView> = {
+    key: 'cover',
+    // The first slide of the county carousel: portrait for feeds, story for TikTok and Reels.
+    sizes: ['portrait', 'story'],
+    // Its numbers are counted from the unit index; the headline is a fixed template.
+    editableHeadline: false,
+    label: () => 'Carousel',
+    headline: coverHeadline,
+    caption: coverCaption,
+    layout: coverLayout,
+    maps: (layout: CoverLayout, view) => [{ key: 'map', box: layout.map, spec: coverSpec(view) }],
+    aspect: (view) => viewMapAspect(coverSpec(view)),
+    copy: (view) => ({
+        title: 'Share the county carousel',
+        description: `Four slides on who holds ${view.county.name}’s ${view.counts.total.toLocaleString('en-GB')} elected seats, sized for Instagram or stories.`,
+    }),
+    // Taken again from the seats in that theme, so independents follow it.
+    inTheme: (view, theme, ctx) =>
+        coverCardView({
+            seats: seatsInTheme(ctx.seats, theme),
+            index: ctx.index,
+            county: view.county.code,
+            theme,
+            sample: view.sample,
+        }) ?? { ...view, theme },
+    filename: (view, size) => `kenya-electoral-map-county-${view.county.code}-cover-${size}.png`,
+    component: CoverCard,
+};
+
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
 
 const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
@@ -546,6 +587,7 @@ const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
     ballots: BALLOTS,
     tiles: TILES,
     versus: VERSUS,
+    cover: COVER,
 };
 
 // TypeScript cannot follow a union of views to the matching entry, so this one lookup says it.
@@ -701,3 +743,36 @@ export const slideFilename = (
     i: number,
     total: number,
 ): string => `${filenameOf(view, size).replace(/\.png$/, '')}-${i + 1}-of-${total}.png`;
+
+/**
+ * The county carousel: its cover, then the county's leaders card, then "This view" for the county
+ * on the MP seat and on the MCA seat, made by the very functions the page uses for those cards
+ * (`leadersCardView`, `snapshotView`), so a slide is the card it is outside the series. Nothing is
+ * highlighted on the seat slides; the map settings are the person's (surroundings, MP outlines).
+ * Null for a code that is not a county.
+ */
+export function carouselCard({
+    seats,
+    index,
+    county,
+    theme,
+    showSurroundings = false,
+    mpOutlines = true,
+    sample = false,
+}: {
+    seats: SeatsData;
+    index: UnitIndex;
+    county: number;
+    theme: ThemeName;
+    showSurroundings?: boolean;
+    mpOutlines?: boolean;
+    sample?: boolean;
+}): ShareCard | null {
+    const focus = { level: 'county' as const, code: county };
+    const cover = coverCardView({ seats, index, county, theme, sample });
+    const leaders = leadersCardView({ seats, index, focus, theme, sample });
+    if (!cover || !leaders) return null;
+    const seatSlide = (seat: 'mp' | 'mca') =>
+        snapshotView({ seats, index, seat, focus, only: [], showSurroundings, theme, sample, mpOutlines, onlyMp: [] });
+    return seriesCard('carousel', COVER.label(cover), [cover, leaders, seatSlide('mp'), seatSlide('mca')]);
+}

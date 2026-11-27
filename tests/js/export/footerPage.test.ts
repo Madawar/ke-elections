@@ -1,7 +1,8 @@
 // The page text of a slide in a series ("2 of 4"): it sits on the link's line, beside the link, so
 // the footer's measured height never changes; a card outside a series has none and its footer is
-// exactly what it was. When the line cannot hold the brand, the page text and the link, the page
-// text takes the brand's place on that line; when even that is too narrow, the link shrinks.
+// exactly what it was. The link keeps its size: the page text goes between the brand and the link,
+// or right after the link (the brand giving way, as it does when a link is too long for it); only
+// when even that is too narrow does the link shrink.
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import CardFooter from '@/components/export/CardFooter.vue';
@@ -93,7 +94,21 @@ describe('footerBlock: the page text of a slide', () => {
         }
     });
 
-    it('takes the brand’s place when the line cannot hold all three', () => {
+    it('goes right after the link, which does not move, where the brand was already left out', () => {
+        const url = 'http://localhost:8080/county/47?seat=county_seats';
+        const { footerBox } = cardFrame('story', { source: input.source, asOf: input.asOf }, url);
+        const fonts = SPECS.story.footer;
+        const plain = footerBlock(footerBox, fonts, { ...input, url });
+        expect(plain.lines.some((l) => l.text === 'Kenya Electoral Map')).toBe(false);
+        const b = footerBlock(footerBox, fonts, { ...input, url, page: '2 of 4' });
+        expect(b.lines).toEqual(plain.lines);
+        const link = b.lines.at(-1)!;
+        expect(b.page!.anchor).toBe('start');
+        expect(b.page!.x).toBe(Math.round(link.x + textWidth(link.text, link.size, true) + Math.round(fonts.url * 0.6)));
+        expect(inside(b.page!, footerBox)).toBe(true);
+    });
+
+    it('goes right after the link, at its size, when the line cannot hold all three (the brand gives way)', () => {
         const fonts = SPECS.portrait.footer;
         const url = 'https://example.org/county/47?seat=county_seats';
         const urlW = textWidth('example.org/county/47?seat=county_seats', fonts.url, true);
@@ -106,11 +121,12 @@ describe('footerBlock: the page text of a slide', () => {
         const page = b.page!;
         const line = onLine(b.lines, page);
         expect(line.some((l) => l.text === 'Kenya Electoral Map')).toBe(false);
-        expect(page.x).toBe(area.x);
-        expect(page.anchor ?? 'start').toBe('start');
         const link = line.find((l) => l.text.includes('county/47'))!;
+        expect(link.x).toBe(area.x);
+        expect(link.anchor ?? 'start').toBe('start');
         expect(link.size).toBe(plain.lines.find((l) => l.text.includes('county/47'))!.size);
-        expect(apart(page, link)).toBe(true);
+        expect(page.joins).toBe('after');
+        expect(span(page)[0]).toBeGreaterThan(span(link)[1]);
         for (const t of [...line, page]) expect(inside(t, area)).toBe(true);
         expect(b.bottom).toBe(plain.bottom);
     });
@@ -146,13 +162,39 @@ describe('CardFooter: the page text', () => {
         const lines = footerBlock(props.box, props.fonts, { ...input, attribution: ATTRIBUTION, url: props.url }).lines;
         expect(w.findAll('text')).toHaveLength(lines.length);
     });
+    it('draws the page text right after the link where the brand gives way, and apart where the link must shrink', () => {
+        const story = {
+            ...props,
+            box: cardFrame('story', { source: input.source, asOf: input.asOf }, 'http://localhost:8080/county/47?seat=county_seats').footerBox,
+            fonts: SPECS.story.footer,
+            url: 'http://localhost:8080/county/47?seat=county_seats',
+        };
+        const after = mount(CardFooter, { props: { ...story, page: '2 of 4' } });
+        expect(after.get('[data-link]').text()).toBe('localhost:8080/county/47?seat=county_seats2 of 4');
+        expect(after.get('[data-link] [data-page]').attributes('dx')).toBe(String(Math.round(SPECS.story.footer.url * 0.6)));
+        const fonts = SPECS.portrait.footer;
+        const url = 'https://example.org/county/47?seat=county_seats';
+        const w = Math.ceil(textWidth('Kenya Electoral Map', fonts.url, true) + textWidth('example.org/county/47?seat=county_seats', fonts.url, true) + fonts.url * 1.5 + 4);
+        const noBrand = mount(CardFooter, { props: { ...props, box: { x: 0, y: 0, w, h: 300 }, url, page: '3 of 4' } });
+        expect(noBrand.get('[data-link]').text()).toBe('example.org/county/47?seat=county_seats3 of 4');
+        expect(noBrand.findAll('text').some((t) => t.text() === 'Kenya Electoral Map')).toBe(false);
+        // Too narrow for both at full size: the page text stands apart at the start, the link shrinks.
+        const narrow = mount(CardFooter, { props: { ...props, box: { x: 0, y: 0, w: 560, h: 300 }, url, page: '3 of 4' } });
+        expect(narrow.find('[data-link]').exists()).toBe(false);
+        expect(narrow.get('text[data-page]').text()).toBe('3 of 4');
+    });
+
     it('draws the page text in the muted ink beside the link', () => {
         const w = mount(CardFooter, { props: { ...props, page: '2 of 4' } });
         const page = w.find('[data-page]');
         expect(page.text()).toBe('2 of 4');
         expect(page.attributes('fill')).toBe(THEMES.light.muted);
-        const link = w.findAll('text').find((t) => t.text() === 'example.org/county/37')!;
-        expect(page.attributes('y')).toBe(link.attributes('y'));
+        // In the link's own text element, just before the link, a gap apart.
+        const link = w.get('[data-link]');
+        expect(link.element.contains(page.element)).toBe(true);
+        expect(link.text()).toBe('2 of 4example.org/county/37');
+        expect(link.findAll('tspan')[1].attributes('dx')).toBe(String(Math.round(props.fonts.url * 0.6)));
+        expect(page.attributes('font-weight')).toBe('400');
     });
 });
 

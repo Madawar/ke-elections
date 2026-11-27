@@ -50,6 +50,12 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
                       choice: { label: string; options: unknown[]; value: string };
                   }
                 | undefined;
+            const carousel = cards.find((c) => c.key === 'carousel') as
+                | {
+                      view: unknown;
+                      slides: { kind: string; seat?: string; path: string }[];
+                  }
+                | undefined;
             const tiles = cards.find((c) => c.key === 'tiles')?.view as
                 | { seat: string; tiles: { colour: string }[] }
                 | undefined;
@@ -60,6 +66,9 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
                 'data-share-cards': cards.map((c) => c.label).join('|'),
                 'data-share-top': top && `${top.group} ${top.seat}`,
                 'data-share-tiles': tiles && `${tiles.seat} ${tiles.tiles.length}`,
+                'data-share-carousel':
+                    carousel &&
+                    `${carousel.view === carousel.slides[0]} ${carousel.slides.map((x) => `${x.kind}:${x.seat ?? ''}:${x.path}`).join(',')}`,
                 'data-share-versus':
                     versus &&
                     `${versus.view.seat} ${versus.view.halves.map((x) => x.code).join(',')} ${versus.choice.label} ${versus.choice.options.length} ${versus.choice.value}`,
@@ -266,7 +275,7 @@ describe('sharing the leaders of a unit', () => {
             w.findComponent(Legend).vm.$emit('share');
             await flushPromises();
             const d = w.get('[data-share-kind]');
-            expect(d.attributes('data-share-cards'), seat).toBe('This view|County leaders|Side by side');
+            expect(d.attributes('data-share-cards'), seat).toBe('This view|County leaders|Side by side|Carousel');
             // Nairobi City (47) against the next code, Mombasa (1), lower code first.
             expect(d.attributes('data-share-versus'), seat).toBe(`${seat} 1,47 Compare with 46 1`);
             w.unmount();
@@ -293,9 +302,57 @@ describe('sharing the leaders of a unit', () => {
         }
     });
 
+    it('offers "Carousel" last for a county on any seat view that offers "Share this view"', async () => {
+        const expected: Record<string, string> = {
+            governor: 'This view|County leaders|Carousel',
+            senator: 'This view|County leaders|Carousel',
+            woman_rep: 'This view|County leaders|Carousel',
+            mp: 'This view|County leaders|Side by side|Carousel',
+            mca: 'This view|County leaders|Side by side|Carousel',
+        };
+        for (const [seat, cards] of Object.entries(expected)) {
+            const w = await mountPage(`?seat=${seat}`, county);
+            w.findComponent(Legend).vm.$emit('share');
+            await flushPromises();
+            const d = w.get('[data-share-kind]');
+            expect(d.attributes('data-share-cards'), seat).toBe(cards);
+            // Its slides: the cover, the leaders card, then the county on MP and on MCA.
+            expect(d.attributes('data-share-carousel'), seat).toBe(
+                'true cover:mca:/county/47,leaders:mca:/county/47?seat=county_seats,party:mp:/county/47?seat=mp,party:mca:/county/47?seat=mca',
+            );
+            w.unmount();
+            document.body.innerHTML = '';
+        }
+    });
+
+    it('offers no "Carousel" for all of Kenya, a constituency or a ward, or on "County seats" (the leaders way)', async () => {
+        const cards = async (search: string, unit: { name: string } | null = null) => {
+            const w = await mountPage(search, unit);
+            w.findComponent(Legend).vm.$emit('share');
+            await flushPromises();
+            const out = w.find('[data-share-kind]').attributes('data-share-cards') ?? '';
+            w.unmount();
+            document.body.innerHTML = '';
+            return out;
+        };
+        for (const seat of ['governor', 'senator', 'woman_rep', 'mp', 'mca', 'county_seats'])
+            expect(await cards(`?seat=${seat}`), seat).not.toContain('Carousel');
+        for (const seat of ['governor', 'mp', 'mca']) {
+            expect(await cards(`?seat=${seat}`, constituency), seat).not.toContain('Carousel');
+            expect(await cards(`?seat=${seat}`, ward), seat).not.toContain('Carousel');
+        }
+        // A county on "County seats" shares its leaders card alone, as v0.4.0 does.
+        expect(await cards('?seat=county_seats', county)).toBe('County leaders');
+    });
+
     it('offers "County leaders" beside the view whenever a county is focused, whatever the seat mode', async () => {
-        // On MP and MCA "Side by side" comes after the leaders card; the leaders card is the same.
-        const after: Record<string, string> = { governor: '', mp: '|Side by side', mca: '|Side by side' };
+        // On MP and MCA "Side by side" comes after the leaders card, then the carousel; the leaders
+        // card is the same.
+        const after: Record<string, string> = {
+            governor: '|Carousel',
+            mp: '|Side by side|Carousel',
+            mca: '|Side by side|Carousel',
+        };
         for (const seat of ['governor', 'mp', 'mca']) {
             const w = await mountPage(`?seat=${seat}`, county);
             w.findComponent(Legend).vm.$emit('share');
@@ -370,7 +427,7 @@ describe('sharing the leaders of a unit', () => {
             undefined,
         ]);
         expect(await offered('?seat=mca&parties=ind', county)).toEqual([
-            'This view|County leaders|Side by side',
+            'This view|County leaders|Side by side|Carousel',
             undefined,
         ]);
     });
@@ -400,7 +457,7 @@ describe('sharing the leaders of a unit', () => {
         for (const seat of ['mp', 'mca'])
             expect((await offered(`?seat=${seat}`))[1], seat).toBeUndefined();
         expect(await offered('?seat=county_seats')).toEqual(['Five seats|By the numbers', undefined]);
-        expect(await offered('?seat=governor', county)).toEqual(['This view|County leaders', undefined]);
+        expect(await offered('?seat=governor', county)).toEqual(['This view|County leaders|Carousel', undefined]);
         expect(await offered('?seat=woman_rep', constituency)).toEqual(['This view|Leaders', undefined]);
     });
 

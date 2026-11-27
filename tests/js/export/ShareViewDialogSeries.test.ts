@@ -10,6 +10,7 @@ import { leadersCardView } from '@/lib/export/leadersCard';
 import type { ShareCard, ShareableView } from '@/lib/export/shareView';
 import { snapshotView } from '@/lib/export/viewState';
 import type { SeatKey } from '@/lib/seats';
+import { NUMBERS_SEATS, numbersIndex } from './numbersFixtures';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
 
 // Map drawing is a deferred we resolve by hand; rasterising returns a PNG at once.
@@ -376,5 +377,27 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
             SLIDES.map((s, i) => real.filenameOf(s, 'square').replace(/\.png$/, `-${i + 1}-of-4.png`)),
         );
         expect(share.downloadBlob).not.toHaveBeenCalled();
+    });
+
+    it('makes the county carousel’s four files, cover first, in portrait by default', async () => {
+        const card = shareView.carouselCard({ seats: NUMBERS_SEATS, index: numbersIndex, county: 37, theme: 'light' })!;
+        mount(ShareViewDialog, {
+            props: { open: true, view: card.view, cards: [card], context: { ...context, index: numbersIndex, seats: NUMBERS_SEATS } },
+            attachTo: document.body,
+        });
+        await drawAll();
+        expect(sizes()).toEqual(['portrait', 'story']);
+        expect(document.querySelector('[data-fixed-headline]')?.textContent?.trim()).toBe('Who holds Kakamega’s 75 elected seats');
+        expect(pageText()).toBe('1 of 4');
+        button('Download all 4')!.click();
+        for (let round = 0; round < 20 && !vi.mocked(share.downloadBlob).mock.calls.length; round++) await drawAll('ALL');
+        await new Promise((r) => setTimeout(r, 1200));
+        await settle();
+        expect(vi.mocked(share.downloadBlob).mock.calls.map((c) => c[1])).toEqual([
+            'kenya-electoral-map-county-37-cover-portrait-1-of-4.png',
+            'kenya-electoral-map-leaders-county-37-portrait-2-of-4.png',
+            'kenya-electoral-map-mp-county-37-portrait-3-of-4.png',
+            'kenya-electoral-map-mca-county-37-portrait-4-of-4.png',
+        ]);
     });
 });
