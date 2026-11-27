@@ -118,7 +118,7 @@ async function onKey(e: KeyboardEvent, from: number) {
         role="radiogroup"
         aria-label="Colour the map by seat"
         data-onboarding="seat-chips"
-        class="pointer-events-none flex snap-x snap-proximity gap-1.5 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        class="pointer-events-none flex w-fit max-w-full snap-x snap-proximity gap-1.5 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
         <button
             v-for="(chip, i) in CHIPS"

@@ -49,6 +49,7 @@ import {
 } from '@/lib/export/viewMap';
 import { seatsInTheme } from '@/lib/export/viewState';
 import { THEMES, type ThemeName } from '@/lib/map/theme';
+import { TIPS, claimTip } from '@/lib/onboarding';
 
 const props = defineProps<{
     /** A seat view ("Share this view") or a party card. */
@@ -226,6 +227,16 @@ async function build() {
     }
 }
 
+// The first time the dialog opens, one line says which size is for what (once ever, after the tour).
+const sizeTip = ref(false);
+watch(
+    open,
+    (isOpen) => {
+        sizeTip.value = isOpen && claimTip('share-dialog');
+    },
+    { immediate: true },
+);
+
 watch(
     [open, size, themeName, headline],
     ([isOpen]) => {
@@ -336,6 +347,23 @@ async function copyCaption() {
                                 >
                             </label>
                         </div>
+                        <p
+                            v-if="sizeTip"
+                            role="status"
+                            data-onboarding-tip
+                            class="mt-2 flex items-start gap-2 border-l-4 border-ink pl-3 text-[14px]"
+                        >
+                            <span class="min-w-0 flex-1 pt-2.5">{{
+                                TIPS['share-dialog'].text({})
+                            }}</span>
+                            <button
+                                type="button"
+                                class="min-h-11 shrink-0 px-2 underline underline-offset-4"
+                                @click="sizeTip = false"
+                            >
+                                Got it
+                            </button>
+                        </p>
                     </fieldset>
 
                     <fieldset class="mt-3">

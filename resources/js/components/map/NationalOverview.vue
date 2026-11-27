@@ -96,6 +96,7 @@ const hasData = computed(() => props.seats.holders.length > 0);
                     v-if="canShareView"
                     type="button"
                     data-share-view
+                    data-onboarding="share-view"
                     class="flex h-11 w-full items-center justify-center rounded-md border border-hairline bg-surface px-3 text-[15px]"
                     @click="emit('shareView')"
                 >

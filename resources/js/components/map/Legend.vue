@@ -204,6 +204,7 @@ const spoken = (r: LegendRow) =>
                 <button
                     v-if="filtered"
                     type="button"
+                    data-onboarding="legend-clear"
                     class="min-h-11 text-[14px] underline underline-offset-4"
                     @click="emit('clear')"
                 >
@@ -213,6 +214,7 @@ const spoken = (r: LegendRow) =>
                     v-if="shareable"
                     type="button"
                     data-share-view
+                    data-onboarding="share-view"
                     class="ml-auto flex min-h-11 items-center rounded-md px-3 text-[14px] font-medium"
                     :class="
                         shareEmphasis

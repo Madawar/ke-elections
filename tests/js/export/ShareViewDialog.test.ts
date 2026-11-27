@@ -196,4 +196,34 @@ describe('ShareViewDialog with a party card', () => {
         expect(document.querySelector('[data-rows-hint]')).toBeNull();
         wrapper.unmount();
     });
+    it('says once which size is for what, after the tour, and never again', async () => {
+        const { TOUR_KEY, resetOnboardingState, setFlag, state } =
+            await import('@/lib/onboarding');
+        const open = async () => {
+            const w = mount(ShareViewDialog, {
+                props: { view, context, open: true },
+                attachTo: document.body,
+            });
+            await settle();
+            const tip = document.querySelector('[data-onboarding-tip]');
+            w.unmount();
+            document.body.innerHTML = '';
+            return tip?.textContent ?? null;
+        };
+        localStorage.clear();
+        resetOnboardingState();
+        // Before the tour is done, or during it, there is no tip.
+        expect(await open()).toBeNull();
+        setFlag(TOUR_KEY);
+        state.tourActive = true;
+        expect(await open()).toBeNull();
+        state.tourActive = false;
+        expect(await open()).toContain(
+            'Pick a size: square for feeds, story for TikTok and Reels, wide for X.',
+        );
+        state.tipShown = false;
+        expect(await open()).toBeNull();
+        resetOnboardingState();
+        localStorage.clear();
+    });
 });

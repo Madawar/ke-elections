@@ -125,7 +125,7 @@ const areaLine = (u: SearchResult) =>
 </script>
 
 <template>
-    <div class="relative w-full">
+    <div class="relative w-full" data-onboarding="search">
         <label class="sr-only" for="unit-search"
             >Search places, people and parties</label
         >

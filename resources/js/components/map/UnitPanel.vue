@@ -301,6 +301,7 @@ const sourceHost = (url: string) => {
                 v-if="canShareView"
                 type="button"
                 data-share-view
+                data-onboarding="share-view"
                 class="mb-2 flex h-11 w-full items-center justify-center rounded-md bg-ink px-3 text-[15px] font-medium text-surface"
                 @click="emit('shareView')"
             >

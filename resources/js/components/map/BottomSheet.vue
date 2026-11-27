@@ -71,6 +71,11 @@ const dragPx = ref<number | null>(null);
 let suppressClick = false;
 
 function onPointerDown(e: PointerEvent) {
+    // A button or link in the header (List, About, Done) gets its own tap: capturing the pointer
+    // would send the click to the sheet instead. Only the handle and plain header text drag.
+    const target = e.target as Element | null;
+    if (target?.closest('button:not([data-sheet-handle]), a, input, select'))
+        return;
     drag.value = {
         id: e.pointerId,
         startY: e.clientY,

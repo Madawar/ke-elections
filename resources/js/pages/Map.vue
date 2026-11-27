@@ -2,7 +2,15 @@
 import { Head, router } from '@inertiajs/vue3';
 import { useEventListener, useMediaQuery, useStorage } from '@vueuse/core';
 import { useAppearance } from '@/composables/useAppearance';
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    shallowRef,
+    watch,
+} from 'vue';
 import InPowerExport from '@/components/export/InPowerExport.vue';
 import LocatorExport from '@/components/export/LocatorExport.vue';
 import ShareViewDialog from '@/components/export/ShareViewDialog.vue';
@@ -14,6 +22,7 @@ import Legend from '@/components/map/Legend.vue';
 import MapControls from '@/components/map/MapControls.vue';
 import MapView from '@/components/map/MapView.vue';
 import NationalOverview from '@/components/map/NationalOverview.vue';
+import Onboarding from '@/components/map/Onboarding.vue';
 import PartyPanel from '@/components/map/PartyPanel.vue';
 import OutsideHint, {
     hintText,
@@ -270,12 +279,18 @@ const legend = computed(() => {
 });
 /** A legend row was pressed: switch the parties it stands for on or off, each independently. */
 function toggleParty(key: string) {
-    if (legend.value)
-        onlyParties.value = toggledParties(
-            legend.value.members,
-            onlyParties.value,
-            key,
-        );
+    if (!legend.value) return;
+    const wasFiltered = onlyParties.value.length > 0;
+    onlyParties.value = toggledParties(
+        legend.value.members,
+        onlyParties.value,
+        key,
+    );
+    // The first time a party is picked out, say how to clear it.
+    if (!wasFiltered && onlyParties.value.length > 0)
+        void onboarding.value?.showTip('party', {
+            party: legend.value.rows.find((r) => r.key === key)?.label,
+        });
 }
 // A different seat keeps the highlighted parties that hold it and drops the rest.
 watch(colourKey, (k) => {
@@ -393,6 +408,7 @@ function selectUnit(
     } = {},
 ) {
     outsideHint.value?.dismiss();
+    onboarding.value?.dismissTip();
     overlayInfo.value = null;
     tip.value = null;
     highlightSeat.value = undefined;
@@ -425,6 +441,8 @@ function selectUnit(
     announce.value = announceSelection(unit, ancestors);
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+    // The first time the person picks a place (not a link or a step back), point at Share this view.
+    if (history === 'user') void onboarding.value?.showTip('unit');
 }
 
 // ---- party profile ------------------------------------------------------------------------
@@ -547,13 +565,49 @@ const chipParents = computed(() => {
     return { county: up('county'), constituency: up('constituency') };
 });
 
+// The first time the chips for county-wide seats are muted (inside a constituency or a ward).
+watch(
+    () => focusOf(selection.value)?.level ?? null,
+    (level) => {
+        const county = chipParents.value.county;
+        if ((level === 'constituency' || level === 'ward') && county)
+            void onboarding.value?.showTip('muted-chip', { county });
+    },
+);
+
 const onPick = (p: Picked) =>
     selectUnit(index.value?.get(p.level, p.code) ?? null);
+
+// ---- onboarding -------------------------------------------------------------------------
+const onboarding = ref<InstanceType<typeof Onboarding> | null>(null);
+let tourTimer = 0;
+onBeforeUnmount(() => window.clearTimeout(tourTimer));
+// The part of the screen the panel covers, so the tour can point at the middle of what is left.
+const mapInset = computed(() =>
+    isDesktop.value
+        ? { left: 400, bottom: 0 }
+        : { left: 0, bottom: sheetHeight.value },
+);
+/** The share step points inside the sheet: on a phone, open it so the button shows. */
+async function prepareStep(id: string) {
+    if (id !== 'share' || isDesktop.value || snap.value !== 'peek') return;
+    if (!isSeatMode.value) return;
+    snap.value = 'half';
+    await new Promise((r) => setTimeout(r, 300));
+}
+/** "Show tips again" in the About sheet: leave it, and start the tour over. */
+function showTipsAgain() {
+    view.value = 'unit';
+    outsideHint.value?.dismiss();
+    void nextTick(() => onboarding.value?.restartTour());
+}
 
 // The map can mount after the data (or the other way round): apply a pending deep link once both exist.
 watch(
     () => mapRef.value?.ready,
     (ready) => {
+        // A first visit gets the tour once the map is up and the sheet has settled.
+        if (ready) tourTimer = window.setTimeout(() => onboarding.value?.startTour(), 700);
         if (ready) {
             mapRef.value?.setShowSurroundings(showSurroundings.value);
             mapRef.value?.setFocus(focusOf(selection.value));
@@ -678,6 +732,8 @@ function onOutsideClick() {
     const s = selection.value;
     // With the surroundings shown there is a neighbour to pick, and Back is on screen: no nudge.
     if (!s || s.l === 'province' || showSurroundings.value) return;
+    // The tour and the tips have the floor: never two cards at once.
+    if (onboarding.value?.busy()) return;
     if (outsideHint.value?.nudge()) announce.value = hintText(s.n);
 }
 
@@ -753,6 +809,7 @@ function onOverlayClick(
 async function locate() {
     if (!navigator.geolocation || !manifest.value) {
         locateMessage.value = 'This device cannot share its location.';
+        void onboarding.value?.showTip('locate', { reason: 'unsupported' });
         return;
     }
     locating.value = true;
@@ -778,9 +835,13 @@ async function locate() {
                 locating.value = false;
             }
         },
-        () => {
+        (error) => {
             locating.value = false;
             locateMessage.value = 'Location was not shared.';
+            // Code 1 is "permission denied"; anything else is the device not finding itself.
+            void onboarding.value?.showTip('locate', {
+                reason: error.code === error.PERMISSION_DENIED ? 'denied' : 'failed',
+            });
         },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
@@ -990,6 +1051,7 @@ const showView = (v: typeof view.value) => {
 
         <div
             v-if="legend && !(snap === 'full' && !isDesktop)"
+            data-onboarding="legend"
             class="absolute left-3 z-10 md:left-[396px]"
             :style="{ bottom: isDesktop ? '24px' : `${sheetHeight + 12}px` }"
         >
@@ -1123,7 +1185,7 @@ const showView = (v: typeof view.value) => {
                 :overlays="overlays"
                 :swatch-for="(o) => o.swatch?.(THEMES[theme])"
             />
-            <AboutSheet v-else-if="view === 'about'" />
+            <AboutSheet v-else-if="view === 'about'" @show-tips="showTipsAgain" />
             <UnitList
                 v-else-if="view === 'list' && index"
                 :index="index"
@@ -1197,6 +1259,13 @@ const showView = (v: typeof view.value) => {
             v-model:open="exportNational"
             :seats="seats"
             :theme="THEMES[theme]"
+        />
+
+        <Onboarding
+            ref="onboarding"
+            :map-inset="mapInset"
+            :avoid-map="!isDesktop && selection !== null"
+            :prepare="prepareStep"
         />
 
         <div class="sr-only" aria-live="polite">{{ announce }}</div>

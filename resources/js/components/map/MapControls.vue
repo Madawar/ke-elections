@@ -48,6 +48,7 @@ const btn =
             :class="btn"
             aria-label="Find my ward"
             title="Find my ward"
+            data-onboarding="locate"
             :disabled="locating"
             @click="$emit('locate')"
         >

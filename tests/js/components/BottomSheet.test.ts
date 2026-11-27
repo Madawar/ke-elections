@@ -148,4 +148,20 @@ describe('BottomSheet', () => {
             },
         );
     });
+
+    it('leaves a button in the header to take its own tap, so the pointer is not captured', async () => {
+        const wrapper = mount(BottomSheet, {
+            props: { snap: 'peek' as Snap, desktop: false },
+            slots: { header: '<button class="in-header">About</button>' },
+            attachTo: document.body,
+        });
+        const capture = vi.fn();
+        const drag = wrapper.get('[data-sheet-drag]').element;
+        drag.setPointerCapture = capture;
+        await wrapper.get('.in-header').trigger('pointerdown', { pointerId: 1 });
+        expect(capture).not.toHaveBeenCalled();
+        await wrapper.get('[data-sheet-handle]').trigger('pointerdown', { pointerId: 1 });
+        expect(capture).toHaveBeenCalledOnce();
+        wrapper.unmount();
+    });
 });

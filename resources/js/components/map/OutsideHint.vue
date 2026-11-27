@@ -35,13 +35,16 @@ export const markHintUsed = () => setShown(MAX_SHOWS);
 // `nudge()` on such a tap and `dismiss()` on the next map tap; the card closes itself after 6 s,
 // on Escape, and when either of its buttons is used.
 import { useEventListener } from '@vueuse/core';
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
+import { state as onboarding } from '@/lib/onboarding';
 
 defineProps<{ unit: string; parent: string }>();
 const emit = defineEmits<{ stepUp: []; showSurroundings: [] }>();
 
 const open = ref(false);
 let timer = 0;
+// The onboarding tips keep away while this card is open, so the two never show together.
+watch(open, (o) => (onboarding.hintOpen = o), { flush: 'sync' });
 
 function dismiss() {
     open.value = false;
@@ -70,7 +73,10 @@ function use(event: 'stepUp' | 'showSurroundings') {
 useEventListener(document, 'keydown', (e: KeyboardEvent) => {
     if (open.value && e.key === 'Escape') dismiss();
 });
-onBeforeUnmount(() => window.clearTimeout(timer));
+onBeforeUnmount(() => {
+    window.clearTimeout(timer);
+    onboarding.hintOpen = false;
+});
 defineExpose({ nudge, dismiss });
 </script>
 
