@@ -494,3 +494,46 @@ never cover the control they describe.
 - The whole tour.
 - Each contextual tip, triggered.
 - The About help section.
+
+**Addition to Task 5: the "Leaders here" strip in the legend box (owner, 2026-11-27).** Looking at
+the "MCA seats in Magarini by party" legend, the owner said: "In this box can we show governor,
+senator while at the lowest level, and as we move up it shows the higher electives."
+- **Placement:** a compact strip at the top of the legend box, above the party bars, titled
+  "Leaders here".
+- **Rows by focus level.** Each row shows the ballot-colour bar, the seat, the name exactly as the
+  data spells it, and the party abbreviation chip.
+
+  | Focus | Rows |
+  |---|---|
+  | Ward | MCA (this ward), MP, Governor, Senator, Woman Rep |
+  | Constituency | MP, Governor, Senator, Woman Rep |
+  | County | Governor, Senator, Woman Rep |
+  | Kenya | President and Deputy President, only once they're imported through the validated CSV path with a source. Until then, the strip is absent at national level. `seats.json` has no President seat today. |
+
+- **Behaviour:**
+  - Moving up drops the finer seats; moving down adds them. The rows follow the focus through tap,
+    Back, zoom step-up and search.
+  - The strip omits the row for the seat the legend is already counting when that scope has
+    exactly one holder. For example, at a county in Governor mode, the legend's single bar already
+    shows the Governor.
+  - A row with no holder reads "No approved data yet".
+  - Tapping a row's name opens that person in the panel. It's the same action as picking them in
+    search, so the focus doesn't change.
+- **Keeping the box lean:**
+  - The rows are dense, at most 5 of them, and use 44px targets only on the tappable name.
+  - The strip can collapse to one line, "Leaders here (5)". Remember that per viewer (localStorage
+    with try/catch).
+  - The default is expanded on desktop and collapsed on phones.
+  - The legend box's max height and scrolling still hold. The strip must not push the share button
+    out of reach.
+- **One source of truth:** add `leadersFor(unit, seats)` in `resources/js/lib/leaders.ts`. The
+  panel's "Who represents" section, the card leaders strip and this legend strip all use it. Don't
+  build three versions.
+- **Tests:**
+  - `leadersFor` for a ward, a constituency, a county and Kenya, with rows in fixed order and the
+    single-holder omission.
+  - Vacancy rows.
+  - The strip updates when the focus steps up.
+  - The collapsed state is remembered.
+- **Playwright:** Magarini in MCA mode, then a ward in it, then Kilifi, then Kenya, on phone and
+  desktop.
