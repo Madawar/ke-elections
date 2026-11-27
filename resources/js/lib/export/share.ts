@@ -68,3 +68,39 @@ export async function shareOrDownload(
     downloadBlob(blob, filename);
     return 'downloaded';
 }
+
+export type ShareFilesResult = 'shared' | 'cancelled' | 'blocked' | 'unavailable';
+
+/**
+ * Share several images in one call (a series), where the device can share them all. `blocked`:
+ * the browser refused because the tap that asked is too long ago (the images took a while to
+ * make), so the person can tap again; `unavailable`: this device cannot share these files, or
+ * the share failed some other way, and the caller saves them instead.
+ */
+export async function shareFiles(
+    items: readonly { blob: Blob; filename: string }[],
+    title: string,
+    text?: string,
+): Promise<ShareFilesResult> {
+    const files = items.map(
+        (i) => new File([i.blob], i.filename, { type: i.blob.type || 'image/png' }),
+    );
+    try {
+        if (
+            typeof navigator === 'undefined' ||
+            typeof navigator.share !== 'function' ||
+            !(navigator.canShare?.({ files }) ?? false)
+        )
+            return 'unavailable';
+    } catch {
+        return 'unavailable';
+    }
+    try {
+        await navigator.share(text ? { files, title, text } : { files, title });
+        return 'shared';
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
+        if (error instanceof DOMException && error.name === 'NotAllowedError') return 'blocked';
+        return 'unavailable';
+    }
+}

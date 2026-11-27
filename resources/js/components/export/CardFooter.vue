@@ -15,6 +15,11 @@ const props = withDefaults(
         theme: MapTheme;
         /** The credit line: every map credit unless the card uses less (it was measured with it). */
         attribution?: string;
+        /**
+         * A slide's place in its series ("2 of 4"), on the link's line; a card outside a series
+         * has none and its footer is drawn exactly as before.
+         */
+        page?: string;
     }>(),
     { attribution: ATTRIBUTION },
 );
@@ -25,8 +30,14 @@ const block = computed(() =>
         asOf: props.asOf,
         attribution: props.attribution,
         url: props.url,
+        page: props.page,
     }),
 );
+/** The footer's lines, and the page text after them when there is one. */
+const texts = computed(() => [
+    ...block.value.lines.map((line) => ({ ...line, page: false })),
+    ...(block.value.page ? [{ ...block.value.page, page: true }] : []),
+]);
 </script>
 
 <template>
@@ -40,7 +51,7 @@ const block = computed(() =>
             stroke-width="2"
         />
         <text
-            v-for="(line, i) in block.lines"
+            v-for="(line, i) in texts"
             :key="i"
             :x="line.x"
             :y="line.y"
@@ -48,6 +59,7 @@ const block = computed(() =>
             :font-weight="line.weight ?? 400"
             :text-anchor="line.anchor ?? 'start'"
             :fill="line.tone === 'ink' ? theme.ink : theme.muted"
+            :data-page="line.page ? '' : undefined"
             >{{ line.text }}</text
         >
     </g>

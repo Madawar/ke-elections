@@ -26,6 +26,8 @@ const props = withDefaults(
         mapImages?: Record<string, string>;
         mapPlaceholder?: string;
         mapAspect?: number;
+        /** A slide's place in its series ("2 of 4"), for the footer; none outside a series. */
+        page?: string;
     }>(),
     { theme: () => THEMES.dark },
 );
@@ -190,6 +192,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 :url="url"
                 :theme="theme"
                 :attribution="layout.attribution"
+                :page="page"
             />
             <SampleWatermark
                 v-if="view.sample"

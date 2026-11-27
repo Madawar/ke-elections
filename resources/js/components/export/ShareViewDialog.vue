@@ -4,6 +4,7 @@
 // copy the caption. The view is fixed when the dialog opens, so the card does not change under
 // the person. The PNG is made as soon as the preview is ready, so a tap on "Share" reaches the
 // share sheet while the browser still counts it as the person's tap.
+import { ChevronLeft, ChevronRight } from '@lucide/vue';
 import { useStorage, watchDebounced } from '@vueuse/core';
 import {
     DialogClose,
@@ -22,6 +23,7 @@ import { FontLoadError, svgToPng } from '@/lib/export/rasterize';
 import {
     canShareFiles,
     downloadBlob,
+    shareFiles,
     shareOrDownload,
 } from '@/lib/export/share';
 import {
@@ -46,6 +48,8 @@ import {
     mapSlotsOf,
     shareCards,
     sizesOf,
+    slideFilename,
+    slidePlace,
 } from '@/lib/export/shareView';
 import { type ViewMapContext, renderViewMap } from '@/lib/export/viewMap';
 import { seatsInTheme } from '@/lib/export/viewState';
@@ -83,7 +87,25 @@ const picked = computed(() => {
     const c = choice.value;
     return c ? (picks.value[which.value] ?? c.value) : null;
 });
+/** The slides of a series, while one is picked: the dialog only knows the entry has slides. */
+const slides = computed(() => current.value?.slides ?? null);
+/** The slide shown of each series, by card key, while the dialog is open with these cards. */
+const steps = ref<Record<string, number>>({});
+const step = computed(() => {
+    const list = slides.value;
+    return list
+        ? Math.max(0, Math.min(steps.value[which.value] ?? 0, list.length - 1))
+        : 0;
+});
+function setStep(i: number) {
+    if (slides.value) steps.value = { ...steps.value, [which.value]: i };
+}
+/** "2 of 4" in each slide's footer; none for a card outside a series. */
+const place = computed(() =>
+    slides.value ? slidePlace(step.value, slides.value.length) : undefined,
+);
 const base = computed<ShareableView>(() => {
+    if (slides.value) return slides.value[step.value];
     const c = choice.value;
     const p = picked.value;
     if (c && p !== null && p !== c.value) return c.make(p);
@@ -100,7 +122,13 @@ function choose(value: string) {
  * The card's sizes. The person's stored size is shown when the card has it; otherwise the card's
  * first size is, and the stored choice stays for the next card that has it.
  */
-const sizes = computed(() => sizesOf(base.value));
+const sizes = computed(() => {
+    const list = slides.value;
+    // A series offers the sizes every slide has, in the first slide's order.
+    return list
+        ? sizesOf(list[0]).filter((s) => list.every((v) => sizesOf(v).includes(s)))
+        : sizesOf(base.value);
+});
 const stored = useStorage<ViewSize>('km.viewSize', 'square');
 const size = computed<ViewSize>({
     get: () =>
@@ -119,12 +147,15 @@ const seatView = computed(() => {
     const v = shown.value;
     return v.kind === 'party' ? v : null;
 });
-const copy = computed(() => dialogCopy(base.value));
+/** A series is described, and captioned, by its first slide. */
+const copy = computed(() => dialogCopy(slides.value?.[0] ?? base.value));
 
 const HEADLINE_MAX = 120;
 const generated = computed(() => headlineOf(base.value));
 /** False for a card whose headline is a fixed template: it is shown, not edited. */
-const editable = computed(() => headlineEditable(base.value));
+const editable = computed(
+    () => !slides.value && headlineEditable(base.value),
+);
 const wording = computed(() => headlineWording(base.value));
 const headlineInput = ref(generated.value);
 /**
@@ -148,14 +179,15 @@ const headline = computed(() =>
 const edited = computed(() => headlineInput.value.trim() !== generated.value);
 
 const url = computed(() => siteUrl(base.value.path));
-const caption = computed(() =>
-    captionOf(
-        shown.value,
-        url.value,
+const caption = computed(() => {
+    const first = slides.value?.[0];
+    return captionOf(
+        first ? inTheme(first, themeName.value, props.context) : shown.value,
+        first ? siteUrl(first.path) : url.value,
         size.value === 'x' ? 'x' : 'instagram',
-        headline.value,
-    ),
-);
+        first ? headlineOf(first) : headline.value,
+    );
+});
 const mapAspect = computed(() => aspectOf(base.value));
 /** When this size has no room for every row, say how many it lists and which size lists all. */
 const rowsHint = computed(() => {
@@ -175,7 +207,11 @@ const rowsHint = computed(() => {
         .map((s) => VIEW_SIZE_LABELS[s]);
     return `This size lists ${here.mixRows.length} of the ${all} ${v.mix.rowWord}.${fits.length ? ` ${fits.join(' and ')} ${fits.length === 1 ? 'lists' : 'list'} them all.` : ''}`;
 });
-const filename = computed(() => filenameOf(base.value, size.value));
+const filename = computed(() =>
+    slides.value
+        ? slideFilename(base.value, size.value, step.value, slides.value.length)
+        : filenameOf(base.value, size.value),
+);
 
 /** The card's map images by slot key; `mapImage` is the one-map cards' "map". */
 const mapImages = shallowRef<Record<string, string>>({});
@@ -184,6 +220,18 @@ const mapStatus = ref('Drawing the map…');
 const blob = shallowRef<Blob | null>(null);
 const status = ref<'drawing' | 'ready' | 'error'>('drawing');
 const message = ref('');
+/** "Drawing 2 of 4…" while every slide of a series is made; shown in place of the message. */
+const progress = ref('');
+interface SlideFile {
+    blob: Blob;
+    filename: string;
+}
+/** Counts the runs of "Download all"; closing the dialog or a newer run stops an older one. */
+let batch = 0;
+const batching = ref(false);
+/** The last series made, for the size and theme it was made in, so a second tap reuses it. */
+let made: { key: string; files: SlideFile[] } | null = null;
+
 const card = ref<HTMLElement | null>(null);
 const captionBox = ref<HTMLTextAreaElement | null>(null);
 const canShare = ref(false);
@@ -258,9 +306,13 @@ async function build() {
         url: url.value,
         mapAspect: mapAspect.value,
     });
-    // A card's pick is part of its key: two picks of one card may have the same slot and box.
-    const cardKey =
-        picked.value === null ? which.value : `${which.value}=${picked.value}`;
+    // A card's pick, or a slide's place, is part of its key: two picks of one card, or two slides
+    // of one series, may have the same slot and box.
+    const cardKey = slides.value
+        ? `${which.value}#${step.value}`
+        : picked.value === null
+          ? which.value
+          : `${which.value}=${picked.value}`;
     const keys = slots.map(
         (slot) =>
             `${cardKey}|${s}|${name}|${slot.key}|${slot.box.w}x${slot.box.h}`,
@@ -284,7 +336,7 @@ async function build() {
             if (images.get(keys[i]) === pending[i]) forget(keys[i]);
             if (t !== token) return;
             // Skipped while another card or size was wanted, and wanted again now: draw it.
-            if (error instanceof Superseded) return void build();
+            if (error instanceof Superseded) return build();
             console.error(error);
             // Say so in the dialog, never on the card: no image is made without its maps.
             mapImages.value = {};
@@ -330,14 +382,31 @@ watch(
     { immediate: true },
 );
 
+/** The latest build, so "Download all" can wait for each slide's. */
+let building: Promise<void> = Promise.resolve();
+/** Until no newer build has started since: the card shown is then the one built. */
+async function settled() {
+    for (;;) {
+        const b = building;
+        await b;
+        await nextTick();
+        if (b === building) return;
+    }
+}
+
 watch(
-    [open, size, themeName, headline, which, picked],
+    [open, size, themeName, headline, which, picked, step],
     ([isOpen]) => {
         if (isOpen) {
             canShare.value = canShareFiles();
-            void build();
+            building = build();
         } else {
             token++;
+            // "Download all" stops with the dialog.
+            batch++;
+            batching.value = false;
+            progress.value = '';
+            made = null;
             // Nobody waits for the queued maps any more: they are skipped, not drawn.
             wanted = new Set();
             images.clear();
@@ -354,6 +423,8 @@ watch(
         images.clear();
         finished.clear();
         picks.value = {};
+        steps.value = {};
+        made = null;
         which.value = options.value[0].key;
         themeName.value = base.value.theme;
         setHeadline(headlineOf(base.value));
@@ -363,7 +434,7 @@ watch(
 // changes, before the card is built again, so the new card starts from its own headline (its map
 // has its own cache key).
 watch(
-    [which, picked],
+    [which, picked, step],
     () => {
         setHeadline(headlineOf(base.value));
     },
@@ -384,6 +455,82 @@ function download() {
     if (!blob.value) return;
     downloadBlob(blob.value, filename.value);
     message.value = `Saved ${filename.value}`;
+}
+
+// ---- a series: every slide in turn ----
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Every slide of the series as an image, in order: the preview steps through them, each drawn
+ * as the person would see it, and "Drawing 2 of 4" says where it is. Null when a slide could not
+ * be made (the dialog then shows the usual error, on that slide) or the run was stopped.
+ */
+async function makeAll(): Promise<SlideFile[] | null> {
+    const list = slides.value;
+    if (!list) return null;
+    const key = `${which.value}|${size.value}|${themeName.value}`;
+    if (made?.key === key) return made.files;
+    const run = ++batch;
+    const back = step.value;
+    batching.value = true;
+    const files: SlideFile[] = [];
+    let failed = false;
+    try {
+        for (let i = 0; i < list.length; i++) {
+            progress.value = `Drawing ${i + 1} of ${list.length}…`;
+            setStep(i);
+            await nextTick();
+            await settled();
+            if (run !== batch) return null;
+            if (status.value !== 'ready' || !blob.value) {
+                failed = true;
+                return null;
+            }
+            files.push({ blob: blob.value, filename: filename.value });
+        }
+        made = { key, files };
+        return files;
+    } finally {
+        if (run === batch) {
+            batching.value = false;
+            progress.value = '';
+            // Back to the slide the person was on; a failed run stays on the slide that failed.
+            if (!failed && open.value) {
+                setStep(back);
+                await nextTick();
+                await settled();
+            }
+        }
+    }
+}
+
+/** Saves the files one after another; false when the dialog was closed on the way. */
+async function saveEach(files: SlideFile[]): Promise<boolean> {
+    const run = batch;
+    for (const [i, f] of files.entries()) {
+        if (i) await pause(250);
+        if (run !== batch || !open.value) return false;
+        downloadBlob(f.blob, f.filename);
+    }
+    // A browser may keep only the first of several downloads (some phones ask, some refuse).
+    message.value = `Saved ${files.length} images. If your browser saved only some, step to each slide and use Download PNG.`;
+    return true;
+}
+
+async function downloadAll() {
+    const files = await makeAll();
+    if (files) await saveEach(files);
+}
+
+/** Shares every slide's file in one call; where it cannot, saves them. */
+async function shareAll() {
+    const first = slides.value?.[0];
+    const files = await makeAll();
+    if (!files || !first) return;
+    const result = await shareFiles(files, headlineOf(first), caption.value);
+    if (result === 'blocked')
+        message.value = `The ${files.length} images are ready. Tap Share all ${files.length} again to send them.`;
+    else if (result === 'unavailable') await saveEach(files);
 }
 async function copyCaption() {
     try {
@@ -426,7 +573,11 @@ async function copyCaption() {
                 </div>
 
                 <div class="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-2">
-                    <fieldset v-if="options.length > 1" class="mb-3">
+                    <fieldset
+                        v-if="options.length > 1"
+                        class="mb-3"
+                        :disabled="batching"
+                    >
                         <legend class="mb-2 text-[15px] font-semibold">
                             Card
                         </legend>
@@ -478,7 +629,49 @@ async function copyCaption() {
                             </option>
                         </select>
                     </div>
-                    <fieldset>
+                    <div
+                        v-if="slides"
+                        role="group"
+                        aria-labelledby="view-slide-label"
+                        data-slide-stepper
+                        class="mb-3"
+                    >
+                        <p
+                            id="view-slide-label"
+                            class="mb-1 text-[15px] font-semibold"
+                        >
+                            Slide
+                        </p>
+                        <div class="flex items-center gap-2">
+                            <button
+                                type="button"
+                                aria-label="Previous slide"
+                                class="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-hairline px-3 text-[14px] focus-visible:outline-2 focus-visible:outline-ink disabled:opacity-40"
+                                :disabled="step === 0 || batching"
+                                @click="setStep(step - 1)"
+                            >
+                                <ChevronLeft class="size-4" aria-hidden="true" />
+                                Previous
+                            </button>
+                            <span
+                                data-slide-place
+                                role="status"
+                                class="flex-1 text-center text-[15px] tabular-nums"
+                                >{{ place }}</span
+                            >
+                            <button
+                                type="button"
+                                aria-label="Next slide"
+                                class="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-hairline px-3 text-[14px] focus-visible:outline-2 focus-visible:outline-ink disabled:opacity-40"
+                                :disabled="step === slides.length - 1 || batching"
+                                @click="setStep(step + 1)"
+                            >
+                                Next
+                                <ChevronRight class="size-4" aria-hidden="true" />
+                            </button>
+                        </div>
+                    </div>
+                    <fieldset :disabled="batching">
                         <legend class="mb-2 text-[15px] font-semibold">
                             Size
                         </legend>
@@ -533,7 +726,7 @@ async function copyCaption() {
                         </p>
                     </fieldset>
 
-                    <fieldset class="mt-3">
+                    <fieldset class="mt-3" :disabled="batching">
                         <legend class="mb-2 text-[15px] font-semibold">
                             Colours
                         </legend>
@@ -624,6 +817,7 @@ async function copyCaption() {
                             :map-aspect="mapAspect"
                             :url="url"
                             :theme="theme"
+                            :page="place"
                         />
                     </div>
 
@@ -651,9 +845,48 @@ async function copyCaption() {
                         class="mb-2 min-h-5 text-[13px] text-muted-ink"
                         aria-live="polite"
                     >
-                        {{ message }}
+                        {{ progress || message }}
                     </p>
-                    <div class="flex gap-2">
+                    <div v-if="slides" class="grid grid-cols-2 gap-2">
+                        <button
+                            v-if="canShare"
+                            type="button"
+                            class="flex h-11 items-center justify-center rounded-md bg-ink px-3 text-[15px] font-medium text-surface disabled:opacity-50"
+                            :disabled="status !== 'ready' || batching"
+                            @click="shareAll"
+                        >
+                            Share all {{ slides.length }}
+                        </button>
+                        <button
+                            type="button"
+                            class="flex h-11 items-center justify-center rounded-md border border-hairline px-3 text-[15px] font-medium disabled:opacity-50"
+                            :disabled="status !== 'ready' || batching"
+                            @click="download"
+                        >
+                            Download PNG
+                        </button>
+                        <button
+                            type="button"
+                            class="flex h-11 items-center justify-center rounded-md px-3 text-[15px] font-medium disabled:opacity-50"
+                            :class="
+                                canShare
+                                    ? 'border border-hairline'
+                                    : 'bg-ink text-surface'
+                            "
+                            :disabled="status !== 'ready' || batching"
+                            @click="downloadAll"
+                        >
+                            Download all {{ slides.length }}
+                        </button>
+                        <button
+                            type="button"
+                            class="flex h-11 items-center justify-center rounded-md border border-hairline px-3 text-[15px] font-medium"
+                            @click="copyCaption"
+                        >
+                            Copy caption
+                        </button>
+                    </div>
+                    <div v-else class="flex gap-2">
                         <button
                             v-if="canShare"
                             type="button"

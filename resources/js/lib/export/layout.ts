@@ -287,6 +287,8 @@ export interface FooterInput {
     asOf: string | null; // already formatted
     attribution: string;
     url: string; // shown without the protocol
+    /** A slide's place in its series ("2 of 4"), on the link's line; none outside a series. */
+    page?: string;
 }
 
 const BRAND = 'Kenya Electoral Map';
@@ -296,7 +298,7 @@ export function footerBlock(
     area: Box,
     fonts: FooterFonts,
     input: FooterInput,
-): { rule: number; lines: TextItem[]; bottom: number } {
+): { rule: number; lines: TextItem[]; page: TextItem | null; bottom: number } {
     const lines: TextItem[] = [];
     const lead = (s: number) => s * 1.35;
     let y = area.y + Math.round(fonts.text * 0.7);
@@ -332,12 +334,37 @@ export function footerBlock(
         floor,
         true, // drawn at weight 600
     );
+    const brandW = textWidth(BRAND, fonts.url, true);
     const brandFits =
-        textWidth(BRAND, fonts.url, true) +
-            textWidth(url, urlSize, true) +
-            fonts.url * 1.5 <=
-        area.w;
-    if (brandFits)
+        brandW + textWidth(url, urlSize, true) + fonts.url * 1.5 <= area.w;
+    // A slide's page text sits on this line too, so the footer is no taller for it: beside the
+    // link after the brand; where the three do not fit, in the brand's place; where even the page
+    // text and the link do not, the link shrinks to make room (down to its floor, then without its
+    // query). A card outside a series takes none of these steps.
+    let page: TextItem | null = null;
+    let showBrand = brandFits;
+    let linkText = url;
+    let linkSize = urlSize;
+    if (input.page) {
+        const text = input.page;
+        const gap = Math.round(fonts.url * 0.6);
+        const pageW = (s: number) => textWidth(text, s, false);
+        const urlW = textWidth(url, urlSize, true);
+        const muted = { y, text, weight: 400, tone: 'muted' as const };
+        if (brandFits && brandW + fonts.url * 1.5 + pageW(urlSize) + gap + urlW <= area.w) {
+            page = { ...muted, x: Math.round(area.x + area.w - urlW - gap), size: urlSize, anchor: 'end' };
+        } else {
+            showBrand = false;
+            const room = area.w - pageW(urlSize) - gap;
+            linkSize = fitFontSize(url, room, urlSize, floor, true);
+            if (textWidth(url, linkSize, true) > room) {
+                linkText = url.replace(/[?#].*$/, '').replace(/\/$/, '');
+                linkSize = fitFontSize(linkText, room, urlSize, floor, true);
+            }
+            page = { ...muted, x: area.x, size: linkSize, anchor: 'start' };
+        }
+    }
+    if (showBrand)
         lines.push({
             x: area.x,
             y,
@@ -346,16 +373,17 @@ export function footerBlock(
             weight: 600,
             tone: 'ink',
         });
+    const end = showBrand || !!page;
     lines.push({
-        x: brandFits ? area.x + area.w : area.x,
+        x: end ? area.x + area.w : area.x,
         y,
-        text: url,
-        size: urlSize,
+        text: linkText,
+        size: linkSize,
         weight: 600,
-        anchor: brandFits ? 'end' : 'start',
+        anchor: end ? 'end' : 'start',
         tone: 'ink',
     });
-    return { rule: area.y, lines, bottom: y + fonts.url * 0.25 };
+    return { rule: area.y, lines, page, bottom: y + fonts.url * 0.25 };
 }
 
 // ---- locator: seats and map legend -----------------------------------------------------

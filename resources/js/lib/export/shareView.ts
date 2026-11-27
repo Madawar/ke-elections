@@ -142,12 +142,17 @@ export interface CardChoice {
     remember?(value: string): void;
 }
 
-/** A card the dialog's "Card" choice offers. */
+/**
+ * A card the dialog's "Card" choice offers. A series (`slides`, made with `seriesCard`) is shown
+ * one slide at a time with a "Slide" stepper, each slide a card of any kind; its `view` is the
+ * first slide, the one it opens on.
+ */
 export interface ShareCard {
     key: string;
     label: string;
     view: ShareableView;
     choice?: CardChoice;
+    slides?: readonly ShareableView[];
 }
 
 interface Context {
@@ -205,7 +210,7 @@ interface CardKind<V extends ShareableView> {
     /**
      * The component that draws the card. The dialog gives every card the same props (`view`,
      * `size`, `headline`, `mapImage`, `mapImages`, `mapPlaceholder`, `mapAspect`, `url`,
-     * `theme`; see `CardProps`), and each card declares them all, using what it needs.
+     * `theme`, `page`; see `CardProps`), and each card declares them all, using what it needs.
      */
     component: Component;
 }
@@ -224,6 +229,8 @@ export interface CardProps {
     mapAspect: number;
     url: string;
     theme: MapTheme;
+    /** A slide's place in its series ("2 of 4"), for its footer; none outside a series. */
+    page?: string;
 }
 
 const ALL_SIZES = Object.keys(VIEW_SIZES) as ViewSize[];
@@ -669,3 +676,27 @@ export function versusCard({
         },
     };
 }
+
+/**
+ * A series for the "Card" choice: slides of any kinds, shown one at a time and saved as one file
+ * each. The dialog opens it on the first slide.
+ */
+export function seriesCard(
+    key: string,
+    label: string,
+    slides: readonly ShareableView[],
+): ShareCard {
+    if (!slides.length) throw new Error('A series needs at least one slide');
+    return { key, label, view: slides[0], slides };
+}
+
+/** "2 of 4": a slide's place in its series, as its footer prints it. */
+export const slidePlace = (i: number, total: number): string => `${i + 1} of ${total}`;
+
+/** A slide's own file name with its place: `…-2-of-4.png`. */
+export const slideFilename = (
+    view: ShareableView,
+    size: ViewSize,
+    i: number,
+    total: number,
+): string => `${filenameOf(view, size).replace(/\.png$/, '')}-${i + 1}-of-${total}.png`;

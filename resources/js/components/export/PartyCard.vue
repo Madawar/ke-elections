@@ -28,6 +28,8 @@ const props = withDefaults(
         mapPlaceholder?: string;
         /** Every map slot's image, by key; this card draws its one slot, `mapImage`. */
         mapImages?: Record<string, string>;
+        /** A slide's place in its series ("2 of 4"), for the footer; none outside a series. */
+        page?: string;
     }>(),
     {
         theme: () => THEMES.dark,
@@ -224,6 +226,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 :as-of="asOfText"
                 :url="url"
                 :theme="theme"
+                :page="page"
             />
             <SampleWatermark
                 v-if="view.sample"
