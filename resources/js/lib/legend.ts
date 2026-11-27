@@ -184,9 +184,10 @@ export const settingsCount = (
 ): number => (colour !== 'none' ? 1 : 0) + (legend?.showing.length ?? 0);
 
 /**
- * Whether the legend box is open after the selection changes. Focusing a unit from Kenya
- * collapses it to its chip so it never covers the unit; going back to all of Kenya opens it on
- * desktop (phones keep it collapsed); moving between units leaves it as the person set it.
+ * Whether the legend box is open after the selection changes. On desktop it stays open when a unit
+ * is focused (the fitted unit keeps clear of it, see `mapPadding`) unless the person collapsed it;
+ * going back to all of Kenya opens it. On a phone, focusing a unit from Kenya collapses it to its
+ * chip so it never covers the unit; moving between units leaves it as the person set it.
  */
 export function legendOpenAfterSelect(
     open: boolean,
@@ -200,6 +201,6 @@ export function legendOpenAfterSelect(
         focusing: boolean;
     },
 ): boolean {
-    if (focusing) return wasFocused ? open : false;
+    if (focusing) return desktop || wasFocused ? open : false;
     return desktop;
 }

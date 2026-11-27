@@ -272,8 +272,14 @@ describe('legendOpenAfterSelect', () => {
         focusing: boolean,
     ) => legendOpenAfterSelect(open, { desktop, wasFocused, focusing });
 
-    it('collapses the legend when a unit is first focused', () => {
-        expect(from(true, true, false, true)).toBe(false);
+    it('keeps the legend as it is, open by default, when a unit is first focused on desktop', () => {
+        expect(from(true, true, false, true)).toBe(true);
+        // ... and respects a person who collapsed it.
+        expect(from(false, true, false, true)).toBe(false);
+    });
+
+    it('collapses the legend to its chip when a unit is first focused on a phone', () => {
+        expect(from(true, false, false, true)).toBe(false);
     });
 
     it('leaves it as the person set it while moving between units', () => {

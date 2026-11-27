@@ -334,9 +334,10 @@ const isDesktop = useMediaQuery('(min-width: 768px)');
 const snap = ref<'peek' | 'half' | 'full'>('peek');
 const sheetHeight = ref(112);
 const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
-// The legend is open on desktop; a focused unit collapses it to its chip so it never covers the unit.
-const legendOpen = ref(isDesktop.value && !props.unit);
-watch(isDesktop, (d) => (legendOpen.value = d && !selection.value));
+// The legend is open by default on desktop, beside a focused unit too (the fit keeps the unit clear
+// of it); the person can collapse it to its chip. On a phone it starts as the chip.
+const legendOpen = ref(isDesktop.value);
+watch(isDesktop, (d) => (legendOpen.value = d));
 // The open legend is capped to the room between the search bar and its own bottom edge, so its
 // heading is never pushed under the search bar.
 const legendMaxHeight = computed(
