@@ -170,6 +170,45 @@ a feature finishes.
 - The Senate notice says "Saturday, 25th June", but 25 Jun 2027 is a Friday.
 
 ## Parked minor findings (fix when touching the code)
+- **Map controls (v0.2.0).** The final review decided these can wait:
+  - **Seat chips:**
+    - The Map button's badge counts the chip choice.
+    - Muted chips use `role=radio`; consider `role=button`.
+    - Party highlights pruned by an automatic seat switch aren't restored when stepping out.
+    - Phones show "None" off-screen when MP or MCA is active.
+    - There's no contrast test for faded chips.
+  - **Hover:** runs 3 `queryRenderedFeatures` calls per mousemove. Query only the focus level and
+    the next one.
+  - **History:**
+    - The pending-pop queue isn't keyed to a path.
+    - A zoom that jumps two levels leaves a duplicate entry.
+    - After a reload, the app's Back button pushes an entry instead of going back.
+    - The popstate gate has no listener-order guard test against an Inertia upgrade.
+    - A swallowed popstate drops the query string.
+  - **Outside-tap hint:** inside taps and pans don't dismiss it.
+  - **Party profile:**
+    - Zooming out closes the profile.
+    - "Show on map" closes it on desktop.
+    - The tab title drops the scope after `router.replace`.
+    - A ward `?in=` isn't resolved to its constituency.
+    - The vacancy wording ("Not held by X" for a vacant seat) needs fixing when the by-election
+      model lands.
+    - The percentage for "Total elected seats" at county scope is dominated by MCAs.
+    - Add a `coalition_source_url` data column; until then only Azimio and Kenya Kwanza show.
+  - **Party card:** the empty bands in square and portrait sizes.
+  - **Legend:** at 320 px, windows 1100–1199 px wide lose the focused unit's clearance.
+  - **Onboarding:**
+    - Tips steal focus.
+    - The legend fallback should use the "below" side.
+    - The docked phone tip has no pointer.
+    - `goto()` races on a double Next.
+    - The location guard is a source-text test.
+  - **Tests:**
+    - Flaky `vi.waitFor` timeouts in the colourSync and partyPage tests under parallel load.
+    - The no-WebGL test relies on a `__noWebGL` mock global.
+  - **Ops:**
+    - Production `APP_URL` should be `https://`.
+    - The unused MySQL user `ke_elections` on the server should be removed.
 - **Social export:**
   - A scoped deep link with `parties=other` expands against the national uncoloured set, so a
     county link can highlight a small party from outside that county. Expand it within the link's
