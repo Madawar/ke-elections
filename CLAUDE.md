@@ -71,3 +71,4 @@ Claude Code memory on the owner's machine):
 
 @.claude/memory/MEMORY.md
 @.claude/memory/project-kenya-electoral-map.md
+@.claude/memory/release-tags.md
