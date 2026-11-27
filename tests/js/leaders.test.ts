@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     type LeaderRow,
+    basisLabel,
     leaderSources,
     leadersFor,
     legendOmits,
@@ -254,5 +255,17 @@ describe('leaderSources', () => {
         expect(
             leaderSources(leadersFor(unit('county', 3), seats, index)),
         ).toHaveLength(1);
+    });
+});
+
+describe('basisLabel (how a holder came to the seat)', () => {
+    it('names each basis the importer allows, and gives an unknown one no word at all', () => {
+        expect(basisLabel('elected')).toBe('Elected');
+        expect(basisLabel('by_election')).toBe('By-election');
+        expect(basisLabel('succession')).toBe('Succeeded');
+        expect(basisLabel('nominated')).toBe('Nominated');
+        // Not "Elected": the record does not say so.
+        expect(basisLabel('appointed')).toBe('');
+        expect(basisLabel('')).toBe('');
     });
 });

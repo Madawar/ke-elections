@@ -1,6 +1,7 @@
 # Roadmap and open decisions
 
-Last updated 2026-11-27, when v0.2.0 (`feature/map-controls`, Tasks 1–4) was released. This is
+Last updated 2026-11-27, when v0.4.0 (`feature/share-formats`, the first four share formats) was
+released. This is
 the committed record of what comes next. Local execution ledgers are gitignored and deleted when
 a feature finishes.
 
@@ -32,11 +33,31 @@ a feature finishes.
   - Back button and phone back, with the outside-tap hint.
   - Party profiles scoped to a county or constituency, with a party card.
   - Onboarding tour and tips.
+- **Leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with the owner's additions,
+  v0.3.0). Rulings, review outcomes and parked minors are in `2026-11-27-leaders-progress.md`.
+  - "Who represents <unit>" in the panel and "Leaders here" in the legend, both from
+    `leadersFor()` in `lib/leaders.ts`.
+  - The striped "County seats" view.
+  - MP outlines over MCA wards, with "MP: <ABBREV>" under constituency names and two lists in
+    the legend.
+  - Leaders cards for a county, a constituency and a ward; a leaders strip and bigger maps on
+    the "Share this view" cards.
+- **Share formats 1, 5, 6 and 8** (`2026-11-27-share-formats.md`, v0.4.0). Rulings, review
+  outcomes and parked minors are in `2026-11-27-share-formats-progress.md`.
+  - One registry of card kinds in `lib/export/shareView.ts`: a new card is one entry (its
+    component, sizes, map slots, headline rule, caption). The dialog's "Card" choice lists what
+    the place offers.
+  - "By the numbers" (square, story) and "Kenya, five ways" (square, story) from any national
+    seat view, including "County seats".
+  - "Top 10 counties" for one party or the independents on MP or MCA seats (square, story), from
+    the national view with that group highlighted, or from the party's profile.
+  - "Who represents this ward" (portrait, story): five ballot papers with three locator maps. It
+    replaces the ward's "Leaders of <ward>" card.
 
 ## Queue, in order (owner priorities as of 2026-11-27)
-0. **Next branch: leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with their
-   owner additions).
 1. **All eight share formats.** The owner said, 2026-11-27: "I loved all."
+   - **Done in v0.4.0:** formats 1, 5, 6 and 8 (`2026-11-27-share-formats.md`).
+   - **Next:** 4 (equal-size county tiles), 7 (side by side), 3 (county carousel, slides 1–4).
    - **Mock-ups:** https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj
    - **Order:**
      - After the leaders branch, because format 1 reuses `leadersFor()`: 1 (who represents this
@@ -152,6 +173,19 @@ a feature finishes.
   2022".
 
 ## Open questions for the owner
+- **Share formats (v0.4.0), to judge by eye:**
+  - The top-10 story map is small (280 × 341); a bigger one means smaller rows.
+  - The five-ways story is three maps across with the sixth cell empty and the key under the
+    grid (the plan said two across; those maps were 171 × 208).
+  - The ward card's MP and MCA maps are small on the story (about 120 px tall).
+  - A listed county as small as Mombasa barely shows on the top-10 map. Give it a ring?
+  - The ward card's locator marks are ink, not the seat's ballot colour as in the mock-up, so a
+    green or beige fill cannot read as a party.
+- **"Towns: © OpenStreetMap contributors" on cards:** every card with a map prints it, but card
+  maps draw no town labels. Dropping it changes the footer of every map card.
+- **Leaders strip on other cards:** only MCA cards for a county or a constituency carry it. Should
+  Governor, Senator, Woman Rep and MP cards carry it too? (`cardLeaders` in
+  `lib/export/viewState.ts`; see the ruling in `2026-11-27-leaders-progress.md`.)
 - Past results work (step 4): yes or no, and in that order?
 - None-mode inner borders inside a focused unit are now heavier (plan item (e)). Is that OK, given
   the owner liked "boundaries only"?
@@ -182,6 +216,11 @@ a feature finishes.
 - The Senate notice says "Saturday, 25th June", but 25 Jun 2027 is a Friday.
 
 ## Parked minor findings (fix when touching the code)
+- **Share formats (v0.4.0):** see "Parked minor findings" in
+  `2026-11-27-share-formats-progress.md`.
+- **Leaders and MP outlines (v0.3.0):** see "Parked minor findings" in
+  `2026-11-27-leaders-progress.md`. Also left from that branch: bigger maps on the party card and
+  the "Share image" card.
 - **Map controls (v0.2.0).** The final review decided these can wait:
   - **Seat chips:**
     - The Map button's badge counts the chip choice.

@@ -314,9 +314,51 @@ export function breakHeadline(
     return wrapText(text, w, size, maxLines, true);
 }
 
+/** A line ends inside a word broken after its hyphen ("Shinoyi-Shikomari-"), not at a space. */
+const hyphenBreak = (line: string) => /[^\s-]-$/.test(line);
+
+/**
+ * The headline's words as one string again, from its lines: a line broken after a hyphen inside
+ * a word joins the next with no space.
+ */
+export const headlineText = (lines: { text: string }[]): string =>
+    lines.reduce(
+        (all, l, i) => (i === 0 ? l.text : hyphenBreak(lines[i - 1].text) ? all + l.text : `${all} ${l.text}`),
+        '',
+    );
+
+/**
+ * `text` on lines no wider than `w`, broken at spaces and, inside a word too wide for a line of
+ * its own, after its hyphens. Never cut: null when a piece is still too wide.
+ */
+function wrapAtHyphens(text: string, w: number, size: number): string[] | null {
+    const fits = (t: string) => textWidth(t, size, true) <= w;
+    const lines: string[] = [];
+    let line = '';
+    for (const word of text.split(/\s+/).filter(Boolean)) {
+        const pieces = fits(word) ? [word] : word.split(/(?<=[^\s-]-)(?=[^-])/);
+        pieces.forEach((piece, i) => {
+            const next = line ? `${line}${i ? '' : ' '}${piece}` : piece;
+            if (!line || fits(next)) line = next;
+            else {
+                lines.push(line);
+                line = piece;
+            }
+        });
+    }
+    if (line) lines.push(line);
+    return lines.every(fits) ? lines : null;
+}
+
+/** The least share of the base a headline steps down to so that a word too wide is not cut. */
+const HEADLINE_LEAST = 0.4;
+
 /**
  * The largest headline size (down to 78% of the base) that keeps the whole headline, broken
- * cleanly after its colon, within the usual lines; then any size that keeps it whole; then cut.
+ * cleanly after its colon, within the usual lines; then any size that keeps it whole. When one
+ * word is wider than the line (a ward named "Shinoyi-Shikomari-Esumeyia"), the word breaks after
+ * a hyphen, and if a piece still does not fit, the size steps down below the least until it does:
+ * no word is cut. Only a headline with too many words for its lines (an edited one) is cut.
  */
 function fitHeadline(
     headline: string,
@@ -339,10 +381,51 @@ function fitHeadline(
             const lines = breakHeadline(headline, w, size, maxLines);
             if (whole(lines) && ok(lines)) return { size, lines };
         }
+    // Only reached by a headline that did not fit whole: the cards' other headlines are unchanged.
+    const words = headline.split(/\s+/).filter(Boolean);
+    if (words.some((word) => textWidth(word, min, true) > w)) {
+        const least = Math.min(min, Math.round(spec.headline * HEADLINE_LEAST));
+        for (let size = spec.headline; size >= least; size -= size > min ? 2 : 1) {
+            const lines = wrapAtHyphens(headline, w, size);
+            if (lines && lines.length <= spec.headlineMax) return { size, lines };
+        }
+    }
     return {
         size: min,
         lines: breakHeadline(headline, w, min, spec.headlineMax),
     };
+}
+
+/**
+ * The headline's last two lines broken where they are most even, when the last is a lone word
+ * ("Where UDA holds the most MP" / "seats"): the same words, size and number of lines.
+ */
+export function balanced(lines: TextItem[], w: number): TextItem[] {
+    if (
+        lines.length < 2 ||
+        lines[lines.length - 1].text.includes(' ') ||
+        hyphenBreak(lines[lines.length - 2].text)
+    )
+        return lines;
+    const [a, b] = lines.slice(-2);
+    const words = `${a.text} ${b.text}`.split(' ');
+    const width = (t: string) => textWidth(t, a.size, true);
+    let best: [string, string] | null = null;
+    for (let k = 1; k < words.length; k++) {
+        const pair: [string, string] = [
+            words.slice(0, k).join(' '),
+            words.slice(k).join(' '),
+        ];
+        if (pair.some((t) => width(t) > w)) continue;
+        if (!best || Math.max(...pair.map(width)) < Math.max(...best.map(width)))
+            best = pair;
+    }
+    if (!best) return lines;
+    return [
+        ...lines.slice(0, -2),
+        { ...a, text: best[0] },
+        { ...b, text: best[1] },
+    ];
 }
 
 /** Headline (shrinking a little before it wraps badly or cuts) and the scope line under it. */
@@ -423,17 +506,21 @@ function titleAtLeast(
     return whole(more) ? more : null;
 }
 
-/** Height the footer needs at this width (footerBlock lays it out from the top of its box). */
+/**
+ * Height the footer needs at this width (footerBlock lays it out from the top of its box), with
+ * the credit the card prints: every map credit by default, less on a card that uses less.
+ */
 export function footerHeight(
     w: number,
     fonts: FooterFonts,
     view: Pick<ViewState, 'source' | 'asOf'>,
     url: string,
+    attribution: string = ATTRIBUTION,
 ): number {
     const { bottom } = footerBlock(box(0, 0, w, 0), fonts, {
         source: view.source,
         asOf: view.asOf,
-        attribution: ATTRIBUTION,
+        attribution,
         url,
     });
     return Math.ceil(bottom);
@@ -684,6 +771,8 @@ export function cardFrame(
     size: ViewSize,
     view: Pick<ViewState, 'source' | 'asOf'>,
     url: string,
+    /** The credit the card's footer prints (CardFooter's `attribution`). */
+    attribution: string = ATTRIBUTION,
 ) {
     const { w, h } = VIEW_SIZES[size];
     const spec = SPECS[size];
@@ -693,7 +782,7 @@ export function cardFrame(
     const top = Math.round(
         Math.max(spec.stripH * 2 + pad * TIGHT.top, spec.safeTop),
     );
-    const fh = footerHeight(innerW, spec.footer, view, url);
+    const fh = footerHeight(innerW, spec.footer, view, url, attribution);
     const footerBox = box(
         pad,
         Math.round(h - Math.max(spec.safeBottom, pad * TIGHT.foot) - fh),

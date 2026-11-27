@@ -31,15 +31,25 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
     default: defineComponent({
         props: {
             view: { type: Object, required: true },
-            leaders: { type: Object, default: null },
+            cards: { type: Array, default: () => [] },
         },
         render() {
             const v = this.view as { kind: string; unit?: { name: string } };
-            const alt = this.leaders as { unit: { name: string } } | null;
+            const cards = this.cards as {
+                key: string;
+                label: string;
+                view: { unit?: { name: string } };
+            }[];
+            const alt = cards.find((c) => c.key === 'leaders' && c.view !== v);
+            const top = cards.find((c) => c.key === 'topCounties')?.view as
+                | { group: string; seat: string }
+                | undefined;
             return h('div', {
                 'data-share-kind': v.kind,
                 'data-share-unit': v.unit?.name,
-                'data-share-offers': alt?.unit.name,
+                'data-share-offers': alt?.view.unit?.name,
+                'data-share-cards': cards.map((c) => c.label).join('|'),
+                'data-share-top': top && `${top.group} ${top.seat}`,
             });
         },
     }),
@@ -81,6 +91,7 @@ const NAIROBI = { level: 'county', code: 47, name: 'Nairobi City' };
 const MATHARE = { level: 'constituency', code: 290, name: 'Mathare' };
 const county = { ...NAIROBI, ancestors: [] };
 const constituency = { ...MATHARE, ancestors: [NAIROBI] };
+const ward = { level: 'ward', code: 1448, name: 'Ngei', ancestors: [NAIROBI, MATHARE] };
 
 async function mountPage(search = '', unit: { name: string } | null = null) {
     window.history.replaceState({}, '', `/${search}`);
@@ -194,9 +205,18 @@ describe('the "County seats" view on the page', () => {
         );
     });
 
-    it('has no card for all of Kenya, and shares a county as its leaders card', async () => {
+    it('offers "Five seats" and "By the numbers" for all of Kenya (no "This view" of the stripes), and shares a county as its leaders card', async () => {
         const kenya = await mountPage('?seat=county_seats');
-        expect(kenya.findComponent(Legend).props('shareable')).toBe(false);
+        expect(kenya.findComponent(Legend).props('shareable')).toBe(true);
+        kenya.findComponent(Legend).vm.$emit('share');
+        await flushPromises();
+        const national = kenya.get('[data-share-kind]');
+        expect(national.attributes('data-share-kind')).toBe('fiveSeats');
+        expect(national.attributes('data-share-cards')).toBe(
+            'Five seats|By the numbers',
+        );
+        kenya.unmount();
+        document.body.innerHTML = '';
         const w = await mountPage('?seat=county_seats', county);
         expect(w.findComponent(Legend).props('shareable')).toBe(true);
         w.findComponent(Legend).vm.$emit('share');
@@ -205,6 +225,7 @@ describe('the "County seats" view on the page', () => {
         expect(dialog.attributes('data-share-kind')).toBe('leaders');
         expect(dialog.attributes('data-share-unit')).toBe('Nairobi City');
         expect(dialog.attributes('data-share-offers')).toBeUndefined();
+        expect(dialog.attributes('data-share-cards')).toBe('County leaders');
     });
 });
 
@@ -236,16 +257,22 @@ describe('sharing the leaders of a unit', () => {
             expect(dialog.attributes('data-share-offers'), seat).toBe(
                 'Nairobi City',
             );
+            expect(dialog.attributes('data-share-cards'), seat).toBe(
+                'This view|County leaders',
+            );
             w.unmount();
         }
     });
 
-    it('offers the leaders of a constituency too, and nothing for all of Kenya', async () => {
+    it('offers the leaders of a constituency too, and for all of Kenya the national cards (no leaders)', async () => {
         const w = await mountPage('?seat=mca', constituency);
         w.findComponent(Legend).vm.$emit('share');
         await flushPromises();
         expect(w.get('[data-share-kind]').attributes('data-share-offers')).toBe(
             'Mathare',
+        );
+        expect(w.get('[data-share-kind]').attributes('data-share-cards')).toBe(
+            'This view|Leaders',
         );
         const kenya = await mountPage('?seat=mca');
         kenya.findComponent(Legend).vm.$emit('share');
@@ -253,6 +280,50 @@ describe('sharing the leaders of a unit', () => {
         expect(
             kenya.get('[data-share-kind]').attributes('data-share-offers'),
         ).toBeUndefined();
+        expect(
+            kenya.get('[data-share-kind]').attributes('data-share-cards'),
+        ).toBe('This view|Five seats|By the numbers');
+    });
+
+    it('offers the top 10 counties for all of Kenya when the seat is MP or MCA and one group is highlighted', async () => {
+        const offered = async (search: string, unit: { name: string } | null = null) => {
+            const w = await mountPage(search, unit);
+            w.findComponent(Legend).vm.$emit('share');
+            await flushPromises();
+            const d = w.get('[data-share-kind]');
+            const out = [
+                d.attributes('data-share-cards'),
+                d.attributes('data-share-top'),
+            ];
+            w.unmount();
+            document.body.innerHTML = '';
+            return out;
+        };
+        expect(await offered('?seat=mca&parties=ind')).toEqual([
+            'This view|Five seats|By the numbers|Top 10 counties',
+            'IND mca',
+        ]);
+        expect(await offered('?seat=mp&parties=odm')).toEqual([
+            'This view|Five seats|By the numbers|Top 10 counties',
+            'ODM mp',
+        ]);
+        // Not for a seat a county has one of, more than one group, none, or a place.
+        expect(await offered('?seat=governor&parties=uda')).toEqual([
+            'This view|Five seats|By the numbers',
+            undefined,
+        ]);
+        expect(await offered('?seat=mca&parties=odm,uda')).toEqual([
+            'This view|Five seats|By the numbers',
+            undefined,
+        ]);
+        expect(await offered('?seat=mca')).toEqual([
+            'This view|Five seats|By the numbers',
+            undefined,
+        ]);
+        expect(await offered('?seat=mca&parties=ind', county)).toEqual([
+            'This view|County leaders',
+            undefined,
+        ]);
     });
 
     it('opens the leaders card straight from the panel, with no seat colouring at all', async () => {
@@ -266,5 +337,45 @@ describe('sharing the leaders of a unit', () => {
         const dialog = w.get('[data-share-kind]');
         expect(dialog.attributes('data-share-kind')).toBe('leaders');
         expect(dialog.attributes('data-share-unit')).toBe('Mathare');
+        expect(dialog.attributes('data-share-cards')).toBe('Leaders');
+    });
+
+    it('on a ward, "Share leaders" opens "Who represents this ward", and "Share this view" lists "This view" and "Who represents"', async () => {
+        const w = await mountPage('?seat=mca', ward);
+        await w
+            .findComponent(UnitPanel)
+            .get('[data-share-leaders]')
+            .trigger('click');
+        await flushPromises();
+        const dialog = w.get('[data-share-kind]');
+        expect(dialog.attributes('data-share-kind')).toBe('ballots');
+        expect(dialog.attributes('data-share-cards')).toBe('Who represents');
+        w.unmount();
+        document.body.innerHTML = '';
+        const v = await mountPage('?seat=mca', ward);
+        v.findComponent(Legend).vm.$emit('share');
+        await flushPromises();
+        const shared = v.get('[data-share-kind]');
+        expect(shared.attributes('data-share-kind')).toBe('party');
+        expect(shared.attributes('data-share-cards')).toBe('This view|Who represents');
+    });
+
+    it('keeps the leaders card for a county and a constituency from the panel', async () => {
+        for (const [unit, cards] of [
+            [county, 'County leaders'],
+            [constituency, 'Leaders'],
+        ] as const) {
+            const w = await mountPage('?seat=mca', unit);
+            await w
+                .findComponent(UnitPanel)
+                .get('[data-share-leaders]')
+                .trigger('click');
+            await flushPromises();
+            const dialog = w.get('[data-share-kind]');
+            expect(dialog.attributes('data-share-kind')).toBe('leaders');
+            expect(dialog.attributes('data-share-cards')).toBe(cards);
+            w.unmount();
+            document.body.innerHTML = '';
+        }
     });
 });

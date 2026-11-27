@@ -1,12 +1,36 @@
 // The text that goes with a shared view: the headline, the numbers behind it, the source with
 // its date, the link and the tags. Instagram and TikTok allow 2,200 characters; X allows 280.
+import {
+    type BallotsCardView,
+    ballotRows,
+    ballotsHeadline,
+    ballotsScopeLines,
+} from './ballotsCard';
+import {
+    FIVE_SEATS_HEADLINE,
+    type FiveSeatsCardView,
+    fiveSeatsScope,
+} from './fiveSeatsCard';
 import { formatAsOf } from './format';
 import {
     type LeadersCardView,
     leadersHeadline,
     mcaMixLabel,
 } from './leadersCard';
+import {
+    type NumbersCardView,
+    numbersHeadline,
+    numbersNote,
+    numbersRowLine,
+} from './numbersCard';
 import { type PartyCardView, TOP_COUNTIES_TITLE, partyHeadline } from './partyCard';
+import {
+    type TopCountiesCardView,
+    topCountiesHeadline,
+    topCountiesNote,
+    topCountiesRowLine,
+    topCountiesScope,
+} from './topCountiesCard';
 import { type ViewState, headlineFor } from './viewState';
 
 export type CaptionPlatform = 'instagram' | 'x';
@@ -28,7 +52,7 @@ const list = (items: string[]) =>
         ? (items[0] ?? '')
         : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
-/** What the source line needs of a card: both kinds of card have it. */
+/** What the source line needs of a card: every kind of card has it. */
 type Sourced = Pick<ViewState, 'asOf' | 'source' | 'sources' | 'sample'>;
 
 /** The sources, naming at most `max` of them and counting the rest. */
@@ -62,22 +86,26 @@ function partyLine(
 const clip = (text: string, max: number) =>
     text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 
+/**
+ * Every card's caption on X: the headline, then the source, link and tags. Those always fit: the
+ * source names at most two sites, then one; only the headline is shortened.
+ */
+function xCaption(card: Sourced, url: string, headline: string): string {
+    let tail = '';
+    for (const max of [2, 1]) {
+        tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
+        if (xLength(tail) <= X_MAX - 20) break;
+    }
+    return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
+}
+
 export function captionFor(
     view: ViewState,
     url: string,
     platform: CaptionPlatform = 'instagram',
     headline = headlineFor(view),
 ): string {
-    if (platform === 'x') {
-        // The source, link and tags always fit: the source names at most two sites, then one;
-        // only the headline is shortened.
-        let tail = '';
-        for (const max of [2, 1]) {
-            tail = `\n\n${sourceText(view, max)}\n${url}\n${TAGS}`;
-            if (xLength(tail) <= X_MAX - 20) break;
-        }
-        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
-    }
+    if (platform === 'x') return xCaption(view, url, headline);
     // The source, link and tags always go in; party lines are dropped from the end to make room.
     const head = clip(headline, 300);
     const tail = [sourceText(view, 10), url, '', TAGS].join('\n');
@@ -118,14 +146,7 @@ export function partyCaption(
     platform: CaptionPlatform = 'instagram',
     headline = partyHeadline(card),
 ): string {
-    if (platform === 'x') {
-        let tail = '';
-        for (const max of [2, 1]) {
-            tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
-            if (xLength(tail) <= X_MAX - 20) break;
-        }
-        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
-    }
+    if (platform === 'x') return xCaption(card, url, headline);
     const lines = card.hasSeats || card.scope
         ? [
               ...card.rows.map(
@@ -163,14 +184,7 @@ export function leadersCaption(
     platform: CaptionPlatform = 'instagram',
     headline = leadersHeadline(card),
 ): string {
-    if (platform === 'x') {
-        let tail = '';
-        for (const max of [2, 1]) {
-            tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
-            if (xLength(tail) <= X_MAX - 20) break;
-        }
-        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
-    }
+    if (platform === 'x') return xCaption(card, url, headline);
     const lines = card.rows.map((r) => {
         const seat = `${r.title}${r.where ? ` (${r.where})` : ''}`;
         if (!r.holder) return `${seat}: no approved data yet`;
@@ -181,6 +195,136 @@ export function leadersCaption(
         clip(headline, 300),
         '',
         ...lines,
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "By the numbers": the headline, one line per seat with its count and the groups
+ * holding the most, the card's note, the source with its date, the link and the tags. On X only
+ * the headline, source, link and tags fit.
+ */
+export function numbersCaption(
+    card: NumbersCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = numbersHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    return [
+        clip(headline, 300),
+        '',
+        ...card.rows.map(numbersRowLine),
+        '',
+        numbersNote(card),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "Top 10 counties": the fixed headline, the scope, one line per county, the
+ * card's note, the source with its date, the link and the tags. On X only the headline, source,
+ * link and tags fit.
+ */
+export function topCountiesCaption(
+    card: TopCountiesCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = topCountiesHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    const scope = topCountiesScope(card);
+    const note = topCountiesNote(card);
+    return [
+        clip(headline, 300),
+        '',
+        `${scope.lead} ${scope.list}`,
+        ...card.rows.map(topCountiesRowLine),
+        ...(note ? ['', note] : []),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "Who represents this ward": the headline, where the ward is, one line per seat in
+ * ballot order ("Governor (Kakamega County): <name> (ODM, Orange Democratic Movement). Elected in
+ * August 2022."), the source with its date, the link and the tags. On X only the headline, source,
+ * link and tags fit.
+ */
+export function ballotsCaption(
+    card: BallotsCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = ballotsHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    const lines = ballotRows(card).map((r) => {
+        const seat = `${r.label} (${r.place})`;
+        if (r.name === null) return `${seat}: no approved data yet.`;
+        return `${seat}: ${r.name}${r.party ? ` (${r.party.line})` : ''}.${r.since ? ` ${r.since}.` : ''}`;
+    });
+    return [
+        clip(headline, 300),
+        '',
+        `${ballotsScopeLines(card)[0]}.`,
+        ...lines,
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The key in words: the party colours in their order, the parties folded into "Other parties" (as
+ * the card's note says), and the seats with no approved holder, which are not a party colour.
+ */
+function fiveSeatsKeyLine(card: FiveSeatsCardView): string {
+    const parties = card.key.filter((k) => k.key !== 'none').map((k) => k.label);
+    const n = card.folded.length;
+    return [
+        `Party colours, in order of seats held across all five: ${parties.join(', ')}.`,
+        n ? `The ${n.toLocaleString('en-GB')} with the fewest are drawn as Other parties.` : '',
+        card.vacant
+            ? `No approved holder yet for ${card.vacant.toLocaleString('en-GB')} ${card.vacant === 1 ? 'seat' : 'seats'}.`
+            : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+}
+
+/**
+ * The caption for "Kenya, five ways": the headline, the scope, one line per seat (as "By the
+ * numbers" writes it), the key in its order, the source with its date, the link and the tags. On X
+ * only the headline, source, link and tags fit.
+ */
+export function fiveSeatsCaption(
+    card: FiveSeatsCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = FIVE_SEATS_HEADLINE,
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    return [
+        clip(headline, 300),
+        '',
+        `${fiveSeatsScope(card)}.`,
+        ...card.rows.map(numbersRowLine),
+        '',
+        fiveSeatsKeyLine(card),
         '',
         sourceText(card, 10),
         url,

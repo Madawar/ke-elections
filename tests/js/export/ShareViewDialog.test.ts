@@ -2,14 +2,25 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { leadersCardView } from '@/lib/export/leadersCard';
+import { ballotsCardView } from '@/lib/export/ballotsCard';
+import { fiveSeatsCardView } from '@/lib/export/fiveSeatsCard';
+import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
+import { inTheme, shareCards } from '@/lib/export/shareView';
+import {
+    topCountiesCardView,
+    topCountiesColouring,
+} from '@/lib/export/topCountiesCard';
+import { THEMES } from '@/lib/map/theme';
 import { seatsInTheme, snapshotView } from '@/lib/export/viewState';
 import { PARTY_SEATS } from '../party/partyFixtures';
+import { NUMBERS_SEATS, numbersIndex } from './numbersFixtures';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
 
 // Map drawing is a deferred we resolve by hand; rasterising returns a PNG at once.
 const renders: {
     size: string;
+    spec: unknown;
     resolve: (v: string) => void;
     reject: (e: unknown) => void;
 }[] = [];
@@ -17,13 +28,18 @@ vi.mock('@/lib/export/viewMap', async (actual) => ({
     ...(await actual<typeof import('@/lib/export/viewMap')>()),
     renderViewMap: vi.fn(
         (
-            _v: unknown,
+            spec: unknown,
             _c: unknown,
             _t: unknown,
             box: { w: number; h: number },
         ) =>
             new Promise<string>((resolve, reject) =>
-                renders.push({ size: `${box.w}x${box.h}`, resolve, reject }),
+                renders.push({
+                    size: `${box.w}x${box.h}`,
+                    spec,
+                    resolve,
+                    reject,
+                }),
             ),
     ),
 }));
@@ -245,6 +261,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         focus: { level: 'county', code: 47 },
         theme: 'dark',
     })!;
+    const cards = shareCards([county, leaders]);
     const cardOption = (value: string) =>
         document.querySelector<HTMLInputElement>(
             `input[name="view-card"][value="${value}"]`,
@@ -261,7 +278,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('offers "This view" and "County leaders", and starts on the view', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -275,7 +292,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('switches to the leaders card, with its own headline, caption and file', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -299,7 +316,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('puts the new card’s own headline on it at once, never the other card’s for a moment', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -316,7 +333,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
 
     it('keeps the new card’s headline even when the person had just been typing on the other', async () => {
         mount(ShareViewDialog, {
-            props: { open: true, view: county, leaders, context },
+            props: { open: true, view: county, cards, context },
             attachTo: document.body,
         });
         await settle();
@@ -349,7 +366,7 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         plain.unmount();
         document.body.innerHTML = '';
         mount(ShareViewDialog, {
-            props: { open: true, view: leaders, leaders, context },
+            props: { open: true, view: leaders, cards: shareCards([leaders]), context },
             attachTo: document.body,
         });
         await settle();
@@ -358,5 +375,211 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         expect(
             document.querySelectorAll('[data-preview] [data-leader]'),
         ).toHaveLength(3);
+    });
+});
+
+describe('ShareViewDialog: "By the numbers" beside the national view', () => {
+    const numbersContext = { ...context, index: numbersIndex, seats: NUMBERS_SEATS };
+    const kenya = snapshotView({
+        seats: NUMBERS_SEATS,
+        index: numbersIndex,
+        seat: 'mca',
+        focus: null,
+        only: [],
+        showSurroundings: false,
+        theme: 'dark',
+    });
+    const numbers = numbersCardView({
+        seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+        index: numbersIndex,
+        theme: 'dark',
+    });
+    beforeEach(() => {
+        renders.length = 0;
+        localStorage.setItem('km.viewSize', 'portrait');
+    });
+    afterEach(() => {
+        document.body.innerHTML = '';
+    });
+
+    it('offers it as a card, made with no map, in square and story', async () => {
+        mount(ShareViewDialog, {
+            props: {
+                open: true,
+                view: kenya,
+                cards: shareCards([kenya, numbers]),
+                context: numbersContext,
+            },
+            attachTo: document.body,
+        });
+        await settle();
+        const option = document.querySelector<HTMLInputElement>(
+            'input[name="view-card"][value="numbers"]',
+        )!;
+        expect(option.closest('label')?.textContent?.trim()).toBe('By the numbers');
+        expect(renders).toHaveLength(1); // the view's map
+        option.click();
+        await settle();
+        expect(renders).toHaveLength(1); // none for the numbers
+        expect(
+            [...document.querySelectorAll<HTMLInputElement>('input[name="view-size"]')].map(
+                (i) => i.value,
+            ),
+        ).toEqual(['square', 'story']);
+        expect(document.querySelectorAll('[data-preview] [data-seat]')).toHaveLength(5);
+        expect(
+            document.querySelector('[data-preview] svg')?.getAttribute('viewBox'),
+        ).toBe('0 0 1080 1080');
+        expect(
+            document.querySelector<HTMLInputElement>('#view-headline')!.value,
+        ).toBe('1,881 elected seats below the President');
+        expect(
+            document.querySelector<HTMLTextAreaElement>('#view-caption')!.value,
+        ).toContain('MCAs: 1,450 seats. Most held: UDA 523, ODM 312, Independent 114.');
+        expect(download().disabled).toBe(false);
+        expect(document.body.textContent).toContain('Share by the numbers');
+    });
+
+    it('gives every card the same props, and none of them falls through onto the card as an attribute', async () => {
+        const leaders = leadersCardView({
+            seats: VIEW_SEATS,
+            index: viewIndex,
+            focus: { level: 'county', code: 47 },
+            theme: 'dark',
+        })!;
+        const party = partyCardView({
+            seats: seatsInTheme(PARTY_SEATS, 'dark'),
+            abbrev: 'UDA',
+            theme: 'dark',
+        })!;
+        const top = topCountiesCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            seat: 'mca',
+            group: 'IND',
+            theme: 'dark',
+        });
+        const five = fiveSeatsCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            theme: 'dark',
+        });
+        const ballots = ballotsCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            ward: 1046,
+            theme: 'dark',
+        })!;
+        for (const card of [kenya, numbers, leaders, party, top, five, ballots]) {
+            const w = mount(ShareViewDialog, {
+                props: { open: true, view: card, context: numbersContext },
+                attachTo: document.body,
+            });
+            await settle();
+            const svg = document.querySelector('[data-preview] > svg')!;
+            expect(
+                [...svg.attributes].map((a) => a.name).sort(),
+                card.kind,
+            ).toEqual(
+                ['aria-label', 'height', 'role', 'viewBox', 'width', 'xmlns'].sort(),
+            );
+            w.unmount();
+            document.body.innerHTML = '';
+        }
+    });
+
+    const topOf = (theme: 'light' | 'dark') =>
+        topCountiesCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, theme),
+            index: numbersIndex,
+            seat: 'mca',
+            group: 'IND',
+            theme,
+        });
+
+    it('redraws the top-10 card in the other theme through the registry, with the independents’ bars in that theme’s colour', async () => {
+        const dark = topOf('dark');
+        // The registry's own answer: the card taken again from the seats in that theme.
+        const light = inTheme(dark, 'light', numbersContext) as ReturnType<typeof topOf>;
+        expect(light.colour).toBe(THEMES.light.independent);
+        expect(THEMES.light.independent).not.toBe(THEMES.dark.independent);
+        mount(ShareViewDialog, {
+            props: { open: true, view: dark, context: numbersContext },
+            attachTo: document.body,
+        });
+        await settle();
+        const bars = () =>
+            new Set(
+                [...document.querySelectorAll('[data-preview] [data-bar]')].map(
+                    (b) => b.getAttribute('fill'),
+                ),
+            );
+        expect(bars()).toEqual(new Set([THEMES.dark.independent]));
+        document
+            .querySelector<HTMLInputElement>('input[name="view-theme"][value="light"]')!
+            .click();
+        await settle();
+        expect(bars()).toEqual(new Set([THEMES.light.independent]));
+    });
+
+    it('draws the top-10 card’s map with the card’s own colouring', async () => {
+        const dark = topOf('dark');
+        mount(ShareViewDialog, {
+            props: { open: true, view: dark, context: numbersContext },
+            attachTo: document.body,
+        });
+        await settle();
+        expect(renders).toHaveLength(1);
+        const spec = renders[0].spec as {
+            colouring?: unknown;
+            haloCountyLines?: boolean;
+            focus: unknown;
+        };
+        expect(spec.colouring).toEqual(topCountiesColouring(dark, THEMES.dark));
+        expect(spec.haloCountyLines).toBe(true);
+        expect(spec.focus).toBeNull();
+    });
+
+    it('draws the ward card’s three maps, framed and marked by code, before it offers the PNG', async () => {
+        const ballots = ballotsCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            ward: 1046,
+            theme: 'dark',
+        })!;
+        localStorage.setItem('km.viewSize', 'square');
+        mount(ShareViewDialog, {
+            props: { open: true, view: ballots, context: numbersContext },
+            attachTo: document.body,
+        });
+        await settle();
+        // No square: the card opens on its first size, portrait.
+        expect(
+            [...document.querySelectorAll<HTMLInputElement>('input[name="view-size"]')].map(
+                (i) => i.value,
+            ),
+        ).toEqual(['portrait', 'story']);
+        expect(document.querySelector('[data-preview] svg')?.getAttribute('viewBox')).toBe(
+            '0 0 1080 1350',
+        );
+        for (let i = 0; i < 3; i++) {
+            expect(download().disabled).toBe(true);
+            renders[i].resolve(`data:image/png;base64,M${i}`);
+            await settle();
+        }
+        expect(
+            renders.map((r) => {
+                const s = r.spec as { focus: { level: string; code: number }; mark: unknown };
+                return [s.focus.level, s.focus.code, s.mark];
+            }),
+        ).toEqual([
+            ['county', 37, { level: 'ward', code: 1046 }],
+            ['county', 37, { level: 'constituency', code: 209 }],
+            ['constituency', 209, { level: 'ward', code: 1046 }],
+        ]);
+        expect(document.querySelectorAll('[data-preview] image[data-map]')).toHaveLength(3);
+        expect(download().disabled).toBe(false);
+        // The stored size is left as it was.
+        expect(localStorage.getItem('km.viewSize')).toBe('square');
     });
 });

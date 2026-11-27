@@ -26,6 +26,8 @@ const props = withDefaults(
         mapAspect?: number;
         /** Shown in the map area while there is no image. */
         mapPlaceholder?: string;
+        /** Every map slot's image, by key; this card draws its one slot, `mapImage`. */
+        mapImages?: Record<string, string>;
     }>(),
     {
         theme: () => THEMES.dark,
