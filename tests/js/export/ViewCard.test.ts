@@ -6,12 +6,15 @@ import { headlineFor, snapshotView } from '@/lib/export/viewState';
 import {
     type Box,
     HEADLINE_STRETCH,
+    SPECS,
     breakHeadline,
+    cardFrame,
+    footerHeight,
     viewLayout,
 } from '@/lib/export/viewLayout';
 import { footerBlock, type TextItem } from '@/lib/export/layout';
 import { textWidth } from '@/lib/export/text';
-import { ATTRIBUTION, THEMES } from '@/lib/map/theme';
+import { ATTRIBUTION, CODES_CREDIT, THEMES } from '@/lib/map/theme';
 import { withIndependentColour } from '@/lib/seats';
 import { MIX_SEATS, mixIndex } from './mixFixtures';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
@@ -234,6 +237,22 @@ describe('credits', () => {
         expect(ATTRIBUTION).not.toContain('·');
         expect(ATTRIBUTION).toBe(
             'Boundaries: IEBC 2012 delimitation (via mikelmaron/kenya-election-data); 13 wards: American Red Cross (HDX), CC BY 4.0; Codes: Kenya Gazette Notice 13771 (2026); Towns: © OpenStreetMap contributors',
+        );
+        expect(CODES_CREDIT).toBe('Codes: Kenya Gazette Notice 13771 (2026)');
+        expect(ATTRIBUTION).toContain(CODES_CREDIT);
+    });
+
+    it('measure the footer with the full credit unless a card names its own', () => {
+        const view = { source: 'Source: IEBC gazette notices.', asOf: '2026-07-16' };
+        const fonts = SPECS.square.footer;
+        expect(footerHeight(900, fonts, view, 'example.org')).toBe(
+            footerHeight(900, fonts, view, 'example.org', ATTRIBUTION),
+        );
+        expect(
+            footerHeight(900, fonts, view, 'example.org', CODES_CREDIT),
+        ).toBeLessThan(footerHeight(900, fonts, view, 'example.org'));
+        expect(cardFrame('square', view, 'example.org').footerBox).toEqual(
+            cardFrame('square', view, 'example.org', ATTRIBUTION).footerBox,
         );
     });
 });

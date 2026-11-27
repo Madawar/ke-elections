@@ -82,12 +82,13 @@ import { fileUrl } from '@/lib/map/style';
 import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { formatAsOf } from '@/lib/export/format';
-import {
-    type LeadersCardView,
-    leadersCardView,
-} from '@/lib/export/leadersCard';
+import { leadersCardView } from '@/lib/export/leadersCard';
+import { ballotsCardView } from '@/lib/export/ballotsCard';
+import { fiveSeatsCardView } from '@/lib/export/fiveSeatsCard';
+import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
-import type { ShareableView } from '@/lib/export/shareView';
+import { type ShareCard, shareCards } from '@/lib/export/shareView';
+import { topCountiesCardView } from '@/lib/export/topCountiesCard';
 import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
 import { type PartyScope, findParty, scopeFor } from '@/lib/party';
 import { parsePartyPath } from '@/lib/map/urls';
@@ -673,14 +674,17 @@ function showPartyOnMap(seat: SeatKey) {
 function shareParty() {
     const abbrev = partyAbbrev.value;
     if (!abbrev) return;
-    sharedLeaders.value = null;
-    sharedView.value = partyCardView({
-        seats: seats.value,
-        abbrev,
-        theme: theme.value,
-        index: index.value ?? undefined,
-        scope: partyScope.value,
-    });
+    // Across Kenya the party's top 10 counties for MCA seats come too, when it holds any.
+    sharedCards.value = shareCards([
+        partyCardView({
+            seats: seats.value,
+            abbrev,
+            theme: theme.value,
+            index: index.value ?? undefined,
+            scope: partyScope.value,
+        }),
+        !partyScope.value && topCountiesOf('mca', [abbrev]),
+    ]);
 }
 
 // The person zoomed out of the focused unit: the focus (and the panel) move up to its parent, and
@@ -1091,47 +1095,98 @@ function shareUnit() {
 // ---- share this view --------------------------------------------------------------------
 // The view is fixed when the dialog opens, so the card doesn't change under the person.
 const isSeatMode = computed(() => isSeatColouring(colourKey.value));
-// A seat view can be shared as it is. "County seats" has a card only for a county (its leaders).
-const canShareView = computed(
-    () =>
-        isSeatMode.value &&
-        (colourKey.value !== COUNTY_SEATS ||
-            focusOf(selection.value)?.level === 'county'),
-);
-const sharedView = shallowRef<ShareableView | null>(null);
-// The focused unit's leaders card, offered in the dialog beside the view being shared.
-const sharedLeaders = shallowRef<LeadersCardView | null>(null);
+// A seat view can be shared as it is. "County seats" has cards for all of Kenya (five seats, by
+// the numbers) and for a county (its leaders); its stripes have no "This view".
+const canShareView = computed(() => {
+    if (!isSeatMode.value) return false;
+    if (colourKey.value !== COUNTY_SEATS) return true;
+    const level = focusOf(selection.value)?.level;
+    return !level || level === 'county';
+});
+// The cards the share dialog offers, the first being the one it opens on; empty while it is shut.
+const sharedCards = shallowRef<ShareCard[]>([]);
+// A county's or a constituency's leaders card; a ward's is "Who represents this ward".
 const leadersOf = (focus: FocusSelection | null) =>
-    index.value && focus
-        ? leadersCardView({
-              seats: seats.value,
-              index: index.value,
-              focus,
-              theme: theme.value,
-          })
-        : null;
+    !index.value || !focus
+        ? null
+        : focus.level === 'ward'
+          ? ballotsCardView({
+                seats: seats.value,
+                index: index.value,
+                ward: focus.code,
+                theme: theme.value,
+            })
+          : leadersCardView({
+                seats: seats.value,
+                index: index.value,
+                focus,
+                theme: theme.value,
+            });
+/**
+ * "Top 10 counties" for all of Kenya: a seat a county has more than one of (MP, MCA) and exactly
+ * one group highlighted (a party or the independents) that holds any of it; otherwise null.
+ */
+function topCountiesOf(seat: ColourKey, only: readonly string[]) {
+    if (!index.value || (seat !== 'mp' && seat !== 'mca') || only.length !== 1)
+        return null;
+    const card = topCountiesCardView({
+        seats: seats.value,
+        index: index.value,
+        seat,
+        group: only[0],
+        theme: theme.value,
+    });
+    return card.rows.length ? card : null;
+}
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
-    if (k === COUNTY_SEATS) return shareLeaders();
-    sharedLeaders.value = leadersOf(focusOf(selection.value));
-    sharedView.value = snapshotView({
-        seats: seats.value,
-        index: index.value,
-        seat: k,
-        focus: focusOf(selection.value),
-        only: onlyParties.value,
-        showSurroundings: showSurroundings.value,
-        theme: theme.value,
-        mpOutlines: mpOutlines.value,
-        onlyMp: onlyMpParties.value,
-    });
+    const focus = focusOf(selection.value);
+    if (k === COUNTY_SEATS) {
+        if (focus) return shareLeaders();
+        // All of Kenya on the striped map: the national cards, with no "This view".
+        sharedCards.value = shareCards([
+            fiveSeatsCardView({ seats: seats.value, index: index.value, theme: theme.value }),
+            numbersCardView({ seats: seats.value, index: index.value, theme: theme.value }),
+        ]);
+        return;
+    }
+    // "This view", then the other cards for what is in view: one line each.
+    sharedCards.value = shareCards([
+        snapshotView({
+            seats: seats.value,
+            index: index.value,
+            seat: k,
+            focus,
+            only: onlyParties.value,
+            showSurroundings: showSurroundings.value,
+            theme: theme.value,
+            mpOutlines: mpOutlines.value,
+            onlyMp: onlyMpParties.value,
+        }),
+        leadersOf(focus),
+        !focus &&
+            fiveSeatsCardView({
+                seats: seats.value,
+                index: index.value,
+                theme: theme.value,
+            }),
+        !focus &&
+            numbersCardView({
+                seats: seats.value,
+                index: index.value,
+                theme: theme.value,
+            }),
+        !focus && topCountiesOf(k, onlyParties.value),
+    ]);
 }
 
-/** The leaders card of the focused unit ("County leaders in <county>", "Leaders of <unit>"). */
+/**
+ * The leaders card of the focused unit ("County leaders in <county>", "Leaders of <constituency>"),
+ * or a ward's "Who represents" card.
+ */
 function shareLeaders() {
-    sharedLeaders.value = null;
-    sharedView.value = leadersOf(focusOf(selection.value));
+    sharedCards.value = shareCards([leadersOf(focusOf(selection.value))]);
 }
 
 const showView = (v: typeof view.value) => {
@@ -1482,17 +1537,17 @@ const showView = (v: typeof view.value) => {
             @update:open="(v) => !v && (exportUnit = null)"
         />
         <ShareViewDialog
-            v-if="sharedView && index && manifest"
+            v-if="sharedCards.length && index && manifest"
             :open="true"
-            :view="sharedView"
-            :leaders="sharedLeaders"
+            :view="sharedCards[0].view"
+            :cards="sharedCards"
             :context="{
                 manifest,
                 provinceOfCounty,
                 index,
                 seats,
             }"
-            @update:open="(v) => !v && (sharedView = null)"
+            @update:open="(v) => !v && (sharedCards = [])"
         />
         <InPowerExport
             v-model:open="exportNational"

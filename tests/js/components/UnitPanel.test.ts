@@ -268,6 +268,33 @@ describe('UnitPanel: who represents the unit', () => {
         expect(row.get('a').text()).toBe('archive.gazettes.africa');
     });
 
+    it('says how each seat was won in its own word, and "Since" for a basis it does not know', () => {
+        const withBasis = (basis: string) =>
+            mount(UnitPanel, {
+                props: {
+                    unit: leadersIndex.get('county', 47)!,
+                    index: leadersIndex,
+                    seats: {
+                        ...LEADERS_SEATS,
+                        holders: LEADERS_SEATS.holders.map((h) =>
+                            h.seat === 'governor' && h.code === 47 ? { ...h, basis } : h,
+                        ),
+                    },
+                    towns: [],
+                },
+            })
+                .get('[data-leader="governor"]')
+                .text()
+                .replace(/\s+/g, ' ');
+        expect(withBasis('elected')).toContain('Elected 2022');
+        expect(withBasis('by_election')).toContain('By-election 2022');
+        expect(withBasis('succession')).toContain('Succeeded 2022');
+        expect(withBasis('nominated')).toContain('Nominated 2022');
+        const unknown = withBasis('appointed');
+        expect(unknown).toContain('Since 2022');
+        expect(unknown).not.toContain('Elected');
+    });
+
     it('says "No approved data yet" for a seat with no holder', () => {
         const w = mountAt('county', 3);
         expect(w.get('[data-leader="senator"]').text()).toContain(

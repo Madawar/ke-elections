@@ -104,7 +104,7 @@ export function mixColours(view: ViewState) {
 }
 
 /** Lay `parts` across `w` in proportion to their counts, with `gap` between them. */
-function spread<T extends { count: number }>(
+export function spread<T extends { count: number }>(
     parts: T[],
     x: number,
     w: number,

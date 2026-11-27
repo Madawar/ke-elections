@@ -370,6 +370,73 @@ describe('the party card', () => {
         await flushPromises();
         expect(document.body.textContent).toContain('Share party card');
     });
+
+    const cardChoices = () =>
+        [
+            ...document.querySelectorAll<HTMLInputElement>(
+                'input[name="view-card"]',
+            ),
+        ].map((i) => `${i.value}:${i.closest('label')?.textContent?.trim()}`);
+
+    it('offers the party’s top 10 counties for MCA seats beside the party card, across Kenya', async () => {
+        const w = await mountPage();
+        w.findComponent(SearchBox).vm.$emit('pickParty', 'UDA');
+        await flushPromises();
+        await w.get('[data-share-card]').trigger('click');
+        await flushPromises();
+        expect(cardChoices()).toEqual([
+            'partyCard:Party card',
+            'topCounties:Top 10 counties',
+        ]);
+        document
+            .querySelector<HTMLInputElement>(
+                'input[name="view-card"][value="topCounties"]',
+            )!
+            .click();
+        await flushPromises();
+        expect(
+            document.querySelector('[data-fixed-headline]')?.textContent?.trim(),
+        ).toBe('Where UDA holds the most MCA seats');
+        expect(document.body.textContent).toContain(
+            'This card’s headline is fixed, so it stays neutral.',
+        );
+    });
+
+    it('does not offer it for a party profile within a county, or for a party with no MCA', async () => {
+        const w = await mountPage();
+        await pick(w, NAIROBI);
+        w.findComponent(SearchBox).vm.$emit('pickParty', 'UDA');
+        await flushPromises();
+        await w.get('[data-share-card]').trigger('click');
+        await flushPromises();
+        expect(document.body.textContent).toContain('Share party card');
+        expect(cardChoices()).toEqual([]);
+        w.unmount();
+        document.body.innerHTML = '';
+
+        // DP's MCA seats given to another party: it still holds seats, but no MCA.
+        const noMca = {
+            ...PARTY_SEATS,
+            holders: PARTY_SEATS.holders.map((h) =>
+                h.seat === 'mca' && h.party === 'DP' ? { ...h, party: 'UDA' } : h,
+            ),
+        };
+        vi.stubGlobal(
+            'fetch',
+            vi.fn((url: string) =>
+                url.includes('seats.json')
+                    ? Promise.resolve(new Response(JSON.stringify(noMca), { status: 200 }))
+                    : fakeFetch(url),
+            ),
+        );
+        const d = await mountPage();
+        d.findComponent(SearchBox).vm.$emit('pickParty', 'DP');
+        await flushPromises();
+        await d.get('[data-share-card]').trigger('click');
+        await flushPromises();
+        expect(document.body.textContent).toContain('Share party card');
+        expect(cardChoices()).toEqual([]);
+    });
 });
 
 describe('the legend while a profile is open', () => {

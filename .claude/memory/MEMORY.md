@@ -1,1 +1,2 @@
 - [Kenya Electoral Map project](project-kenya-electoral-map.md) — phased build, superpowers workflow, public repo, PWA, MySQL
+- [Release tags](release-tags.md) — cloud sessions cannot push tags (403); do the release, then hand the owner the tag commands

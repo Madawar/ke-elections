@@ -50,6 +50,20 @@ export interface LeaderRow {
     holder: LeaderHolder | null;
 }
 
+const BASIS_LABEL: Record<string, string> = {
+    elected: 'Elected',
+    by_election: 'By-election',
+    succession: 'Succeeded',
+    nominated: 'Nominated',
+};
+
+/**
+ * How a holder came to the seat, as the panel and the cards say it, for each basis the importer
+ * allows (`HoldersImporter::BASES`): "Elected", "By-election", "Succeeded", "Nominated". An unknown
+ * basis gets no word (""), so nothing is claimed that the record does not say.
+ */
+export const basisLabel = (basis: string): string => BASIS_LABEL[basis] ?? '';
+
 /** The seat's ballot colour; the Deputy President is elected on the President's ballot. */
 export const leaderColour = (seat: LeaderSeat): string =>
     SEAT_COLOURS[seat === 'deputy_president' ? 'president' : seat];
