@@ -87,6 +87,8 @@ import {
     countySeatsColouring,
     legendScope,
     loadSeats,
+    mcaNameLines,
+    mpOutline,
     seatColouring,
     withIndependentColour,
 } from '@/lib/seats';
@@ -291,10 +293,79 @@ const colouring = computed<Colouring>(() => {
         faded: t.faded,
         only: new Set(onlyParties.value),
     };
-    return k === COUNTY_SEATS
-        ? countySeatsColouring(seats.value, tokens)
-        : seatColouring(seats.value, k, tokens);
+    if (k === COUNTY_SEATS) return countySeatsColouring(seats.value, tokens);
+    const fills = seatColouring(seats.value, k, tokens);
+    if (k !== 'mca') return fills;
+    // The MCA view: each ward label may carry its MCA's name, and each constituency is outlined
+    // in its MP's party colour (with its own highlight), unless that is switched off.
+    return {
+        ...fills,
+        names: mcaNameLines(seats.value),
+        ...(outlinesOn.value
+            ? {
+                  outline: mpOutline(seats.value, {
+                      noData: t.noData,
+                      faded: t.faded,
+                      only: new Set(onlyMpParties.value),
+                  }),
+              }
+            : {}),
+    };
 });
+
+// ---- MP outlines over the MCA wards ----------------------------------------------------------
+// "Show MPs as outlines" (map settings): on by default, and remembered.
+const MP_OUTLINES_KEY = 'kem.mpOutlines';
+function readMpOutlines() {
+    try {
+        return localStorage.getItem(MP_OUTLINES_KEY) !== 'false';
+    } catch {
+        return true;
+    }
+}
+const mpOutlines = ref(readMpOutlines());
+watch(mpOutlines, (on) => {
+    try {
+        localStorage.setItem(MP_OUTLINES_KEY, String(on));
+    } catch {
+        // Storage can be blocked; the choice then lasts until the page closes.
+    }
+});
+// The outlines are drawn in the MCA view, over the wards of whatever is in view. A focused ward
+// has no constituency outline around it to draw.
+const outlinesOn = computed(
+    () =>
+        colourKey.value === 'mca' &&
+        mpOutlines.value &&
+        focusOf(selection.value)?.level !== 'ward',
+);
+// The outlines have their own highlight, apart from the ward fills'.
+const onlyMpParties = useStorage<string[]>('km.onlyMp', []);
+/** The outlines' own legend: MP seats in the same scope, from the same function as every legend. */
+const mpLegend = computed(() => {
+    if (!outlinesOn.value || !index.value) return null;
+    const scope = legendScope(index.value, 'mp', focusOf(selection.value));
+    return buildLegend(
+        seats.value,
+        'mp',
+        scope && { codes: scope.codes, unitName: scope.unit.n },
+        onlyMpParties.value,
+        asOfText.value,
+    );
+});
+function toggleMpParty(key: string) {
+    if (!mpLegend.value) return;
+    onlyMpParties.value = toggledParties(
+        mpLegend.value.members,
+        onlyMpParties.value,
+        key,
+    );
+}
+/** "Show all": every highlight goes, the fills' and the outlines'. */
+function clearHighlights() {
+    onlyParties.value = [];
+    onlyMpParties.value = [];
+}
 
 const asOfText = computed(() =>
     formatAsOf(seats.value.data_as_of ?? seats.value.as_of),
@@ -931,8 +1002,17 @@ async function locate() {
 const tip = ref<{ text: string; x: number; y: number } | null>(null);
 function onHover(p: Picked | null, point: { x: number; y: number }) {
     const u = p && index.value?.get(p.level, p.code);
+    // In the MCA view a ward's tooltip names its MCA: on the map itself only the selected ward does.
+    const mca =
+        u?.l === 'ward' && colourKey.value === 'mca'
+            ? colouring.value.names?.get(u.c)
+            : undefined;
     tip.value = u
-        ? { text: `${u.n} ${LEVEL_NAME[u.l]}`, x: point.x, y: point.y }
+        ? {
+              text: `${u.n} ${LEVEL_NAME[u.l]}${mca ? `. MCA: ${mca}` : ''}`,
+              x: point.x,
+              y: point.y,
+          }
         : null;
 }
 
@@ -1006,6 +1086,8 @@ function shareView() {
         only: onlyParties.value,
         showSurroundings: showSurroundings.value,
         theme: theme.value,
+        mpOutlines: mpOutlines.value,
+        onlyMp: onlyMpParties.value,
     });
 }
 
@@ -1167,15 +1249,26 @@ const showView = (v: typeof view.value) => {
                 :rows="legend.rows"
                 :note="legend.note"
                 :highlighted="legend.highlighted"
-                :filtered="legend.filtered"
+                :filtered="
+                    legend.filtered || (!!mpLegend && mpLegend.filtered)
+                "
+                :outline="
+                    mpLegend && {
+                        title: 'MPs (outline)',
+                        rows: mpLegend.rows,
+                        highlighted: mpLegend.highlighted,
+                    }
+                "
+                fill-title="MCAs (fill)"
                 :shareable="canShareView"
                 :share-emphasis="
                     canShareView &&
                     (onlyParties.length > 0 || !!focusOf(selection))
                 "
                 @toggle="toggleParty"
+                @toggle-outline="toggleMpParty"
                 :leaders="leadersHere"
-                @clear="onlyParties = []"
+                @clear="clearHighlights"
                 @share="shareView"
                 @party="openParty"
                 @leader="onPickLeader"
@@ -1286,6 +1379,7 @@ const showView = (v: typeof view.value) => {
                     )
                 "
                 @update:colour="chooseMode"
+                v-model:mp-outlines="mpOutlines"
                 v-model:enabled="enabledOverlays"
                 v-model:theme="themePref"
                 :overlays="overlays"

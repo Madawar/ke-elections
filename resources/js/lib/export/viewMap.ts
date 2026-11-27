@@ -11,6 +11,7 @@ import type { MapTheme } from '@/lib/map/theme';
 import {
     type SeatsData,
     countySeatsColouring,
+    mpOutline,
     seatColouring,
 } from '@/lib/seats';
 import type { UnitIndex } from '@/lib/units';
@@ -29,6 +30,10 @@ export type ViewMapSpec = Pick<
 > & {
     /** A county leaders card: stripe the counties by their three seats instead of `seat`. */
     stripes?: boolean;
+    /** Outline each constituency in its MP's party colour, over the MCA ward fills. */
+    outline?: boolean;
+    /** The highlight of those outlines. */
+    onlyMp?: readonly string[];
 };
 
 export interface ViewMapContext {
@@ -49,9 +54,18 @@ export function viewColouring(
         faded: theme.faded,
         only: new Set(view.only),
     };
-    return view.stripes
-        ? countySeatsColouring(seats, tokens)
-        : seatColouring(seats, view.seat, tokens);
+    if (view.stripes) return countySeatsColouring(seats, tokens);
+    const colouring = seatColouring(seats, view.seat, tokens);
+    return view.outline
+        ? {
+              ...colouring,
+              outline: mpOutline(seats, {
+                  noData: theme.noData,
+                  faded: theme.faded,
+                  only: new Set(view.onlyMp ?? []),
+              }),
+          }
+        : colouring;
 }
 
 /** Width over height of the area the card's map shows, in Web Mercator. */

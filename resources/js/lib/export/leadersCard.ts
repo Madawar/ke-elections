@@ -35,6 +35,8 @@ export interface LeadersCardView {
     // constituency and a ward are coloured by MCA. Nothing is highlighted.
     seat: 'mca';
     stripes: boolean;
+    /** A constituency's map is outlined in its MP's party colour, over its wards. */
+    outline: boolean;
     only: string[];
     focus: FocusSelection & {
         name: string;
@@ -110,6 +112,7 @@ export function leadersCardView({
         theme,
         seat: 'mca',
         stripes,
+        outline: focus.level === 'constituency',
         only: [],
         focus: { ...focus, name: unit.n, b: unit.b },
         showSurroundings: false,

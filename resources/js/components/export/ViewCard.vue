@@ -288,6 +288,16 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                     </text>
                 </g>
                 <text
+                    v-if="layout.leaders.note"
+                    data-leaders-note
+                    :x="layout.leaders.note.x"
+                    :y="layout.leaders.note.y"
+                    :font-size="layout.leaders.note.size"
+                    :fill="tone(layout.leaders.note.tone)"
+                >
+                    {{ layout.leaders.note.text }}
+                </text>
+                <text
                     v-if="layout.leaders.more"
                     data-leaders-more
                     :x="layout.leaders.more.x"

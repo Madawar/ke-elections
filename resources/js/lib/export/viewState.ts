@@ -78,6 +78,15 @@ export interface PartyView {
     single: SingleSeat | null;
     /** The highlighted party abbreviations, in the order they were picked. */
     only: string[];
+    /**
+     * An MCA card for a county or a constituency: its map outlines each constituency in its
+     * MP's party colour, as on screen.
+     */
+    outline: boolean;
+    /** The parties whose MP outlines are highlighted (apart from the ward fills' highlight). */
+    onlyMp: string[];
+    /** A county's MCA card: "MPs (outlines): ODM 8, UDA 4", from the MP legend of the county. */
+    mpLine: string | null;
     showSurroundings: boolean;
     theme: ThemeName;
     /** The legend heading without the highlight ("MCA seats across Kenya by party"). */
@@ -137,6 +146,10 @@ export interface SnapshotInput {
     theme: ThemeName;
     /** Set when the view shows sample records. */
     sample?: boolean;
+    /** "Show MPs as outlines" is on (the default). */
+    mpOutlines?: boolean;
+    /** The highlight of the MP outlines. */
+    onlyMp?: readonly string[];
 }
 
 const fmt = (n: number) => n.toLocaleString('en-GB');
@@ -233,6 +246,8 @@ export function snapshotView({
     showSurroundings,
     theme,
     sample = false,
+    mpOutlines = true,
+    onlyMp = [],
 }: SnapshotInput): PartyView {
     const scope = legendScope(index, seat, focus);
     const legend = buildLegend(
@@ -309,6 +324,29 @@ export function snapshotView({
             h.seat === seat && h.party && (!scope || scope.codes.has(h.code)),
     );
     const leaders = cardLeaders(seats, index, seat, focusUnit ? focus : null);
+    // The MP outlines are drawn inside a county or a constituency, over its wards.
+    const outline =
+        mpOutlines &&
+        seat === 'mca' &&
+        !!focusUnit &&
+        !!focus &&
+        focus.level !== 'ward';
+    // A county's card has no MP row (17 MPs would not fit): one line counts them by party.
+    const mpScope =
+        outline && focus?.level === 'county'
+            ? legendScope(index, 'mp', focus)
+            : null;
+    const mpRows = mpScope
+        ? buildLegend(
+              seats,
+              'mp',
+              { codes: mpScope.codes, unitName: mpScope.unit.n },
+              [],
+          ).rows
+        : [];
+    const mpLine = mpRows.length
+        ? `MPs (outlines): ${mpRows.map((r) => `${r.label} ${r.count}`).join(', ')}`
+        : null;
     // The strip's holders are on the card too, so their sources join the footer's.
     const sourceUrls = [
         ...holdersInView.map((h) => h.source_url),
@@ -335,6 +373,9 @@ export function snapshotView({
             only,
         ),
         leaders,
+        outline,
+        onlyMp: outline ? [...new Set(onlyMp)] : [],
+        mpLine,
         only: [...new Set(only)],
         showSurroundings,
         theme,
@@ -429,6 +470,8 @@ export function withTheme(
         showSurroundings: view.showSurroundings,
         theme,
         sample: view.sample,
+        mpOutlines: view.outline,
+        onlyMp: view.onlyMp,
     });
 }
 

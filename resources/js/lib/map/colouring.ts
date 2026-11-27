@@ -42,6 +42,22 @@ export interface Colouring {
     patterns?: Map<number, string>;
     /** ... and the pattern of a county with no holder at all. */
     fallbackPattern?: string;
+    /** MCA view: each constituency outlined in its MP's party colour, over the ward fills. */
+    outline?: OutlineColouring;
+    /** MCA view: the second line of a ward's label, "<MCA name> (<ABBREV>)", by ward code. */
+    names?: Map<number, string>;
+}
+
+/** The MP outlines drawn over the MCA ward fills. */
+export interface OutlineColouring {
+    /** Constituency code to the MP's party colour (the faded colour when not highlighted). */
+    colours: Map<number, string>;
+    /** A constituency with no approved MP. */
+    fallback: string;
+    /** Constituency code to its badge, "MP: ODM". */
+    badges: Map<number, string>;
+    /** The badge of a constituency with no approved MP. */
+    fallbackBadge: string;
 }
 
 export const NO_COLOURING: Colouring = {

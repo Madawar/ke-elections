@@ -5,7 +5,9 @@ import type {
 } from 'maplibre-gl';
 import {
     type Colouring,
+    type OutlineColouring,
     NO_COLOURING,
+    codeColour,
     fillColor,
     fillPattern,
     isFinerThanSeat,
@@ -14,6 +16,7 @@ import {
 import { patternId } from './stripes';
 import { type MapLevel, levelOpacityStops } from './levels';
 import type { MapTheme } from './theme';
+import { NAME_LINE_MAX_EMS, fitsNameLine } from './wardLabels';
 
 export const GLYPHS = '/glyphs/{fontstack}/{range}.pbf';
 export const SOURCES = [
@@ -38,6 +41,8 @@ export interface FocusStyle {
     outside?: OutsideTests;
     /** The focused unit's level; a seat colouring above it is carried down to that level's fill. */
     level?: MapLevel;
+    /** The focused unit's code: a focused ward's label carries its MCA's name. */
+    code?: number;
 }
 /** A seat colour is drawn this opaque, so the lines and labels over it stay legible. */
 export const SEAT_FILL_OPACITY = 0.8;
@@ -134,6 +139,7 @@ function lineLayers(
     theme: MapTheme,
     cased: boolean,
     focus?: FocusStyle,
+    outline?: OutlineColouring,
 ): LayerSpecification[] {
     const width = (stops: number[]) =>
         [
@@ -225,6 +231,7 @@ function lineLayers(
     });
     return [
         ...lines,
+        ...outlineLayers(theme, focus, outline),
         ...SOURCES.filter((s) => s !== 'provinces').map(
             (source): LayerSpecification => ({
                 id: `${source}-selected`,
@@ -243,9 +250,179 @@ function lineLayers(
     ];
 }
 
+/**
+ * The MP outline is this wide, in pixels, by zoom: 4 to 5 from zoom 12, where single wards are
+ * read, and lighter further out, where a 4px band inside every small constituency of a whole
+ * county (Nairobi City has 17) would bury the ward fills.
+ */
+const OUTLINE_WIDTH = [6.4, 1.5, 9, 2.5, 11, 3.2, 12, 4, 14, 5];
+/** The ink edge on each side of it. */
+const OUTLINE_EDGE = 1;
+
+/**
+ * MP outlines over the MCA wards: inside each constituency, a party-colour line between two thin
+ * ink edges, so it reads even over wards of the same colour. It is offset inward by half its
+ * width, so two neighbours each show their own MP's colour on their own side of a shared border.
+ * The layers are always in the style (a restyle only changes paint); with no outline to draw
+ * they are fully transparent. Outlines show from the constituency zoom band down, and at any
+ * zoom while a unit is focused.
+ */
+function outlineLayers(
+    theme: MapTheme,
+    focus: FocusStyle | undefined,
+    outline: OutlineColouring | undefined,
+): LayerSpecification[] {
+    const zoomed = (stops: number[], f: (v: number) => number) =>
+        [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            ...stops.map((v, i) => (i % 2 === 1 ? f(v) : v)),
+        ] as ExpressionSpecification;
+    const outside = focus?.outside?.constituencies;
+    const shown: ExpressionSpecification | number = focus
+        ? 1
+        : (['interpolate', ['linear'], ['zoom'], 6.4, 0, 7.2, 1] as never);
+    const opacity = !outline
+        ? 0
+        : outside
+          ? (['case', outside, OUTSIDE_LINE_FACTOR, shown] as never)
+          : shown;
+    const colour = outline
+        ? codeColour(outline.colours, outline.fallback)
+        : theme.noData;
+    const edged = (v: number) => v + 2 * OUTLINE_EDGE;
+    // A focused constituency's own outline (ink, centred on its border) would cover most of the
+    // band, so there the band starts inside that outline.
+    const clear = (zoom: number) =>
+        focus?.level === 'constituency'
+            ? (3.4 + ((Math.min(12, zoom) - 4) / 8) * 2.2) / 2
+            : 0;
+    const offset = [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        ...OUTLINE_WIDTH.map((v, i) =>
+            i % 2 === 1 ? edged(v) / 2 + clear(OUTLINE_WIDTH[i - 1]) : v,
+        ),
+    ] as ExpressionSpecification;
+    const layer = (
+        id: string,
+        lineColour: unknown,
+        lineWidth: ExpressionSpecification,
+    ): LayerSpecification =>
+        ({
+            id,
+            type: 'line',
+            source: 'constituencies',
+            layout: { 'line-join': 'round' },
+            paint: {
+                'line-color': lineColour,
+                'line-width': lineWidth,
+                'line-offset': offset,
+                'line-opacity': opacity,
+            },
+        }) as LayerSpecification;
+    return [
+        layer('mp-outline-edge', theme.ink, zoomed(OUTLINE_WIDTH, edged)),
+        layer(
+            'mp-outline',
+            outside ? ['case', outside, theme.muted, colour] : colour,
+            zoomed(OUTLINE_WIDTH, (v) => v),
+        ),
+    ];
+}
+
+/** A filter that matches nothing: the layer stays in the style but places no label. */
+const NO_LABELS = ['==', ['get', 'code'], -1] as const;
+
+/**
+ * The "MP: <ABBREV>" badge at each constituency's label point, and the selected ward's two-line
+ * label with its MCA's name. Both sit under the labels they must give way to (MapLibre places
+ * the layers on top first): the badge under the constituency and ward names, and the plain ward
+ * name under the two-line label, so that if the two lines do not fit the name alone still shows.
+ */
+function seatLabelLayers(
+    theme: MapTheme,
+    colouring: Colouring,
+    focus: FocusStyle | undefined,
+): { badge: LayerSpecification; wardNames: LayerSpecification } {
+    const text = {
+        'text-allow-overlap': false,
+        'text-padding': 3,
+        'symbol-sort-key': ['get', 'code'],
+    };
+    const paint = {
+        'text-color': theme.label,
+        'text-halo-color': theme.labelHalo,
+        'text-halo-width': 1.6,
+    };
+    const outline = colouring.outline;
+    const badge = {
+        id: 'labels-mp',
+        type: 'symbol',
+        source: 'labels',
+        minzoom: 7,
+        filter: ['==', ['get', 'level'], 'constituency'],
+        layout: {
+            ...text,
+            'text-field': outline
+                ? codeColour(outline.badges, outline.fallbackBadge)
+                : '',
+            'text-font': ['Noto Sans Medium'],
+            'text-size': ['interpolate', ['linear'], ['zoom'], 7, 10, 12, 12],
+            // Under the constituency's name where there is room, else beside or above it.
+            'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+            // Far enough from the point to clear a one-line constituency name.
+            'text-radial-offset': 1.7,
+            'text-justify': 'auto',
+        },
+        paint,
+    } as unknown as LayerSpecification;
+
+    // The selected ward's label carries its MCA's name (see wardLabels.ts for why only that one).
+    // A name that would need more than two lines is left off rather than cut.
+    const code = focus?.level === 'ward' ? focus.code : undefined;
+    const line = code === undefined ? undefined : colouring.names?.get(code);
+    const shown = line !== undefined && fitsNameLine(line);
+    const wardNames = {
+        id: 'labels-ward-mca',
+        type: 'symbol',
+        source: 'labels',
+        filter: shown
+            ? [
+                  'all',
+                  ['==', ['get', 'level'], 'ward'],
+                  ['==', ['get', 'code'], code],
+              ]
+            : NO_LABELS,
+        layout: {
+            ...text,
+            'text-field': shown
+                ? [
+                      'format',
+                      ['get', 'name'],
+                      {},
+                      '\n',
+                      {},
+                      line,
+                      { 'font-scale': 0.86, 'text-color': theme.muted },
+                  ]
+                : '',
+            'text-font': ['Noto Sans Regular'],
+            'text-size': ['interpolate', ['linear'], ['zoom'], 9.3, 11, 13, 14],
+            'text-max-width': NAME_LINE_MAX_EMS,
+            'text-line-height': 1.15,
+        },
+        paint,
+    } as unknown as LayerSpecification;
+    return { badge, wardNames };
+}
+
 function labelLayers(
     theme: MapTheme,
     showProvinces: boolean,
+    seat: { badge: LayerSpecification; wardNames: LayerSpecification },
 ): LayerSpecification[] {
     const opacity = (stops: number[]) =>
         [
@@ -288,6 +465,7 @@ function labelLayers(
             },
         }) as LayerSpecification;
     return [
+        seat.badge,
         base(
             'ward',
             'Noto Sans Regular',
@@ -295,6 +473,7 @@ function labelLayers(
             { minzoom: 9.1 },
             [9.1, 0, 9.7, 1],
         ),
+        seat.wardNames,
         base(
             'constituency',
             'Noto Sans Regular',
@@ -457,14 +636,23 @@ export function buildStyle({
                 }),
             ),
             ...fills,
-            ...lineLayers(theme, colouring.mode.kind !== 'none', focus),
+            ...lineLayers(
+                theme,
+                colouring.mode.kind !== 'none',
+                focus,
+                colouring.outline,
+            ),
             {
                 id: 'overlays-anchor',
                 type: 'background',
                 layout: { visibility: 'none' },
                 paint: {},
             },
-            ...labelLayers(theme, colouring.mode.kind === 'province'),
+            ...labelLayers(
+                theme,
+                colouring.mode.kind === 'province',
+                seatLabelLayers(theme, colouring, focus),
+            ),
         ],
     };
 }

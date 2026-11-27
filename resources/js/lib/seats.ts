@@ -4,6 +4,7 @@ import {
     COUNTY_SEATS,
     COUNTY_SEAT_KEYS,
     type Colouring,
+    type OutlineColouring,
     type SeatKey,
     type SeatMode,
     SEAT_LEVEL,
@@ -213,6 +214,61 @@ export function countySeatsColouring(
         ),
         fallbackPattern: patternId([opts.noData, opts.noData, opts.noData]),
     };
+}
+
+/** The badge of a constituency with no approved MP. */
+export const MP_NO_DATA = 'MP: no data';
+
+/**
+ * The MP outlines over the MCA wards: each constituency's outline in its MP's party colour, from
+ * the same holder data, keyed by constituency code. `only` is the highlight of the outlines
+ * (their own, apart from the ward fills'): the other parties' outlines take the faded colour.
+ * The badge names the party by its abbreviation ("MP: ODM"; "MP: Independent").
+ */
+export function mpOutline(
+    data: SeatsData,
+    opts: { noData: string; faded: string; only?: Set<string> },
+): OutlineColouring {
+    const colours = partyColours(data);
+    const lines = new Map<number, string>();
+    const badges = new Map<number, string>();
+    for (const h of data.holders) {
+        if (h.seat !== 'mp' || h.level !== 'constituency' || !h.party) continue;
+        const show =
+            !opts.only || opts.only.size === 0 || opts.only.has(h.party);
+        lines.set(
+            h.code,
+            show ? (colours.get(h.party) ?? fallback(h.party)) : opts.faded,
+        );
+        badges.set(
+            h.code,
+            `MP: ${h.party === INDEPENDENT ? 'Independent' : h.party}`,
+        );
+    }
+    return {
+        colours: lines,
+        fallback: opts.noData,
+        badges,
+        fallbackBadge: MP_NO_DATA,
+    };
+}
+
+/**
+ * The second line of each ward's label: the MCA's name exactly as the data spells it, then the
+ * party's abbreviation in brackets. A ward with no approved MCA has no line: it shows its name
+ * alone.
+ */
+export function mcaNameLines(data: SeatsData): Map<number, string> {
+    const out = new Map<number, string>();
+    for (const h of data.holders)
+        if (h.seat === 'mca' && h.level === 'ward')
+            out.set(
+                h.code,
+                h.party
+                    ? `${h.name} (${h.party === INDEPENDENT ? 'Independent' : h.party})`
+                    : h.name,
+            );
+    return out;
 }
 
 /** The seats a mode counts: its own, or the three county seats together. */

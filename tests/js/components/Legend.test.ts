@@ -503,3 +503,80 @@ describe('Legend: the "Leaders here" strip', () => {
         ).toBe(false);
     });
 });
+
+describe('Legend: two lists in the MCA view (MP outlines and MCA fills)', () => {
+    const mp = [
+        { key: 'ODM', label: 'ODM', name: 'Orange Democratic Movement', colour: '#f80', count: 8, party: 'ODM' },
+        { key: 'UDA', label: 'UDA', name: 'United Democratic Alliance', colour: '#fc0', count: 4, party: 'UDA' },
+    ];
+    const outline = { title: 'MPs (outline)', rows: mp, highlighted: ['UDA'] };
+    const mountTwo = (props = {}) =>
+        mountLegend({ outline, fillTitle: 'MCAs (fill)', highlighted: ['ODM'], ...props });
+    const section = (w: ReturnType<typeof mountTwo>, name: string) =>
+        w.get(`[data-legend-section="${name}"]`);
+
+    it('heads the two lists "MPs (outline)" and "MCAs (fill)", the outlines first', () => {
+        const w = mountTwo();
+        const sections = w.findAll('[data-legend-section]');
+        expect(sections.map((s) => s.attributes('data-legend-section'))).toEqual([
+            'outline',
+            'fill',
+        ]);
+        expect(section(w, 'outline').get('h4').text()).toBe('MPs (outline)');
+        expect(section(w, 'fill').get('h4').text()).toBe('MCAs (fill)');
+    });
+
+    it('counts and shares each list on its own seats', () => {
+        const w = mountTwo();
+        const cellsOf = (name: string) =>
+            section(w, name)
+                .findAll('li')
+                .map(
+                    (li) =>
+                        `${li.attributes('data-key')} ${li.get('[data-count]').text()} ${li.get('[data-share]').text()}`,
+                );
+        // 8 and 4 of 12 MPs; the MCAs keep their own 28.
+        expect(cellsOf('outline')).toEqual(['ODM 8 (67%)', 'UDA 4 (33%)']);
+        expect(cellsOf('fill')[0]).toBe('ODM 13 (46%)');
+        expect(cellsOf('fill')).toHaveLength(5);
+    });
+
+    it('toggles each list’s own highlight: the outlines’ rows do not touch the fills’', async () => {
+        const w = mountTwo();
+        await section(w, 'outline').get('[data-key="ODM"] button').trigger('click');
+        expect(w.emitted('toggleOutline')).toEqual([['ODM']]);
+        expect(w.emitted('toggle')).toBeUndefined();
+        await section(w, 'fill').get('[data-key="UDA"] button').trigger('click');
+        expect(w.emitted('toggle')).toEqual([['UDA']]);
+        expect(w.emitted('toggleOutline')).toHaveLength(1);
+    });
+
+    it('marks each list’s own highlighted rows, and names what a row highlights', () => {
+        const w = mountTwo();
+        const pressed = (name: string) =>
+            section(w, name)
+                .findAll('button[aria-pressed="true"]')
+                .map((b) => b.attributes('aria-label'));
+        expect(pressed('outline')).toEqual([
+            'Highlight United Democratic Alliance outlines',
+        ]);
+        expect(pressed('fill')).toEqual([
+            'Highlight Orange Democratic Movement areas',
+        ]);
+    });
+
+    it('opens a party’s profile from either list', async () => {
+        const w = mountTwo();
+        await section(w, 'outline')
+            .get('[data-key="UDA"] [data-party-details]')
+            .trigger('click');
+        expect(w.emitted('party')).toEqual([['UDA']]);
+    });
+
+    it('is one list, with no headings, in every other view', () => {
+        const w = mountLegend();
+        expect(w.find('[data-legend-section]').exists()).toBe(false);
+        expect(w.find('h4').exists()).toBe(false);
+        expect(mountLegend({ outline: null, fillTitle: 'MCAs (fill)' }).find('h4').exists()).toBe(false);
+    });
+});

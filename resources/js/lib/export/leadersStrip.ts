@@ -25,6 +25,8 @@ export interface LeadersStripLayout {
     rows: StripRowItem[];
     /** "+1 more at <link>", when there was no room for every row. */
     more: TextItem | null;
+    /** A county's MCA card: "MPs (outlines): ODM 8, UDA 4", under the rows. */
+    note: TextItem | null;
 }
 
 export interface LeadersStripInput {
@@ -44,6 +46,8 @@ export interface LeadersStripInput {
      * Without it the MP shares the columns, and says since when only if that fits its cell.
      */
     lead?: boolean;
+    /** A line under the rows: the county's MPs by party, which its map shows as outlines. */
+    note?: string | null;
 }
 
 const EMPTY = 'No approved data yet';
@@ -66,6 +70,7 @@ export function leadersStrip({
     link,
     columns,
     lead: leadLine = true,
+    note = null,
 }: LeadersStripInput): LeadersStripLayout | null {
     if (!rows.length) return null;
     const rowH = Math.round(font * 1.5);
@@ -138,9 +143,21 @@ export function leadersStrip({
         };
 
     // Every row; with no room for that, the first two and a count of the rest.
+    // The note takes a line of its own (it shrinks a little to fit, and is dropped rather than cut).
+    const noteSize = note
+        ? Math.max(
+              Math.round(small * 0.8),
+              Math.min(
+                  small,
+                  Math.floor((small * (w - lidW - gap)) / textWidth(note, small)),
+              ),
+          )
+        : 0;
+    const noteFits = !!note && textWidth(note, noteSize) <= w - lidW - gap;
+    const noteH = noteFits ? Math.round(small * 1.5) : 0;
     let layout = arrange(rows);
     let more = 0;
-    if (layout.lines * rowH > maxH && rows.length > 2) {
+    if (layout.lines * rowH + noteH > maxH && rows.length > 2) {
         layout = arrange(rows.slice(0, 2));
         more = rows.length - 2;
     }
@@ -222,10 +239,21 @@ export function leadersStrip({
     });
     const rowsH = layout.lines * rowH;
     const moreH = more ? Math.round(small * 1.5) : 0;
+    // With the rows shortened there is no room for the note either.
+    const showNote = noteFits && !more;
     return {
-        box: { x, y, w, h: rowsH + moreH },
+        box: { x, y, w, h: rowsH + moreH + (showNote ? noteH : 0) },
         columns: cols,
         rows: items,
+        note: showNote
+            ? {
+                  x: x + lidW + gap,
+                  y: Math.round(y + rowsH + small * 1.05),
+                  text: note!,
+                  size: noteSize,
+                  tone: 'muted',
+              }
+            : null,
         more: more
             ? {
                   x: x + lidW + gap,

@@ -68,6 +68,9 @@ export interface UseMapOptions {
 
 type Padding = { top: number; bottom: number; left: number; right: number };
 
+/** The label layers whose text a restyle updates, not only their paint. */
+const SEAT_LABEL_LAYERS = new Set(['labels-mp', 'labels-ward-mca']);
+
 /** MapLibre is loaded on demand so the first paint (and phones without WebGL2) never pay for it. */
 export const loadMapLibre = () => import('maplibre-gl');
 
@@ -119,6 +122,7 @@ export function useMap(
                 ? {
                       outside: surroundings ? focusOutside(drawn) : undefined,
                       level: drawn.level,
+                      code: drawn.code,
                   }
                 : undefined,
         });
@@ -222,6 +226,15 @@ export function useMap(
             )?.visibility;
             if (visibility && !overlayLayers.has(layer.id))
                 m.setLayoutProperty(layer.id, 'visibility', visibility);
+            // The seat labels (the MP badges, the selected ward's MCA name) change their text
+            // with the colouring and the focus.
+            if (SEAT_LABEL_LAYERS.has(layer.id)) {
+                m.setLayoutProperty(
+                    layer.id,
+                    'text-field',
+                    (layer.layout as { 'text-field'?: never })['text-field'],
+                );
+            }
         }
         applyFocus();
     }

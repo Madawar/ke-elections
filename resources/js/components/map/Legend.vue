@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// The map legend. With counts it is a bar chart: one bar per party on a single scale that starts
-// at zero, largest first, "Other parties" last. Without counts (former provinces) it is a plain key.
+// The map legend box: its heading, the "Leaders here" strip, the rows (LegendRows.vue: a bar chart
+// with counts, a plain key without), and the source, "Show all" and "Share this view" under them.
+// In the MCA view with MP outlines it has two lists: "MPs (outline)" and "MCAs (fill)".
 import { computed } from 'vue';
 import LeadersStrip from './LeadersStrip.vue';
+import LegendRows from './LegendRows.vue';
 import type { LeaderRow } from '@/lib/leaders';
-import { type LegendRow, shareOf } from '@/lib/legend';
+import type { LegendRow } from '@/lib/legend';
 
 const props = defineProps<{
     title: string;
@@ -24,10 +26,19 @@ const props = defineProps<{
     shareEmphasis?: boolean;
     /** Who holds each seat that covers the focused unit: the "Leaders here" strip. */
     leaders?: LeaderRow[];
+    /**
+     * The MCA view with MP outlines: a second list above the rows, for the outlines, with its own
+     * counts, shares and highlight. The rows are then headed `fillTitle`.
+     */
+    outline?: { title: string; rows: LegendRow[]; highlighted: string[] } | null;
+    /** The heading of the rows when `outline` is given: "MCAs (fill)". */
+    fillTitle?: string;
 }>();
 const emit = defineEmits<{
     /** A row was pressed: switch that party's highlight on or off. */
     toggle: [key: string];
+    /** A row of the outlines' list was pressed: switch that party's outline highlight. */
+    toggleOutline: [key: string];
     /** "Show all": clear every highlight. */
     clear: [];
     /** "Share this view": make a social image of the map as it is now. */
@@ -37,11 +48,9 @@ const emit = defineEmits<{
     /** A name in "Leaders here" was pressed: show that person in the panel. */
     leader: [row: LeaderRow];
 }>();
-const isOn = (key: string) => props.highlighted?.includes(key) ?? false;
 const open = defineModel<boolean>('open', { default: true });
 
-/** Some row has a details button: the rows without one keep its room, so every bar lines up. */
-const anyDetails = computed(() => props.rows.some((r) => r.party));
+// The collapsed chip shows the first few colours, largest first.
 const hasBars = computed(() => props.rows.some((r) => r.count !== undefined));
 const sorted = computed(() =>
     hasBars.value
@@ -53,24 +62,6 @@ const sorted = computed(() =>
           )
         : props.rows,
 );
-// One scale for every bar, from zero to the largest count in view.
-const largest = computed(() =>
-    Math.max(1, ...props.rows.map((r) => r.count ?? 0)),
-);
-const total = computed(() =>
-    props.rows.reduce((n, r) => n + (r.count ?? 0), 0),
-);
-/** A party's share of the seats in view. */
-const share = (count: number) => shareOf(count, total.value);
-const widthOf = (count: number) =>
-    `${Number(((count / largest.value) * 100).toFixed(1))}%`;
-/** The row's full name; a grouped row says how many parties it stands for ("Other parties (9)"). */
-const fullName = (r: LegendRow) =>
-    `${r.name ?? r.label}${r.parties ? ` (${r.parties})` : ''}`;
-const spoken = (r: LegendRow) =>
-    r.count === undefined
-        ? fullName(r)
-        : `${fullName(r)}: ${r.count} ${r.count === 1 ? 'seat' : 'seats'}, ${share(r.count).replace('<1%', 'less than 1 percent').replace('%', ' percent')}`;
 </script>
 
 <template>
@@ -116,92 +107,45 @@ const spoken = (r: LegendRow) =>
                 :rows="leaders"
                 @pick="(row) => emit('leader', row)"
             />
-            <ul class="space-y-0.5">
-                <li v-for="r in sorted" :key="r.key" :data-key="r.key">
-                    <template v-if="r.count !== undefined">
-                        <span class="sr-only">{{ spoken(r) }}</span>
-                        <!-- Two separate targets: the row highlights, the end button opens the party. -->
-                        <div class="-mx-1 flex w-[calc(100%+0.5rem)] items-stretch">
-                        <button
-                            type="button"
-                            class="flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-[3px] px-1 text-left pointer-coarse:min-h-11"
-                            :class="
-                                isOn(r.key)
-                                    ? 'font-semibold ring-2 ring-ink ring-inset'
-                                    : 'hover:bg-ground'
-                            "
-                            :aria-pressed="isOn(r.key)"
-                            :aria-label="`Highlight ${fullName(r)} areas`"
-                            @click="emit('toggle', r.key)"
-                        >
-                            <span
-                                class="inline-block size-3 shrink-0 rounded-[2px] border border-hairline"
-                                :style="{ background: r.colour }"
-                                aria-hidden="true"
-                            />
-                            <span
-                                class="w-[5rem] shrink-0 truncate"
-                                :title="fullName(r)"
-                                aria-hidden="true"
-                                >{{ r.label }}</span
-                            >
-                            <span
-                                data-track
-                                class="h-3 flex-1 rounded-[2px] bg-hairline"
-                                aria-hidden="true"
-                            >
-                                <span
-                                    data-bar
-                                    class="block h-full min-w-0.5 rounded-[2px]"
-                                    :style="{
-                                        width: widthOf(r.count),
-                                        background: r.colour,
-                                    }"
-                                />
-                            </span>
-                            <span
-                                data-count
-                                class="w-7 shrink-0 text-right tabular-nums"
-                                aria-hidden="true"
-                                >{{ r.count }}</span
-                            >
-                            <span
-                                data-share
-                                class="w-11 shrink-0 text-right whitespace-nowrap tabular-nums"
-                                aria-hidden="true"
-                                >({{ share(r.count) }})</span
-                            >
-                        </button>
-                        <button
-                            v-if="r.party"
-                            type="button"
-                            data-party-details
-                            class="flex min-h-8 w-11 shrink-0 items-center justify-center rounded-[3px] text-muted-ink hover:bg-ground hover:text-ink pointer-coarse:min-h-11"
-                            :aria-label="`${fullName(r)}: all seats`"
-                            @click="emit('party', r.party)"
-                        >
-                            <svg viewBox="0 0 16 16" class="size-4" aria-hidden="true">
-                                <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4" />
-                                <path d="M8 7.2v4M8 4.6v.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-                            </svg>
-                        </button>
+            <template v-if="outline">
+                <!-- The MCA view: the MPs' outlines, then the MCAs' fills, each with its own counts -->
+                <section data-legend-section="outline" class="mb-1.5">
+                    <h4 class="flex items-center gap-1.5 py-1 font-semibold">
                         <span
-                            v-else-if="anyDetails"
-                            class="w-11 shrink-0"
+                            class="inline-block size-3 shrink-0 rounded-[2px] border-[3px] border-muted-ink"
                             aria-hidden="true"
-                        />
-                        </div>
-                    </template>
-                    <span v-else class="flex items-center gap-2">
+                        />{{ outline.title }}
+                    </h4>
+                    <LegendRows
+                        :rows="outline.rows"
+                        :highlighted="outline.highlighted"
+                        what="outlines"
+                        @toggle="(key) => emit('toggleOutline', key)"
+                        @party="(abbrev) => emit('party', abbrev)"
+                    />
+                </section>
+                <section data-legend-section="fill">
+                    <h4 class="flex items-center gap-1.5 py-1 font-semibold">
                         <span
-                            class="inline-block size-3 shrink-0 rounded-[2px] border border-hairline"
-                            :style="{ background: r.colour }"
+                            class="inline-block size-3 shrink-0 rounded-[2px] bg-muted-ink"
                             aria-hidden="true"
-                        />
-                        <span class="truncate">{{ r.label }}</span>
-                    </span>
-                </li>
-            </ul>
+                        />{{ fillTitle }}
+                    </h4>
+                    <LegendRows
+                        :rows="rows"
+                        :highlighted="highlighted"
+                        @toggle="(key) => emit('toggle', key)"
+                        @party="(abbrev) => emit('party', abbrev)"
+                    />
+                </section>
+            </template>
+            <LegendRows
+                v-else
+                :rows="rows"
+                :highlighted="highlighted"
+                @toggle="(key) => emit('toggle', key)"
+                @party="(abbrev) => emit('party', abbrev)"
+            />
         </div>
         <!-- Outside the scrolling rows, so the source, "Show all" and "Share this view" stay in view when the legend is capped -->
         <div

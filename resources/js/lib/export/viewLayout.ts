@@ -988,7 +988,14 @@ export function viewLayout(
         // A few pixels of slack: the blocks above are placed on whole pixels.
         8;
     /** The leaders strip across `width` from `y`, in at most `maxH`; null on cards without one. */
-    const stripAt = (x: number, y: number, width: number, maxH: number) =>
+    const stripAt = (
+        x: number,
+        y: number,
+        width: number,
+        maxH: number,
+        /** The county's MPs line under the rows; left out where it would cost the strip its place. */
+        withNote = true,
+    ) =>
         leadersStrip({
             x,
             y,
@@ -999,6 +1006,7 @@ export function viewLayout(
             link,
             columns: spec.leaders.columns,
             lead: spec.leaders.lead,
+            note: withNote ? view.mpLine : null,
         });
     const stripGap = Math.round(gap * 0.75);
     /** Strip (if any), bar, legend and rows from `y` down to `bottom`, across `x`..`x + width`. */
@@ -1118,15 +1126,24 @@ export function viewLayout(
         // The leaders strip goes under the map when the shape leaves the room for it there (a
         // wide unit in a tall column); otherwise it leads the column of words.
         let under: LeadersStripLayout | null = null;
-        if (withRows) {
-            const probe = stripAt(pad, 0, mapW, Infinity);
-            const need = probe ? probe.box.h + stripGap : 0;
-            // "Leaves the room": the shape is drawn no more than 3% smaller for it.
-            if (probe && map.h - need >= (mapW / text.mapAspect) * 0.97) {
-                map = box(pad, top, mapW, map.h - need);
-                under = stripAt(pad, map.y + map.h + stripGap, mapW, Infinity);
+        if (withRows)
+            // With the county's MPs line if that fits too, else without it.
+            for (const withNote of [true, false]) {
+                const probe = stripAt(pad, 0, mapW, Infinity, withNote);
+                const need = probe ? probe.box.h + stripGap : 0;
+                // "Leaves the room": the shape is drawn no more than 3% smaller for it.
+                if (probe && map.h - need >= (mapW / text.mapAspect) * 0.97) {
+                    map = box(pad, top, mapW, map.h - need);
+                    under = stripAt(
+                        pad,
+                        map.y + map.h + stripGap,
+                        mapW,
+                        Infinity,
+                        withNote,
+                    );
+                    break;
+                }
             }
-        }
         if (view.single)
             return single(
                 t,
