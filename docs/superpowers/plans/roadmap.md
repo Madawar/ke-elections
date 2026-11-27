@@ -1,6 +1,7 @@
 # Roadmap and open decisions
 
-Last updated 2026-11-27, when v0.2.0 (`feature/map-controls`, Tasks 1–4) was released. This is
+Last updated 2026-11-27, when v0.3.0 (`feature/leaders`, Tasks 5–6 of the map-controls plan) was
+released. This is
 the committed record of what comes next. Local execution ledgers are gitignored and deleted when
 a feature finishes.
 
@@ -32,11 +33,20 @@ a feature finishes.
   - Back button and phone back, with the outside-tap hint.
   - Party profiles scoped to a county or constituency, with a party card.
   - Onboarding tour and tips.
+- **Leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with the owner's additions,
+  v0.3.0). Rulings, review outcomes and parked minors are in `2026-11-27-leaders-progress.md`.
+  - "Who represents <unit>" in the panel and "Leaders here" in the legend, both from
+    `leadersFor()` in `lib/leaders.ts`.
+  - The striped "County seats" view.
+  - MP outlines over MCA wards, with "MP: <ABBREV>" under constituency names and two lists in
+    the legend.
+  - Leaders cards for a county, a constituency and a ward; a leaders strip and bigger maps on
+    the "Share this view" cards.
 
 ## Queue, in order (owner priorities as of 2026-11-27)
-0. **Next branch: leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with their
-   owner additions).
 1. **All eight share formats.** The owner said, 2026-11-27: "I loved all."
+   - **In progress on `feature/share-formats`:** formats 1, 5, 6 and 8. Plan:
+     `2026-11-27-share-formats.md`.
    - **Mock-ups:** https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj
    - **Order:**
      - After the leaders branch, because format 1 reuses `leadersFor()`: 1 (who represents this
@@ -152,6 +162,9 @@ a feature finishes.
   2022".
 
 ## Open questions for the owner
+- **Leaders strip on other cards:** only MCA cards for a county or a constituency carry it. Should
+  Governor, Senator, Woman Rep and MP cards carry it too? (`cardLeaders` in
+  `lib/export/viewState.ts`; see the ruling in `2026-11-27-leaders-progress.md`.)
 - Past results work (step 4): yes or no, and in that order?
 - None-mode inner borders inside a focused unit are now heavier (plan item (e)). Is that OK, given
   the owner liked "boundaries only"?
@@ -182,6 +195,9 @@ a feature finishes.
 - The Senate notice says "Saturday, 25th June", but 25 Jun 2027 is a Friday.
 
 ## Parked minor findings (fix when touching the code)
+- **Leaders and MP outlines (v0.3.0):** see "Parked minor findings" in
+  `2026-11-27-leaders-progress.md`. Also left from that branch: bigger maps on the party card and
+  the "Share image" card.
 - **Map controls (v0.2.0).** The final review decided these can wait:
   - **Seat chips:**
     - The Map button's badge counts the chip choice.
