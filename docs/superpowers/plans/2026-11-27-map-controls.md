@@ -258,3 +258,63 @@
 - [ ] **Step 5:** Playwright: tips 1–4 on phone and desktop, light and dark. Check that they're
   readable, their pointers are correct, and they don't cover the control they describe.
 - [ ] **Step 6:** Commit: `feat(map): onboarding tips`.
+
+### Task 5: County leadership card, and the striped "County seats" map view
+
+The owner asked on 2026-11-27, looking at a single-seat Meru Governor card: "On the export we can
+only export one seat by county. For sections that have 2 or 3 people ruling that area, can the
+area be multi-shaded in colour?"
+
+**Requirements:**
+- **A "County leaders" card** in the existing card system, in all four sizes:
+  - The headline "County leaders in <county>".
+  - The county map filled with **diagonal stripes**: three equal stripe sets, one per seat
+    (Governor, Senator, Woman Rep), each in the holder's party data colour.
+    - If two or three holders share a party, that colour repeats, so the stripe shares show the
+      balance.
+    - If all three are from one party, the fill is solid.
+    - If a seat has no holder, its stripe uses the no-data token.
+  - **Three holder rows**, in the order Governor, Senator, Woman Rep. Each row has:
+    - The seat's ballot-lid colour as a side bar.
+    - The seat title.
+    - The name exactly as the data spells it.
+    - The party chip and party name.
+    - "In office since <date>" and the row's own source.
+  - The footer with source(s), the "as of" date and the deep link.
+- **Entry:** the share dialog offers "County leaders" whenever a county is focused, whatever the
+  seat mode. A constituency card can add "and its county's leaders" as an option. That option is
+  in scope if it fits the layout; otherwise record it as deferred.
+- **The map's "County seats" mode:**
+  - A seventh seat chip, "County seats". Every county is filled with the same stripe pattern.
+  - Use MapLibre `fill-pattern` with images generated at runtime: one canvas pattern per unique
+    colour triple, added via `map.addImage`, keyed by a stable id.
+  - Patterns are regenerated on theme change and reused for the export map.
+  - **Legend:** list the parties present, with counts of the county seats they hold across all
+    three seat types. Add a note: "Each county is striped by its Governor, Senator and Woman Rep."
+  - The party highlight works on stripes: a non-selected party's stripes become the faded token.
+- **Neutral and checked:**
+  - Stripe order is always Governor, Senator, Woman Rep, never by party.
+  - Names and sources are shown verbatim.
+  - Joins use codes only.
+- **Files:**
+  - Create `resources/js/lib/map/stripes.ts`, with `stripePattern(colours[], theme, size)`
+    returning `ImageData` and `patternId(colours)`.
+  - Create `resources/js/lib/export/countyLeaders.ts`, with `countyLeaders(seats, countyCode)`.
+  - Card layout and component changes, chip, legend and colouring changes, and tests.
+
+- [ ] **Step 1:** Write failing tests:
+  - `countyLeaders(47)` returns the three holders in order, with sources.
+  - `patternId` is stable for the same colours and differs when the order differs. Stripe order
+    is fixed by seat, not by colour.
+  - Same-party counties give a solid pattern.
+  - The legend counts in "County seats" mode sum to 141 (3 × 47) minus vacancies.
+  - The card renders in all four sizes with three holder rows, no overlap, safe zones and source.
+- [ ] **Step 2:** Run them. Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run `npm run test:js`, `types:check` and the Sail build. Expected: PASS.
+- [ ] **Step 5:** Playwright:
+  - "County seats" mode nationally, light and dark.
+  - Meru, Nairobi City, and a county whose three leaders share one party: county-leaders cards in
+    square and story.
+  - Check the stripes are readable at phone size and the borders still read.
+- [ ] **Step 6:** Commit: `feat(map): county leaders card and striped county seats view`.
