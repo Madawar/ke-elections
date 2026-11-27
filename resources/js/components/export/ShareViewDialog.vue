@@ -69,9 +69,32 @@ const options = computed<readonly ShareCard[]>(() =>
 );
 /** Which card is being made, by its key in `options`. */
 const which = ref(options.value[0].key);
-const base = computed<ShareableView>(
-    () => options.value.find((o) => o.key === which.value)?.view ?? props.view,
+const current = computed(() =>
+    options.value.find((o) => o.key === which.value),
 );
+/** The card's own choice, if it has one ("Compare with"); the dialog only shows it. */
+const choice = computed(() => current.value?.choice ?? null);
+/**
+ * The person's pick for each card with a choice, by card key, while the dialog is open with
+ * these cards; a card not in here is on its choice's own `value`, whose view is the card's view.
+ */
+const picks = ref<Record<string, string>>({});
+const picked = computed(() => {
+    const c = choice.value;
+    return c ? (picks.value[which.value] ?? c.value) : null;
+});
+const base = computed<ShareableView>(() => {
+    const c = choice.value;
+    const p = picked.value;
+    if (c && p !== null && p !== c.value) return c.make(p);
+    return current.value?.view ?? props.view;
+});
+function choose(value: string) {
+    const c = choice.value;
+    if (!c) return;
+    picks.value = { ...picks.value, [which.value]: value };
+    c.remember?.(value);
+}
 
 /**
  * The card's sizes. The person's stored size is shown when the card has it; otherwise the card's
@@ -165,8 +188,8 @@ const card = ref<HTMLElement | null>(null);
 const captionBox = ref<HTMLTextAreaElement | null>(null);
 const canShare = ref(false);
 
-// Map images by card, size, theme, slot and box: a changed headline only redraws a map when it
-// moves its box, and each card's maps are kept apart.
+// Map images by card (with its pick, for a card with a choice), size, theme, slot and box: a
+// changed headline only redraws a map when it moves its box, and each card's maps are kept apart.
 const images = new Map<string, Promise<string>>();
 /** The keys in `images` whose drawing has finished; the others are queued or drawing. */
 const finished = new Set<string>();
@@ -235,9 +258,12 @@ async function build() {
         url: url.value,
         mapAspect: mapAspect.value,
     });
+    // A card's pick is part of its key: two picks of one card may have the same slot and box.
+    const cardKey =
+        picked.value === null ? which.value : `${which.value}=${picked.value}`;
     const keys = slots.map(
         (slot) =>
-            `${which.value}|${s}|${name}|${slot.key}|${slot.box.w}x${slot.box.h}`,
+            `${cardKey}|${s}|${name}|${slot.key}|${slot.box.w}x${slot.box.h}`,
     );
     wanted = new Set(keys);
     // Any of this card's maps still to draw: the preview shows none of the maps it had (they may
@@ -305,7 +331,7 @@ watch(
 );
 
 watch(
-    [open, size, themeName, headline, which],
+    [open, size, themeName, headline, which, picked],
     ([isOpen]) => {
         if (isOpen) {
             canShare.value = canShareFiles();
@@ -327,15 +353,17 @@ watch(
     () => {
         images.clear();
         finished.clear();
+        picks.value = {};
         which.value = options.value[0].key;
         themeName.value = base.value.theme;
         setHeadline(headlineOf(base.value));
     },
 );
-// The other card has its own headline. This runs as the choice changes, before the card is
-// built again, so the new card starts from its own headline (its map has its own cache key).
+// The other card, or the card with another pick, has its own headline. This runs as the choice
+// changes, before the card is built again, so the new card starts from its own headline (its map
+// has its own cache key).
 watch(
-    which,
+    [which, picked],
     () => {
         setHeadline(headlineOf(base.value));
     },
@@ -424,6 +452,32 @@ async function copyCaption() {
                             </label>
                         </div>
                     </fieldset>
+                    <div v-if="choice" class="mb-3">
+                        <label
+                            for="view-card-choice"
+                            class="mb-1 block text-[15px] font-semibold"
+                            >{{ choice.label }}</label
+                        >
+                        <select
+                            id="view-card-choice"
+                            data-card-choice
+                            :value="picked ?? undefined"
+                            class="h-11 w-full rounded-md border border-hairline bg-surface px-3 text-[15px] text-ink focus-visible:outline-2 focus-visible:outline-ink"
+                            @change="
+                                choose(
+                                    ($event.target as HTMLSelectElement).value,
+                                )
+                            "
+                        >
+                            <option
+                                v-for="o in choice.options"
+                                :key="o.value"
+                                :value="o.value"
+                            >
+                                {{ o.label }}
+                            </option>
+                        </select>
+                    </div>
                     <fieldset>
                         <legend class="mb-2 text-[15px] font-semibold">
                             Size

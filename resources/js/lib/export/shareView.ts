@@ -111,11 +111,27 @@ export interface MapSlot {
     spec: ViewMapSpec;
 }
 
+/**
+ * One question a card asks of its own ("Compare with"), as data. The dialog shows it as a
+ * labelled select while the card is picked and knows nothing of what the values mean: it shows
+ * `options`, starts on `value` (whose view is the card's `view`), and on a change shows
+ * `make(value)` in place of the card's view and calls `remember(value)` when given, so the page
+ * can keep the pick for next time.
+ */
+export interface CardChoice {
+    label: string;
+    options: readonly { value: string; label: string }[];
+    value: string;
+    make(value: string): ShareableView;
+    remember?(value: string): void;
+}
+
 /** A card the dialog's "Card" choice offers. */
 export interface ShareCard {
     key: string;
     label: string;
     view: ShareableView;
+    choice?: CardChoice;
 }
 
 interface Context {

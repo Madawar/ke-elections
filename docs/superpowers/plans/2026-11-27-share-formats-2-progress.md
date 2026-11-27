@@ -9,7 +9,7 @@ resume from here.
 | Task | What | State | Commit |
 |---|---|---|---|
 | F | "Every county the same size" (county tiles, mock-up 4), portrait and story, from the national Governor, Senator and Woman Rep views | done | `0c28c80` (grid), `9f9be59` (card), `ce9535b` (entry point, sweep), `37f241b` (key columns), then the commit that updates this row (log) |
-| G1 | The dialog's general ability: a card may carry one choice of its own | not started | |
+| G1 | The dialog's general ability: a card may carry one choice of its own | done | the `feat(export): a card can carry one choice…` commit |
 | G2 | "Side by side" (mock-up 7), X and story | not started | |
 | H1 | The dialog's general ability: a card may be a series | not started | |
 | H2 | The county carousel (mock-up 3), portrait and story | not started | |
@@ -122,7 +122,33 @@ Fixed on the way, after looking: with "Other parties" on a line of its own (chos
 allowed a larger key), the key read as six entries then four; now the columns are kept whenever they
 fit at some size, and the key's floor is the footer's small text.
 
-## Rulings
+## Task G1: a card's own choice in the dialog
+
+A `cards` entry may carry `choice` (`CardChoice` in `lib/export/shareView.ts`):
+
+```ts
+{
+    key: 'versus', label: 'Side by side', view,            // the view for `choice.value`
+    choice: {
+        label: 'Compare with',
+        options: [{ value: '1', label: 'Mombasa' }, ...], // shown in this order
+        value: '1',                                       // the pick the card opens on
+        make: (value) => ShareableView,                   // the card for another pick
+        remember: (value) => void,                        // optional: called on every change
+    },
+}
+```
+
+While that card is picked, the dialog shows a labelled native `<select>` (`#view-card-choice`,
+`h-11`, the dialog's focus outline) under the "Card" choice, also when the card is alone in the
+list. A change keeps the pick for that card, shows `make(value)` in place of `view`, resets the
+headline to the new view's own and builds again (maps redraw); `remember(value)` is called. The
+dialog never looks inside a value. Tests: `tests/js/export/ShareViewDialogChoice.test.ts`, with a
+mocked card whose two picks have the same slot key and box (the select only for a card with a
+choice; label, order, keyboard focus, 44px; the rebuilt preview, headline and caption; the cache
+keeping the picks apart; a change of pick mid-draw never showing the other pick's map; the pick kept
+while another card is looked at and reset when the page hands new cards; no `remember`).
+
 
 Each one: what was decided, why, and what it costs if it is wrong.
 
@@ -182,6 +208,20 @@ Each one: what was decided, why, and what it costs if it is wrong.
   as the plan says — cost if wrong: none.
 - **Ruling: a county "has no approved holder" when no holder of that seat with a party has its code**,
   as the numbers card and the legend count it — cost if wrong: one filter.
+
+- **Ruling: the remembered pick lives with the page, not the dialog** — the dialog only calls
+  `choice.remember?.(value)`, and the page passes the starting `value` (and its `view`); the dialog
+  knows no storage key and nothing about what a value means — cost if wrong: one callback.
+- **Ruling: the map cache key of a card with a choice is `<card key>=<pick>|size|theme|slot|box`**;
+  a card without a choice keeps `<card key>|…` as before. The card key alone is no longer enough:
+  two picks of one card can have the same slot key and box (both halves of "Side by side" are one
+  box size) — cost if wrong: none.
+- **Ruling: the pick is kept per card while the dialog stays open with the same cards** (switching
+  to another card and back finds it again), and starts from the card's `value` when the page hands
+  new cards; theme and size stay as the person set them when the pick changes — cost if wrong: one
+  reset in the props watcher.
+- **Ruling: `make` is not called for the card's own `value`**: its view is the entry's `view`, so the
+  page builds that one once — cost if wrong: none.
 
 ## Parked minor findings
 
