@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.2.0, 27 November 2026
+
+### Map controls
+- **Seat chips:** None, Governor, Senator, Woman Rep, MP and MCA sit on the map, under the search
+  bar on phones and beside it on desktop.
+- **Seat view follows the level:**
+  - Inside a constituency the map switches to MCA, so its wards are coloured.
+  - The county-wide seats (Governor, Senator, Woman Rep) show as "County-wide", and tapping one
+    takes you back to the county.
+- **One tap per level:** each tap goes one level deeper, from county to constituency to ward,
+  whatever the zoom.
+- **Back:**
+  - A Back button that names where it goes.
+  - The browser and phone back gesture step out one level. Back from all of Kenya leaves the site.
+- **Outside taps:**
+  - A tap outside the selected area does nothing, and a short hint offers "Back" or "Show
+    surroundings".
+  - With surroundings shown, a tap picks the neighbouring area.
+
+### Parties
+- **Party profiles:** open one from the legend, a seat or search. It shows the Governor, Senator,
+  Woman Rep, MP and MCA seats held, for all of Kenya or for the county or constituency you are in.
+  Each seat has a "Show on map" button.
+- **Party card:** a shareable card in four sizes. Each party has its own link, such as `/party/uda`.
+
+### Help
+- **First-visit tour:** six steps covering search, tapping the map, seat chips, the legend, your
+  location and sharing.
+- **One-time tips** at the moment they help.
+- **"How to use this map"** in About.
+
+### Fixes
+- **Bottom sheet:** the List, About and Done buttons in its header now respond to taps on phones,
+  and a click on its handle resizes the sheet.
+- **Saved seat view:** your choice is only remembered when you make it yourself.
+
 ## 0.1.1, 27 November 2026
 
 - **Fix:** the map stayed blank on servers that send `.mjs` files with the wrong type. MapLibre's
