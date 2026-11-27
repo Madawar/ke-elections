@@ -14,6 +14,8 @@ import {
     state,
 } from '@/lib/onboarding';
 
+const LOCATE_DETAIL =
+    'Your exact position is checked on this device and never sent. The page address then shows your ward.';
 const NAMES = [
     'search',
     'map',
@@ -124,7 +126,7 @@ describe('the first-visit tour', () => {
         expect(seen[2]).toContain('Colour the map by who holds each seat');
         expect(seen[3]).toContain('Tap a party to show only its seats');
         expect(seen[4]).toContain("See the ward you're in.");
-        expect(seen[4]).toContain('Your location stays on your phone.');
+        expect(seen[4]).toContain(LOCATE_DETAIL);
         expect(seen[5]).toContain('Share what you see as an image');
         expect(isSet(TOUR_KEY)).toBe(false);
         await press('Done');
@@ -370,9 +372,9 @@ describe('the locate step’s promise', () => {
         page.indexOf('// ---- hover tooltip'),
     );
 
-    it('says the location stays on the phone', () => {
+    it('says what happens to the position and to the ward', () => {
         expect(TOUR_STEPS.find((s) => s.id === 'locate')?.detail).toBe(
-            'Your location stays on your phone.',
+            LOCATE_DETAIL,
         );
     });
     it('is true: the coordinates only reach the in-page ward lookup', () => {
@@ -388,7 +390,8 @@ describe('the locate step’s promise', () => {
         expect(body).toMatch(
             /findContaining\(wards\.features, \[\s*coords\.longitude,\s*coords\.latitude,?\s*\]\)/,
         );
-        // Nothing is sent, stored or put in the address.
+        // The coordinates are never sent, stored or put in the address by this function. (The
+        // ward found is selected, so the page address then shows the ward; the tour line says so.)
         expect(body).not.toMatch(
             /sendBeacon|XMLHttpRequest|WebSocket|localStorage|sessionStorage|URLSearchParams|history\.|router\.|navigator\.share/,
         );
@@ -403,7 +406,7 @@ describe('the About sheet help', () => {
         expect(items).toHaveLength(6);
         for (const [i, step] of TOUR_STEPS.entries())
             expect(items[i].text()).toContain(step.text);
-        expect(items[4].text()).toContain('Your location stays on your phone.');
+        expect(items[4].text()).toContain(LOCATE_DETAIL);
     });
     it('asks for the tips again', async () => {
         const w = mount(AboutSheet);

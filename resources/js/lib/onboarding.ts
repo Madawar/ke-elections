@@ -123,9 +123,11 @@ export interface TourStep {
     fallback?: { anchors: string[]; text: string };
 }
 
-// The locate step's second sentence is true: the position is read by the browser, compared with
-// the ward shapes in this page (a static file that is fetched without it), and dropped. It is not
-// sent anywhere, stored or put in the address. tests/js/components/Onboarding.test.ts checks that.
+// The locate step's detail line says only what the code does: the coordinates are read by the
+// browser, compared with the ward shapes in this page (a static file fetched without them) and
+// dropped; they are never sent. The ward found does become the page address (/ward/N), which
+// reaches the server on a reload or a share, so the line says so. tests/js/components/
+// Onboarding.test.ts guards the first half against the page's own code.
 export const TOUR_STEPS: TourStep[] = [
     {
         id: 'search',
@@ -167,7 +169,7 @@ export const TOUR_STEPS: TourStep[] = [
         anchors: ['locate'],
         sides: ['left', 'above'],
         text: "See the ward you're in.",
-        detail: 'Your location stays on your phone.',
+        detail: 'Your exact position is checked on this device and never sent. The page address then shows your ward.',
     },
     {
         id: 'share',

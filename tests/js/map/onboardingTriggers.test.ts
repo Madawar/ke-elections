@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, onMounted } from 'vue';
 
 vi.mock('@inertiajs/vue3', () => ({
     Head: defineComponent({ render: () => null }),
@@ -11,7 +11,13 @@ vi.mock('@inertiajs/vue3', () => ({
 // The page, without a real map: it is the chips, the legend and the colour state that are under test.
 vi.mock('@/components/map/MapView.vue', () => ({
     default: defineComponent({
-        setup(_p, { expose }) {
+        emits: ['unsupported'],
+        setup(_p, { expose, emit }) {
+            // A browser without WebGL2: the map reports it as soon as it mounts.
+            onMounted(() => {
+                if ((globalThis as { __noWebGL?: boolean }).__noWebGL)
+                    emit('unsupported');
+            });
             expose({
                 ready: false,
                 setFocus: () => {},
@@ -256,5 +262,49 @@ describe('the contextual tips are triggered by what the person does', () => {
         await quiet();
         expect(popover()).toBeNull();
         expect(localStorage.getItem(tipKey('party'))).toBeNull();
+    });
+
+    it('runs the tour without a map (no WebGL2), minus the map step, and then lets tips through', async () => {
+        localStorage.removeItem(TOUR_KEY);
+        resetOnboardingState();
+        (globalThis as { __noWebGL?: boolean }).__noWebGL = true;
+        try {
+            window.history.replaceState({}, '', '/');
+            mount(Map, { props: { unit: null }, attachTo: document.body });
+            await vi.waitFor(
+                () =>
+                    expect(document.querySelector('h1')?.textContent).toBe(
+                        'All counties',
+                    ),
+                { timeout: 3000 },
+            );
+            const text = await tipText();
+            expect(text).toContain('1 of 5');
+            expect(text).toContain('Find any county');
+            const press = async () => {
+                (
+                    document.querySelector(
+                        '[data-onboarding-popover] button:last-of-type',
+                    ) as HTMLElement
+                ).click();
+                await flushPromises();
+            };
+            const seen = [text];
+            while (!(popover()?.textContent ?? '').includes('5 of 5')) {
+                await press();
+                seen.push(popover()?.textContent ?? '');
+            }
+            expect(seen.join(' ')).not.toContain(
+                'Tap a county, then tap again',
+            );
+            await press();
+            expect(popover()).toBeNull();
+            expect(localStorage.getItem(TOUR_KEY)).toBe('1');
+            // The tour is done, so a tip is allowed again.
+            const { canClaimTip } = await import('@/lib/onboarding');
+            expect(canClaimTip('party')).toBe(true);
+        } finally {
+            delete (globalThis as { __noWebGL?: boolean }).__noWebGL;
+        }
     });
 });

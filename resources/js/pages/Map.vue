@@ -582,6 +582,12 @@ const onPick = (p: Picked) =>
 const onboarding = ref<InstanceType<typeof Onboarding> | null>(null);
 let tourTimer = 0;
 onBeforeUnmount(() => window.clearTimeout(tourTimer));
+// With no WebGL2 the list view replaces the map (it never becomes ready): the tour still runs,
+// without its map step, and the tips (which wait for the tour) are not blocked for good.
+watch(unsupported, (off) => {
+    if (off)
+        tourTimer = window.setTimeout(() => onboarding.value?.startTour(), 700);
+});
 // The part of the screen the panel covers, so the tour can point at the middle of what is left.
 const mapInset = computed(() =>
     isDesktop.value
