@@ -1,0 +1,1 @@
+- [Kenya Electoral Map project](project-kenya-electoral-map.md) — phased build, superpowers workflow, public repo, PWA, MySQL

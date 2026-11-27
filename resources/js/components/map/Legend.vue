@@ -1,0 +1,207 @@
+<script setup lang="ts">
+// The map legend. With counts it is a bar chart: one bar per party on a single scale that starts
+// at zero, largest first, "Other parties" last. Without counts (former provinces) it is a plain key.
+import { computed } from 'vue';
+import { type LegendRow, shareOf } from '@/lib/legend';
+
+const props = defineProps<{
+    title: string;
+    /** The most height the open legend may take (CSS length), so it never runs under the search bar. */
+    maxHeight?: string;
+    /** The short name on the collapsed chip, such as "MP seats" (defaults to the title). */
+    chipLabel?: string;
+    rows: LegendRow[];
+    note?: string;
+    /** The keys of the rows whose areas are highlighted on the map; any number, in any order. */
+    highlighted?: string[];
+    /** Some highlight is on (even one no row stands for): shows "Show all". */
+    filtered?: boolean;
+    /** Offer "Share this view" (any seat colouring). */
+    shareable?: boolean;
+    /** Make "Share this view" stand out: parties are highlighted or a unit is focused. */
+    shareEmphasis?: boolean;
+}>();
+const emit = defineEmits<{
+    /** A row was pressed: switch that party's highlight on or off. */
+    toggle: [key: string];
+    /** "Show all": clear every highlight. */
+    clear: [];
+    /** "Share this view": make a social image of the map as it is now. */
+    share: [];
+}>();
+const isOn = (key: string) => props.highlighted?.includes(key) ?? false;
+const open = defineModel<boolean>('open', { default: true });
+
+const hasBars = computed(() => props.rows.some((r) => r.count !== undefined));
+const sorted = computed(() =>
+    hasBars.value
+        ? [...props.rows].sort(
+              (a, b) =>
+                  Number(!!a.last) - Number(!!b.last) ||
+                  (b.count ?? 0) - (a.count ?? 0) ||
+                  a.label.localeCompare(b.label),
+          )
+        : props.rows,
+);
+// One scale for every bar, from zero to the largest count in view.
+const largest = computed(() =>
+    Math.max(1, ...props.rows.map((r) => r.count ?? 0)),
+);
+const total = computed(() =>
+    props.rows.reduce((n, r) => n + (r.count ?? 0), 0),
+);
+/** A party's share of the seats in view. */
+const share = (count: number) => shareOf(count, total.value);
+const widthOf = (count: number) =>
+    `${Number(((count / largest.value) * 100).toFixed(1))}%`;
+/** The row's full name; a grouped row says how many parties it stands for ("Other parties (9)"). */
+const fullName = (r: LegendRow) =>
+    `${r.name ?? r.label}${r.parties ? ` (${r.parties})` : ''}`;
+const spoken = (r: LegendRow) =>
+    r.count === undefined
+        ? fullName(r)
+        : `${fullName(r)}: ${r.count} ${r.count === 1 ? 'seat' : 'seats'}, ${share(r.count).replace('<1%', 'less than 1 percent').replace('%', ' percent')}`;
+</script>
+
+<template>
+    <div
+        class="flex flex-col rounded-md border border-hairline bg-surface text-[13px] text-ink shadow-sm"
+        :class="open ? 'w-72 max-w-[calc(100vw-1.5rem)]' : 'max-w-[16rem]'"
+        :style="open && maxHeight ? { maxHeight } : undefined"
+    >
+        <button
+            type="button"
+            class="flex min-h-11 w-full shrink-0 items-center gap-2 px-3 text-left font-semibold [word-spacing:0.12em]"
+            :aria-expanded="open"
+            @click="open = !open"
+        >
+            <span v-if="!open" class="flex -space-x-0.5" aria-hidden="true">
+                <span
+                    v-for="r in sorted.slice(0, 4)"
+                    :key="r.key"
+                    class="size-3 rounded-[2px] border border-surface"
+                    :style="{ background: r.colour }"
+                />
+            </span>
+            <span class="flex-1">{{
+                open ? title : (chipLabel ?? title)
+            }}</span>
+            <svg
+                viewBox="0 0 12 12"
+                class="size-3 transition-transform"
+                :class="open ? 'rotate-180' : ''"
+                aria-hidden="true"
+            >
+                <path
+                    d="M2 4.5 6 8l4-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                />
+            </svg>
+        </button>
+        <div v-if="open" class="min-h-0 flex-1 overflow-y-auto px-3 pb-1">
+            <ul class="space-y-0.5">
+                <li v-for="r in sorted" :key="r.key" :data-key="r.key">
+                    <template v-if="r.count !== undefined">
+                        <span class="sr-only">{{ spoken(r) }}</span>
+                        <button
+                            type="button"
+                            class="-mx-1 flex min-h-8 w-[calc(100%+0.5rem)] items-center gap-2 rounded-[3px] px-1 text-left pointer-coarse:min-h-11"
+                            :class="
+                                isOn(r.key)
+                                    ? 'font-semibold ring-2 ring-ink ring-inset'
+                                    : 'hover:bg-ground'
+                            "
+                            :aria-pressed="isOn(r.key)"
+                            :aria-label="`Highlight ${fullName(r)} areas`"
+                            @click="emit('toggle', r.key)"
+                        >
+                            <span
+                                class="inline-block size-3 shrink-0 rounded-[2px] border border-hairline"
+                                :style="{ background: r.colour }"
+                                aria-hidden="true"
+                            />
+                            <span
+                                class="w-[5rem] shrink-0 truncate"
+                                :title="fullName(r)"
+                                aria-hidden="true"
+                                >{{ r.label }}</span
+                            >
+                            <span
+                                data-track
+                                class="h-3 flex-1 rounded-[2px] bg-hairline"
+                                aria-hidden="true"
+                            >
+                                <span
+                                    data-bar
+                                    class="block h-full min-w-0.5 rounded-[2px]"
+                                    :style="{
+                                        width: widthOf(r.count),
+                                        background: r.colour,
+                                    }"
+                                />
+                            </span>
+                            <span
+                                data-count
+                                class="w-7 shrink-0 text-right tabular-nums"
+                                aria-hidden="true"
+                                >{{ r.count }}</span
+                            >
+                            <span
+                                data-share
+                                class="w-11 shrink-0 text-right whitespace-nowrap tabular-nums"
+                                aria-hidden="true"
+                                >({{ share(r.count) }})</span
+                            >
+                        </button>
+                    </template>
+                    <span v-else class="flex items-center gap-2">
+                        <span
+                            class="inline-block size-3 shrink-0 rounded-[2px] border border-hairline"
+                            :style="{ background: r.colour }"
+                            aria-hidden="true"
+                        />
+                        <span class="truncate">{{ r.label }}</span>
+                    </span>
+                </li>
+            </ul>
+        </div>
+        <!-- Outside the scrolling rows, so the source, "Show all" and "Share this view" stay in view when the legend is capped -->
+        <div
+            v-if="open && (filtered || note || shareable)"
+            class="shrink-0 px-3 pb-2"
+        >
+            <div
+                v-if="filtered || shareable"
+                class="flex items-center justify-between gap-2"
+            >
+                <button
+                    v-if="filtered"
+                    type="button"
+                    class="min-h-11 text-[14px] underline underline-offset-4"
+                    @click="emit('clear')"
+                >
+                    Show all
+                </button>
+                <button
+                    v-if="shareable"
+                    type="button"
+                    data-share-view
+                    class="ml-auto flex min-h-11 items-center rounded-md px-3 text-[14px] font-medium"
+                    :class="
+                        shareEmphasis
+                            ? 'bg-ink text-surface'
+                            : 'border border-hairline text-ink hover:bg-ground'
+                    "
+                    @click="emit('share')"
+                >
+                    Share this view
+                </button>
+            </div>
+            <p v-if="note" class="mt-1 text-[12px] text-muted-ink">
+                {{ note }}
+            </p>
+        </div>
+    </div>
+</template>

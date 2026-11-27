@@ -1,0 +1,12 @@
+seat,unit_level,unit_code,unit_name_in_source,holder_name,party_abbrev,party_name_in_source,basis,started_on,ended_on,confidence,source_url,notes
+governor,county,1,Mombasa,Sample Holder One,SPA,Sample Party A,elected,2022-08-25,,high,https://example.org/gazette/2022/9773,Sample data
+senator,county,1,MOMBASA,Sample Holder Two,OSP,Old Sample Party,elected,2022-09-08,,high,https://example.org/gazette/2022/9773,Sample data; alias resolves to SPB
+woman_rep,county,47,Nairobi,Sample Holder Three,SPB,Sample Party B,elected,2022-09-08,,medium,https://example.org/gazette/2022/9773,
+mp,constituency,1,Changamwe,Sample Holder Four,SPA,Sample Party A,elected,2022-09-08,,high,https://example.org/gazette/2022/9773,
+mp,constituency,290,Mathare,Sample Holder Five,IND,Independent,elected,2022-09-08,,high,https://example.org/gazette/2022/9773,
+mp,constituency,2,Jomvu,Sample Holder Six,SPB,Sample Party B,elected,2022-09-08,2024-01-15,high,https://example.org/gazette/2022/9773,Seat fell vacant
+mp,constituency,2,Jomvu,Sample Holder Seven,SPA,Sample Party A,by_election,2024-03-01,,high,https://example.org/gazette/2024/100,By-election
+mca,ward,1448,Ngei Ward,Sample Holder Eight,SPB,Sample Party B,elected,2022-09-08,,low,https://example.org/gazette/2022/9773,
+nominated_mp,national,0,,Sample Holder Nine,SPA,Sample Party A,nominated,2022-09-08,,high,https://example.org/gazette/2022/10000,
+nominated_senator,national,0,,Sample Holder Ten,SPB,Sample Party B,nominated,2022-09-08,,high,https://example.org/gazette/2022/10000,
+nominated_mca,county,1,Mombasa,Sample Holder Eleven,SPA,Sample Party A,nominated,2022-09-20,,high,https://example.org/gazette/2022/10001,

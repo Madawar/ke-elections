@@ -1,0 +1,5 @@
+election_year,seat,unit_level,unit_code,unit_name_in_source,candidate_name,party_abbrev,status,source_url,notes
+2027,governor,county,1,Mombasa,Sample Candidate One,SPA,nominated,https://example.org/nominations/1,Sample data
+2027,governor,county,1,Mombasa,Sample Candidate Two,OSP,nominated,https://example.org/nominations/2,
+2027,mp,constituency,290,Mathare,Sample Candidate Three,IND,withdrawn,https://example.org/nominations/3,
+2027,mca,ward,1,Port Reitz,Sample Candidate Four,SPB,elected,https://example.org/nominations/4,

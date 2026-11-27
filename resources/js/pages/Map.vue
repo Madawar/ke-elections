@@ -1,0 +1,878 @@
+<script setup lang="ts">
+import { Head, router } from '@inertiajs/vue3';
+import { useEventListener, useMediaQuery, useStorage } from '@vueuse/core';
+import { useAppearance } from '@/composables/useAppearance';
+import { computed, onMounted, ref, shallowRef, watch } from 'vue';
+import InPowerExport from '@/components/export/InPowerExport.vue';
+import LocatorExport from '@/components/export/LocatorExport.vue';
+import ShareViewDialog from '@/components/export/ShareViewDialog.vue';
+import AboutSheet from '@/components/map/AboutSheet.vue';
+import BottomSheet from '@/components/map/BottomSheet.vue';
+import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
+import Legend from '@/components/map/Legend.vue';
+import MapControls from '@/components/map/MapControls.vue';
+import MapView from '@/components/map/MapView.vue';
+import NationalOverview from '@/components/map/NationalOverview.vue';
+import SearchBox from '@/components/map/SearchBox.vue';
+import UnitList from '@/components/map/UnitList.vue';
+import UnitPanel from '@/components/map/UnitPanel.vue';
+import type { Picked } from '@/composables/useMap';
+import {
+    LEVEL_NAME,
+    announcePerson,
+    announceSelection,
+} from '@/lib/map/announce';
+import { mapPadding } from '@/lib/map/camera';
+import {
+    type Colouring,
+    type SeatKey,
+    NO_COLOURING,
+} from '@/lib/map/colouring';
+import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
+import type { FocusSelection } from '@/lib/map/focus';
+import { findContaining } from '@/lib/map/locate';
+import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
+import { fileUrl } from '@/lib/map/style';
+import { type PersonResult, SEAT_TITLE } from '@/lib/search';
+import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
+import { unitPath } from '@/lib/map/urls';
+import { formatAsOf } from '@/lib/export/format';
+import {
+    type ViewState,
+    parseViewQuery,
+    snapshotView,
+} from '@/lib/export/viewState';
+import {
+    type SeatsData,
+    EMPTY_SEATS,
+    legendScope,
+    loadSeats,
+    seatColouring,
+    seatLegend,
+    withIndependentColour,
+} from '@/lib/seats';
+import {
+    SEAT_LABEL,
+    buildLegend,
+    buildProvinceLegend,
+    legendOpenAfterSelect,
+    pruneParties,
+    settingsCount,
+    toggleParty as toggledParties,
+} from '@/lib/legend';
+import { type Unit, UnitIndex } from '@/lib/units';
+
+type ServerUnit = {
+    level: MapLevel;
+    code: number;
+    name: string;
+    ancestors: { level: string; code: number; name: string }[];
+} | null;
+const props = defineProps<{ unit: ServerUnit }>();
+
+// ---- data -------------------------------------------------------------------------------
+const manifest = ref<Record<string, string> | null>(null);
+const index = shallowRef<UnitIndex | null>(null);
+const loadedSeats = shallowRef<SeatsData>(EMPTY_SEATS);
+// Independents are drawn in the theme's own `independent` colour everywhere (map, legend,
+// seating charts, cards), so every view reads the seats through the current theme.
+const seats = computed(() =>
+    withIndependentColour(loadedSeats.value, THEMES[theme.value].independent),
+);
+const towns = shallowRef<
+    {
+        name: string;
+        ward_code: number;
+        constituency_code: number;
+        county_code: number;
+        rank: number;
+    }[]
+>([]);
+const loadError = ref<string | null>(null);
+
+const provinceOfCounty = computed(
+    () =>
+        new Map(
+            (index.value?.all() ?? [])
+                .filter((u) => u.l === 'county')
+                .map((u) => [u.c, u.p ?? 0]),
+        ),
+);
+
+onMounted(async () => {
+    try {
+        const m = (await (
+            await fetch('/boundaries/manifest.json', { cache: 'no-cache' })
+        ).json()) as Record<string, string>;
+        const [units, data] = await Promise.all([
+            UnitIndex.load(fileUrl(m, 'units.json')),
+            loadSeats(),
+        ]);
+        index.value = units;
+        loadedSeats.value = data;
+        manifest.value = m;
+        applySharedView(data);
+        if (props.unit)
+            selectUnit(units.get(props.unit.level, props.unit.code) ?? null, {
+                push: false,
+                animate: false,
+            });
+        fetch(fileUrl(m, 'towns.geojson'))
+            .then((r) => r.json())
+            .then(
+                (fc) =>
+                    (towns.value = fc.features.map(
+                        (f: { properties: never }) => f.properties,
+                    )),
+            )
+            .catch(() => {});
+    } catch (e) {
+        loadError.value =
+            'The map data could not be loaded. Check your connection and reload.';
+        console.error(e);
+    }
+});
+
+// ---- preferences ------------------------------------------------------------------------
+// One theme setting for the whole app (the starter kit's appearance cookie + storage), so the
+// server renders the right theme and the map follows it.
+const { appearance, resolvedAppearance, updateAppearance } = useAppearance();
+const theme = computed(() => resolvedAppearance.value);
+const themePref = computed({
+    get: () => appearance.value,
+    set: (v) => updateAppearance(v),
+});
+
+const colourKey = useStorage<ColourKey>('km.colour', 'none');
+const onlyParties = useStorage<string[]>('km.only', []);
+const enabledOverlays = useStorage<string[]>(
+    'km.overlays',
+    OVERLAYS.filter((o) => o.defaultOn).map((o) => o.id),
+);
+const overlays = ref<MapOverlay[]>(OVERLAYS);
+
+const seatCount = (seat: SeatKey) =>
+    Object.values(seats.value.totals[seat] ?? {}).reduce((a, b) => a + b, 0);
+const colourOptions = computed(() => [
+    { key: 'none' as const, label: 'Boundaries only', available: true },
+    { key: 'province' as const, label: 'Former province', available: true },
+    ...(Object.keys(SEAT_LABEL) as SeatKey[]).map((seat) => {
+        const n = seatCount(seat);
+        return {
+            key: seat,
+            label: `${SEAT_LABEL[seat]} party`,
+            available: n > 0,
+            note: n > 0 ? undefined : 'No approved data yet',
+            swatch: SEAT_COLOURS[seat],
+        };
+    }),
+]);
+watch(colourOptions, (opts) => {
+    if (!opts.find((o) => o.key === colourKey.value)?.available)
+        colourKey.value = 'none';
+});
+
+const colouring = computed<Colouring>(() => {
+    const k = colourKey.value;
+    if (k === 'none') return NO_COLOURING;
+    if (k === 'province')
+        return { ...NO_COLOURING, mode: { kind: 'province' } };
+    const t = THEMES[theme.value];
+    return seatColouring(seats.value, k, {
+        noData: t.noData,
+        faded: t.faded,
+        only: new Set(onlyParties.value),
+    });
+});
+
+const asOfText = computed(() =>
+    formatAsOf(seats.value.data_as_of ?? seats.value.as_of),
+);
+const legend = computed(() => {
+    const k = colourKey.value;
+    if (k === 'none') return null;
+    if (k === 'province')
+        return buildProvinceLegend(
+            (index.value?.all() ?? []).filter((u) => u.l === 'province'),
+        );
+    // While a unit is focused the counts cover only the seats inside it (or the one seat above it).
+    const scope = index.value
+        ? legendScope(index.value, k, focusOf(selection.value))
+        : null;
+    return buildLegend(
+        seats.value,
+        k,
+        scope && { codes: scope.codes, unitName: scope.unit.n },
+        onlyParties.value,
+        asOfText.value,
+    );
+});
+/** A legend row was pressed: switch the parties it stands for on or off, each independently. */
+function toggleParty(key: string) {
+    if (legend.value)
+        onlyParties.value = toggledParties(
+            legend.value.members,
+            onlyParties.value,
+            key,
+        );
+}
+// A different seat keeps the highlighted parties that hold it and drops the rest.
+watch(colourKey, (k) => {
+    onlyParties.value = pruneParties(seats.value, k, onlyParties.value);
+});
+/**
+ * A shared view's link (`?seat=mca&parties=uda,odm`) sets the colouring and the highlight once the
+ * data is in, then leaves the address bar on the plain unit path.
+ */
+function applySharedView(data: SeatsData) {
+    const { seat, parties } = parseViewQuery(location.search, data);
+    if (seat) {
+        colourKey.value = seat;
+        onlyParties.value = parties;
+    }
+    // Take only our own two parameters off the address; anything else (utm_…) stays.
+    const query = new URLSearchParams(location.search);
+    if (query.has('seat') || query.has('parties')) {
+        query.delete('seat');
+        query.delete('parties');
+        const rest = query.toString();
+        history.replaceState(
+            history.state,
+            '',
+            `${location.pathname}${rest ? `?${rest}` : ''}${location.hash}`,
+        );
+    }
+}
+const partyChips = computed(() =>
+    colourKey.value === 'none' || colourKey.value === 'province'
+        ? []
+        : seatLegend(seats.value, colourKey.value),
+);
+// What the person set: a colouring, plus each legend row they pressed ("Other" counts once).
+const activeSettings = computed(() =>
+    settingsCount(colourKey.value, legend.value),
+);
+
+// ---- selection and camera ---------------------------------------------------------------
+const mapRef = ref<InstanceType<typeof MapView> | null>(null);
+const selection = shallowRef<Unit | null>(null);
+const autoCentre = ref(true);
+const unsupported = ref(false);
+const announce = ref('');
+const isDesktop = useMediaQuery('(min-width: 768px)');
+const snap = ref<'peek' | 'half' | 'full'>('peek');
+const sheetHeight = ref(112);
+const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
+// The legend is open on desktop; a focused unit collapses it to its chip so it never covers the unit.
+const legendOpen = ref(isDesktop.value && !props.unit);
+watch(isDesktop, (d) => (legendOpen.value = d && !selection.value));
+// The open legend is capped to the room between the search bar and its own bottom edge, so its
+// heading is never pushed under the search bar.
+const legendMaxHeight = computed(
+    () =>
+        `calc(100dvh - ${(isDesktop.value ? 24 : sheetHeight.value + 12) + 68}px)`,
+);
+// Only an open legend beside a focused unit takes room from the fit.
+const legendBoxOpen = computed(
+    () =>
+        isDesktop.value &&
+        legendOpen.value &&
+        legend.value !== null &&
+        selection.value !== null,
+);
+// What a person picked in search points at: a seat row in the unit panel, or a party in the overview.
+const highlightSeat = ref<string | undefined>();
+const highlightParty = ref<string | undefined>();
+
+// With a unit selected the map shows only that unit; this keeps the rest faintly in view instead.
+const SURROUNDINGS_KEY = 'kem.showSurroundings';
+function readSurroundings() {
+    try {
+        return localStorage.getItem(SURROUNDINGS_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
+const showSurroundings = ref(readSurroundings());
+watch(showSurroundings, (on) => {
+    try {
+        localStorage.setItem(SURROUNDINGS_KEY, String(on));
+    } catch {
+        // Storage can be blocked; the choice then lasts until the page closes.
+    }
+    mapRef.value?.setShowSurroundings(on);
+});
+const focusOf = (unit: Unit | null) =>
+    unit && unit.l !== 'province' ? { level: unit.l, code: unit.c } : null;
+
+const boundsOf = (level: MapLevel, code: number) =>
+    index.value?.get(level, code)?.b;
+
+function selectUnit(
+    unit: Unit | null,
+    { push = true, fit = true, animate = true, recentre = true } = {},
+) {
+    overlayInfo.value = null;
+    tip.value = null;
+    highlightSeat.value = undefined;
+    highlightParty.value = undefined;
+    legendOpen.value = legendOpenAfterSelect(legendOpen.value, {
+        desktop: isDesktop.value,
+        wasFocused: selection.value !== null,
+        focusing: unit !== null,
+    });
+    selection.value = unit;
+    applyPadding();
+    autoCentre.value = recentre;
+    view.value = 'unit';
+    const map = mapRef.value;
+    map?.setFocus(focusOf(unit));
+    if (!unit) {
+        map?.clearSelection();
+        announce.value = announceSelection(null, []);
+        if (fit) map?.fitKenya(animate);
+        if (push) replaceUrl('/', null);
+        document.title = 'Kenya Electoral Map';
+        return;
+    }
+    if (unit.l !== 'province') map?.select(unit.l, unit.c, { fit, animate });
+    const ancestors = index.value?.ancestors(unit.l, unit.c) ?? [];
+    if (push && unit.l !== 'province')
+        replaceUrl(unitPath(unit.l, unit.c), {
+            level: unit.l,
+            code: unit.c,
+            name: unit.n,
+            ancestors: ancestors.map((a) => ({
+                level: a.l,
+                code: a.c,
+                name: a.n,
+            })),
+        });
+    announce.value = announceSelection(unit, ancestors);
+    document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+// The person zoomed out of the focused unit: the focus (and the panel) move up to its parent, and
+// the camera stays where their gesture left it.
+function onZoomOut(next: FocusSelection | null) {
+    const unit = next
+        ? (index.value?.get(next.level, next.code) ?? null)
+        : null;
+    selectUnit(unit, { fit: false, recentre: false });
+}
+
+function onPickPerson({ holder, unit }: PersonResult) {
+    selectUnit(unit ?? null);
+    if (unit) highlightSeat.value = holder.seat;
+    else highlightParty.value = holder.party ?? undefined;
+    // Say who was picked and where it is shown; selecting the unit only announced the unit.
+    announce.value = announcePerson(
+        { name: holder.name, title: SEAT_TITLE[holder.seat] },
+        unit ?? null,
+    );
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+
+const onPick = (p: Picked) =>
+    selectUnit(index.value?.get(p.level, p.code) ?? null);
+
+// The map can mount after the data (or the other way round): apply a pending deep link once both exist.
+watch(
+    () => mapRef.value?.ready,
+    (ready) => {
+        if (ready) {
+            mapRef.value?.setShowSurroundings(showSurroundings.value);
+            mapRef.value?.setFocus(focusOf(selection.value));
+        }
+        if (ready && selection.value && selection.value.l !== 'province')
+            mapRef.value?.select(selection.value.l, selection.value.c, {
+                fit: true,
+                animate: false,
+            });
+    },
+);
+
+/**
+ * Keep the address bar on the selected unit so it can be shared. This replaces the current
+ * history entry through Inertia (client-side, state preserved) instead of pushing new ones:
+ * Inertia remounts the page on Back, which would rebuild the map, so Back leaves the map and
+ * the breadcrumb and zoom-out control step back up a level.
+ */
+function replaceUrl(url: string, unit: ServerUnit) {
+    if (location.pathname === url) return;
+    router.replace({
+        url,
+        props: (current) => ({ ...current, unit }),
+        preserveState: true,
+        preserveScroll: true,
+    });
+}
+
+function zoomOut() {
+    if (!index.value) return;
+    const target = zoomOutTarget(
+        selection.value
+            ? { level: selection.value.l, code: selection.value.c }
+            : null,
+        (l, c) => index.value!.get(l, c),
+    );
+    if (target.unit)
+        selectUnit(
+            index.value.get(target.unit.level, target.unit.code) ?? null,
+        );
+    else if (selection.value) selectUnit(null);
+    else mapRef.value?.zoomOutStep();
+}
+const zoomOutLabel = computed(() => {
+    const s = selection.value;
+    if (!s) return 'Zoom out';
+    const parent = index.value?.ancestors(s.l, s.c)[0];
+    return parent && parent.l !== 'province'
+        ? `Zoom out to ${parent.n}`
+        : 'Zoom out to all of Kenya';
+});
+
+function recentre() {
+    autoCentre.value = true;
+    const s = selection.value;
+    if (s && s.l !== 'province') mapRef.value?.select(s.l, s.c, { fit: true });
+    else mapRef.value?.fitKenya();
+}
+
+// Auto-centre is the default: when the sheet or the screen changes size, keep the selection
+// (or Kenya) in view above the sheet, until the person moves the map by hand.
+function applyPadding() {
+    const map = mapRef.value;
+    if (!map) return;
+    map.setPadding(
+        mapPadding({
+            desktop: isDesktop.value,
+            sheetHeight: sheetHeight.value,
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            legendOpen: legendBoxOpen.value,
+        }),
+    );
+}
+let recentreTimer = 0;
+function scheduleRecentre() {
+    applyPadding();
+    window.clearTimeout(recentreTimer);
+    recentreTimer = window.setTimeout(
+        () => autoCentre.value && recentre(),
+        200,
+    );
+}
+watch(
+    [sheetHeight, isDesktop, legendBoxOpen, () => mapRef.value?.ready],
+    scheduleRecentre,
+);
+useEventListener(window, 'resize', scheduleRecentre);
+
+// Zooming out steps the selection up (see onZoomOut), so the panel always shows the selection.
+const panelUnit = computed(() => selection.value);
+
+const townsIn = computed(() => {
+    const u = panelUnit.value;
+    if (!u || u.l === 'province' || u.l === 'county') return [];
+    const key = u.l === 'ward' ? 'ward_code' : 'constituency_code';
+    return towns.value
+        .filter((t) => t[key] === u.c)
+        .sort((a, b) => a.rank - b.rank)
+        .map((t) => t.name)
+        .slice(0, 12);
+});
+
+// ---- find my ward -----------------------------------------------------------------------
+const locating = ref(false);
+const locateMessage = ref('');
+
+// ---- overlay features (polling stations) -----------------------------------------------
+const overlayInfo = ref<{ title: string; detail: string } | null>(null);
+function onOverlayClick(
+    overlay: MapOverlay,
+    properties: Record<string, unknown>,
+) {
+    if (overlay.id !== 'stations') return;
+    const ward = index.value?.get('ward', Number(properties.ward_code));
+    const parent = ward ? index.value?.ancestors('ward', ward.c)[0] : undefined;
+    overlayInfo.value = {
+        title: String(properties.name ?? 'Polling station'),
+        detail: `Polling station${ward ? ` listed under ${ward.n} ward${parent ? `, ${parent.n}` : ''}` : ''}. IEBC 2013 location.`,
+    };
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+}
+async function locate() {
+    if (!navigator.geolocation || !manifest.value) {
+        locateMessage.value = 'This device cannot share its location.';
+        return;
+    }
+    locating.value = true;
+    locateMessage.value = '';
+    navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+            try {
+                const wards = await (
+                    await fetch(fileUrl(manifest.value!, 'wards.geojson'))
+                ).json();
+                const code = findContaining(wards.features, [
+                    coords.longitude,
+                    coords.latitude,
+                ]);
+                if (code) selectUnit(index.value?.get('ward', code) ?? null);
+                else
+                    locateMessage.value =
+                        'Your location is outside Kenya’s wards.';
+            } catch {
+                locateMessage.value =
+                    'The ward map could not be loaded. Check your connection and try again.';
+            } finally {
+                locating.value = false;
+            }
+        },
+        () => {
+            locating.value = false;
+            locateMessage.value = 'Location was not shared.';
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+    );
+}
+
+// ---- hover tooltip (devices with a mouse) -----------------------------------------------
+const tip = ref<{ text: string; x: number; y: number } | null>(null);
+function onHover(p: Picked | null, point: { x: number; y: number }) {
+    const u = p && index.value?.get(p.level, p.code);
+    tip.value = u
+        ? { text: `${u.n} ${LEVEL_NAME[u.l]}`, x: point.x, y: point.y }
+        : null;
+}
+
+const title = computed(() => (panelUnit.value ? panelUnit.value.n : 'Kenya'));
+const subtitle = computed(() => {
+    const u = panelUnit.value;
+    if (!u) return '47 counties, 290 constituencies, 1,450 wards';
+    const parent = index.value
+        ?.ancestors(u.l, u.c)
+        .find((a) => a.l !== 'province');
+    return parent
+        ? `${LEVEL_NAME[u.l].replace(/^./, (c) => c.toUpperCase())} in ${parent.n}`
+        : LEVEL_NAME[u.l].replace(/^./, (c) => c.toUpperCase());
+});
+const headTitle = computed(() =>
+    props.unit
+        ? `${props.unit.name} ${props.unit.level.charAt(0).toUpperCase()}${props.unit.level.slice(1)}`
+        : '',
+);
+// ---- share image ------------------------------------------------------------------------
+// The unit is fixed when the dialog opens, so the card doesn't change under the person.
+const exportUnit = shallowRef<(Unit & { l: MapLevel }) | null>(null);
+const exportNational = ref(false);
+function shareUnit() {
+    const u = panelUnit.value;
+    if (u && u.l !== 'province') exportUnit.value = u as Unit & { l: MapLevel };
+}
+
+// ---- share this view --------------------------------------------------------------------
+// The view is fixed when the dialog opens, so the card doesn't change under the person.
+const isSeatMode = computed(
+    () => colourKey.value !== 'none' && colourKey.value !== 'province',
+);
+const sharedView = shallowRef<ViewState | null>(null);
+function shareView() {
+    const k = colourKey.value;
+    if (!index.value || k === 'none' || k === 'province') return;
+    sharedView.value = snapshotView({
+        seats: seats.value,
+        index: index.value,
+        seat: k,
+        focus: focusOf(selection.value),
+        only: onlyParties.value,
+        showSurroundings: showSurroundings.value,
+        theme: theme.value,
+    });
+}
+
+const showView = (v: typeof view.value) => {
+    view.value = view.value === v ? 'unit' : v;
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+};
+</script>
+
+<template>
+    <Head :title="headTitle" />
+    <div class="km-app fixed inset-0 overflow-hidden">
+        <MapView
+            v-if="manifest && index && !unsupported"
+            ref="mapRef"
+            :manifest="manifest"
+            :province-of-county="provinceOfCounty"
+            :index="index"
+            :bounds-of="boundsOf"
+            :theme="theme"
+            :colouring="colouring"
+            :overlays="overlays"
+            :enabled-overlays="enabledOverlays"
+            @select="onPick"
+            @hover="onHover"
+            @unsupported="
+                unsupported = true;
+                view = 'list';
+            "
+            @user-move="autoCentre = false"
+            @outside-click="zoomOut"
+            @zoom-out="onZoomOut"
+            @overlay-click="onOverlayClick"
+        />
+        <p
+            v-if="loadError"
+            class="absolute inset-x-4 top-24 rounded-md border border-hairline bg-surface p-3 text-[15px]"
+        >
+            {{ loadError }}
+        </p>
+
+        <!-- Search: top on phones, above the map to the right of the panel on desktop -->
+        <div
+            class="absolute top-3 right-3 left-3 z-20 flex gap-2 md:left-[400px] md:max-w-md"
+        >
+            <SearchBox
+                :index="index"
+                :holders="seats.holders"
+                @pick="(u) => selectUnit(u)"
+                @pick-person="onPickPerson"
+            />
+            <button
+                type="button"
+                class="relative flex h-11 shrink-0 items-center gap-1.5 rounded-md border border-hairline bg-surface px-3 text-[15px] text-ink shadow-sm"
+                :aria-pressed="view === 'layers'"
+                @click="showView('layers')"
+            >
+                <svg viewBox="0 0 20 20" class="size-5" aria-hidden="true">
+                    <path
+                        d="M10 3 2 7l8 4 8-4-8-4ZM2 11l8 4 8-4M2 14.5l8 4 8-4"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linejoin="round"
+                    />
+                </svg>
+                <span class="hidden sm:inline">Map</span>
+                <span
+                    v-if="activeSettings"
+                    class="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-ink text-[11px] text-surface tabular-nums"
+                    >{{ activeSettings }}</span
+                >
+            </button>
+        </div>
+
+        <div
+            class="absolute right-3 z-10 transition-[bottom] duration-200"
+            :style="{
+                bottom: isDesktop
+                    ? '24px'
+                    : `${Math.min(sheetHeight, 9999) + 12}px`,
+            }"
+        >
+            <MapControls
+                :can-zoom-out="true"
+                :zoom-out-label="zoomOutLabel"
+                :show-recentre="!autoCentre"
+                :locating="locating"
+                @zoom-in="
+                    autoCentre = false;
+                    mapRef?.zoomIn();
+                "
+                @zoom-out="zoomOut"
+                @recentre="recentre"
+                @locate="locate"
+            />
+        </div>
+
+        <div
+            v-if="legend && !(snap === 'full' && !isDesktop)"
+            class="absolute left-3 z-10 md:left-[396px]"
+            :style="{ bottom: isDesktop ? '24px' : `${sheetHeight + 12}px` }"
+        >
+            <Legend
+                v-model:open="legendOpen"
+                :title="legend.title"
+                :max-height="legendMaxHeight"
+                :chip-label="legend.chipLabel"
+                :rows="legend.rows"
+                :note="legend.note"
+                :highlighted="legend.highlighted"
+                :filtered="legend.filtered"
+                :shareable="isSeatMode"
+                :share-emphasis="
+                    isSeatMode &&
+                    (onlyParties.length > 0 || !!focusOf(selection))
+                "
+                @toggle="toggleParty"
+                @clear="onlyParties = []"
+                @share="shareView"
+            />
+        </div>
+
+        <div
+            v-if="tip"
+            class="pointer-events-none absolute z-30 rounded-[4px] bg-ink px-2 py-1 text-[13px] text-surface"
+            :style="{ left: `${tip.x + 12}px`, top: `${tip.y + 12}px` }"
+        >
+            {{ tip.text }}
+        </div>
+
+        <BottomSheet v-model:snap="snap" @height="(h) => (sheetHeight = h)">
+            <template #header>
+                <div class="flex items-start gap-2 pb-2">
+                    <div class="min-w-0 flex-1">
+                        <h1
+                            class="truncate text-[20px] leading-tight font-semibold text-ink"
+                            style="font-variation-settings: 'wdth' 100"
+                        >
+                            {{
+                                view === 'layers'
+                                    ? 'Map settings'
+                                    : view === 'about'
+                                      ? 'About this map'
+                                      : view === 'list'
+                                        ? 'All counties'
+                                        : title
+                            }}
+                        </h1>
+                        <p
+                            v-if="view === 'unit'"
+                            class="truncate text-[14px] text-muted-ink"
+                        >
+                            {{ subtitle }}
+                        </p>
+                    </div>
+                    <button
+                        v-if="view !== 'unit'"
+                        type="button"
+                        class="min-h-11 px-2 text-[14px] underline underline-offset-4"
+                        @click="view = 'unit'"
+                    >
+                        Done
+                    </button>
+                    <template v-else>
+                        <button
+                            type="button"
+                            class="min-h-11 px-2 text-[14px] text-muted-ink underline underline-offset-4"
+                            @click="showView('list')"
+                        >
+                            List
+                        </button>
+                        <button
+                            type="button"
+                            class="min-h-11 px-2 text-[14px] text-muted-ink underline underline-offset-4"
+                            @click="showView('about')"
+                        >
+                            About
+                        </button>
+                    </template>
+                </div>
+                <div
+                    v-if="overlayInfo"
+                    class="mb-2 flex items-start gap-2 rounded-md border border-hairline px-3 py-2"
+                >
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[15px] font-medium text-ink">
+                            {{ overlayInfo.title }}
+                        </p>
+                        <p class="text-[13px] text-muted-ink">
+                            {{ overlayInfo.detail }}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="min-h-11 px-2 text-[14px] underline underline-offset-4"
+                        @click="overlayInfo = null"
+                    >
+                        Close
+                    </button>
+                </div>
+                <p v-if="locateMessage" class="pb-2 text-[13px] text-muted-ink">
+                    {{ locateMessage }}
+                </p>
+                <p v-if="unsupported" class="pb-2 text-[13px] text-muted-ink">
+                    This device can't draw the map, so here is the list of every
+                    unit instead.
+                </p>
+            </template>
+
+            <LayersPanel
+                v-if="view === 'layers'"
+                v-model:colour="colourKey"
+                v-model:only="onlyParties"
+                v-model:enabled="enabledOverlays"
+                v-model:theme="themePref"
+                :colour-options="colourOptions"
+                :parties="partyChips"
+                :overlays="overlays"
+                :swatch-for="(o) => o.swatch?.(THEMES[theme])"
+            />
+            <AboutSheet v-else-if="view === 'about'" />
+            <UnitList
+                v-else-if="view === 'list' && index"
+                :index="index"
+                @pick="(u) => selectUnit(u)"
+            />
+            <template v-else-if="index">
+                <UnitPanel
+                    v-if="panelUnit"
+                    :unit="panelUnit"
+                    :index="index"
+                    :seats="seats"
+                    :towns="townsIn"
+                    :highlight-seat="highlightSeat"
+                    v-model:show-surroundings="showSurroundings"
+                    :can-share-view="isSeatMode"
+                    @go="(u) => selectUnit(u)"
+                    @share="shareUnit"
+                    @share-view="shareView"
+                />
+                <NationalOverview
+                    v-else
+                    :seats="seats"
+                    :highlight-party="highlightParty"
+                    :can-share-view="isSeatMode"
+                    @colour-by="(s) => (colourKey = s)"
+                    @share="exportNational = true"
+                    @share-view="shareView"
+                />
+            </template>
+        </BottomSheet>
+
+        <LocatorExport
+            v-if="exportUnit && index && manifest"
+            :open="true"
+            :unit="exportUnit"
+            :index="index"
+            :seats="seats"
+            :manifest="manifest"
+            :province-of-county="provinceOfCounty"
+            :theme="THEMES[theme]"
+            :colouring="colouring"
+            :show-surroundings="showSurroundings"
+            @update:open="(v) => !v && (exportUnit = null)"
+        />
+        <ShareViewDialog
+            v-if="sharedView && index && manifest"
+            :open="true"
+            :view="sharedView"
+            :context="{
+                manifest,
+                provinceOfCounty,
+                index,
+                seats,
+            }"
+            @update:open="(v) => !v && (sharedView = null)"
+        />
+        <InPowerExport
+            v-model:open="exportNational"
+            :seats="seats"
+            :theme="THEMES[theme]"
+        />
+
+        <div class="sr-only" aria-live="polite">{{ announce }}</div>
+    </div>
+</template>

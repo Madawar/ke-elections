@@ -1,0 +1,149 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "COUNTY_ASS": 1,
+        "COUNTY_A_1": "WARD ONE",
+        "CONST_CODE": 1,
+        "COUNTY_COD": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              0
+            ],
+            [
+              10,
+              10
+            ],
+            [
+              0,
+              10
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "COUNTY_ASS": 1,
+        "COUNTY_A_1": "WARD ONE",
+        "CONST_CODE": 1,
+        "COUNTY_COD": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              10,
+              0
+            ],
+            [
+              12,
+              0
+            ],
+            [
+              12,
+              10
+            ],
+            [
+              10,
+              10
+            ],
+            [
+              10,
+              0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "COUNTY_ASS": 2,
+        "COUNTY_A_1": "WARD TWO OLD",
+        "CONST_CODE": 1,
+        "COUNTY_COD": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              20,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              10
+            ],
+            [
+              20,
+              10
+            ],
+            [
+              20,
+              0
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "COUNTY_ASS": 0,
+        "COUNTY_A_1": "SLIVER",
+        "CONST_CODE": 1,
+        "COUNTY_COD": 1
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              50,
+              0
+            ],
+            [
+              50.1,
+              0
+            ],
+            [
+              50.1,
+              5
+            ],
+            [
+              50,
+              5
+            ],
+            [
+              50,
+              0
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
