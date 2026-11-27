@@ -46,15 +46,15 @@ export const COUNTY_TILES: Record<number, TileCell> = {
     42: { col: 1, row: 4 }, // Kisumu
     35: { col: 2, row: 4 }, // Kericho
     32: { col: 3, row: 4 }, // Nakuru
-    21: { col: 4, row: 4 }, // Murang'a
-    20: { col: 5, row: 4 }, // Kirinyaga
+    20: { col: 4, row: 4 }, // Kirinyaga
+    13: { col: 5, row: 4 }, // Tharaka - Nithi
     // Row 5
     43: { col: 0, row: 5 }, // Homa Bay
     46: { col: 1, row: 5 }, // Nyamira
     36: { col: 2, row: 5 }, // Bomet
     22: { col: 3, row: 5 }, // Kiambu
-    14: { col: 4, row: 5 }, // Embu
-    13: { col: 5, row: 5 }, // Tharaka - Nithi
+    21: { col: 4, row: 5 }, // Murang'a
+    14: { col: 5, row: 5 }, // Embu
     7: { col: 7, row: 5 }, // Garissa
     // Row 6
     44: { col: 0, row: 6 }, // Migori

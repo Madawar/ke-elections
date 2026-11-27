@@ -21,7 +21,7 @@ function separated(grid: Record<number, TileCell>): [number, number][] {
 }
 
 /** The number recorded in docs/superpowers/plans/2026-11-27-share-formats-2-progress.md. */
-const RECORDED = 23;
+const RECORDED = 24;
 
 /** The mock-up's arrangement, by code (the plan's table), for the record. */
 const MOCK_UP = [
@@ -88,6 +88,15 @@ describe('the county tile grid', () => {
         expect([3, 4]).toContain(at(47).col);
         expect(at(47).row).toBeLessThan(at(34).row);
         expect(at(47).col).toBeLessThan(at(16).col);
+    });
+
+    it('keeps the Mount Kenya counties in their familiar order, as the mock-up has them', () => {
+        const at = (code: number) => COUNTY_TILES[code];
+        // Meru, Tharaka - Nithi, Embu going south; Nyeri, Kirinyaga, Murang'a going south.
+        expect(at(20)).toEqual({ col: 4, row: 4 }); // Kirinyaga
+        expect(at(13)).toEqual({ col: 5, row: 4 }); // Tharaka - Nithi
+        expect(at(21)).toEqual({ col: 4, row: 5 }); // Murang'a
+        expect(at(14)).toEqual({ col: 5, row: 5 }); // Embu
     });
 
     it('leaves the bottom-left corner empty, for the key', () => {

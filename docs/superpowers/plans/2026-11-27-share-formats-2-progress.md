@@ -42,8 +42,8 @@ Kericho–Homa Bay, Kakamega–Siaya.
 
 ### The moves, and why
 
-Eight tiles moved; the grid keeps the mock-up's eight columns and nine rows, its silhouette but
-for two cells, and the empty bottom-left corner. Internal gaps (empty cells between the first and
+Four tiles moved (eight at first; the Mount Kenya four went back, see move 3); the grid keeps the
+mock-up's eight columns and nine rows, its silhouette but for two cells, and the empty bottom-left corner. Internal gaps (empty cells between the first and
 last tile of a row or column) went from 13 to 12: no hole was added.
 
 1. **Turkana one column right (2,0 to 3,0), Baringo up into Elgeyo/Marakwet's cell and
@@ -53,16 +53,16 @@ last tile of a row or column) went from 13 to 12: no hole was added.
    and Baringo are at about the same latitude, so the swap barely changes the shape.
 2. **Garissa one row down (7,4 to 7,5).** It now touches Tana River and Lamu (two pairs fewer); it
    was already apart from Wajir and Isiolo, and stays on the east edge.
-3. **Around Mount Kenya, Murang'a, Kirinyaga, Embu and Tharaka - Nithi turned** (Murang'a 4,4,
-   Kirinyaga 5,4, Embu 4,5, Tharaka - Nithi 5,5). Nyandarua–Murang'a, Nyeri–Murang'a and
-   Tharaka - Nithi–Kitui come together; Meru–Tharaka - Nithi and Machakos–Murang'a go apart: one
-   pair fewer. Murang'a stays west of Kirinyaga, as on the map.
+3. ~~**Around Mount Kenya, Murang'a, Kirinyaga, Embu and Tharaka - Nithi turned**~~ **Undone**
+   (owner's eye, after Task F; see the ruling): the turn saved one pair but put Kirinyaga above
+   Tharaka - Nithi and Embu west of it. The four are back where the mock-up had them: Kirinyaga
+   4,4, Tharaka - Nithi 5,4, Murang'a 4,5, Embu 5,5.
 
 Tried and not taken: a search that moved tiles freely found 19 to 22, but only by putting Nairobi
 City under Kajiado, West Pokot above Turkana, Mombasa west of Kwale or a hole in the middle of the
 grid; and swaps that only traded one pair for another (Nakuru with Nyandarua, Migori with Kisii).
 
-### The final grid: 23 pairs apart
+### The final grid: 24 pairs apart
 
 | Row | Columns 0 to 7 |
 |---|---|
@@ -70,17 +70,17 @@ grid; and swaps that only traded one pair for another (Nakuru with Nyandarua, Mi
 | 1 | –, Trans Nzoia, West Pokot, Baringo, Samburu, –, Wajir, – |
 | 2 | Bungoma, Kakamega, Uasin Gishu, Elgeyo/Marakwet, Laikipia, Isiolo, –, – |
 | 3 | Busia, Vihiga, Nandi, Nyandarua, Nyeri, Meru, –, – |
-| 4 | Siaya, Kisumu, Kericho, Nakuru, Murang'a, Kirinyaga, –, – |
-| 5 | Homa Bay, Nyamira, Bomet, Kiambu, Embu, Tharaka - Nithi, –, Garissa |
+| 4 | Siaya, Kisumu, Kericho, Nakuru, Kirinyaga, Tharaka - Nithi, –, – |
+| 5 | Homa Bay, Nyamira, Bomet, Kiambu, Murang'a, Embu, –, Garissa |
 | 6 | Migori, Kisii, Narok, Nairobi City, Machakos, Kitui, Tana River, Lamu |
 | 7 | –, –, –, Kajiado, Makueni, Taita Taveta, Kilifi, – |
 | 8 | –, –, –, –, –, Kwale, Mombasa, – |
 
 (The table in `lib/export/countyTiles.ts` is written with IEBC codes.)
 
-Pairs still apart (23): Tana River–Isiolo, Taita Taveta–Kajiado, Garissa–Wajir, Garissa–Isiolo,
-Wajir–Marsabit, Marsabit–Isiolo, Meru–Tharaka - Nithi, Meru–Embu, Meru–Kitui, Machakos–Kirinyaga,
-Machakos–Murang'a, Nyandarua–Kiambu, Kiambu–Kajiado, Trans Nzoia–Elgeyo/Marakwet,
+Pairs still apart (24): Tana River–Isiolo, Taita Taveta–Kajiado, Garissa–Wajir, Garissa–Isiolo,
+Wajir–Marsabit, Marsabit–Isiolo, Meru–Embu, Meru–Kitui, Tharaka - Nithi–Kitui, Machakos–Kirinyaga,
+Nyandarua–Murang'a, Nyandarua–Kiambu, Nyeri–Murang'a, Kiambu–Kajiado, Trans Nzoia–Elgeyo/Marakwet,
 Uasin Gishu–Kericho, Baringo–Nakuru, Baringo–Kericho, Laikipia–Nakuru, Nakuru–Narok,
 Nakuru–Kajiado, Narok–Migori, Kericho–Homa Bay, Kakamega–Siaya.
 
@@ -88,7 +88,8 @@ Most of what is left is the shape itself: the north-east is four large counties 
 Tana River, Isiolo) that a grid of equal tiles cannot keep all touching while Garissa stays at its
 latitude, and Nakuru has eight neighbours on every side. The test (`tests/js/export/countyTiles.test.ts`)
 checks all 47 codes once, no shared cell, the shape (top row, lake columns, coast, Nairobi City),
-the empty corner, the mock-up's 29 and at most 23 now.
+the empty corner, the Mount Kenya four in the mock-up's cells, the mock-up's 29 and at most 24
+now.
 
 ## Task F: the card, and how it was checked
 
@@ -133,6 +134,13 @@ Each one: what was decided, why, and what it costs if it is wrong.
   vertices; the test computes them again from the committed file — cost if wrong: a pair whose
   border was simplified apart would be missed (none is expected while the layers are derived as
   they are).
+- **Ruling: Murang'a, Kirinyaga, Embu and Tharaka - Nithi stay where the mock-up had them**
+  (Kirinyaga and Tharaka - Nithi on row 4, Murang'a and Embu under them on row 5). Supersedes the
+  turn in move 3. The turn put Kirinyaga above Tharaka - Nithi and Embu west of it, which reads
+  wrong to anyone who knows the Mount Kenya counties; the mock-up's order (Meru, Tharaka - Nithi,
+  Embu going south; Nyeri, Kirinyaga, Murang'a going south) is the familiar one, and shape outranks
+  the pair count. The other moves (Turkana, Baringo and Elgeyo/Marakwet, Garissa) stay. Tested — cost
+  if wrong: one pair more apart (24, not 23).
 - **Ruling: the grid is kept as compact as the mock-up's, and its shape outranks the count** — 22
   or fewer pairs were possible only with Nairobi City under Kajiado, West Pokot above Turkana or a
   hole in the grid — cost if wrong: a few pairs more apart than a looser grid would have.
