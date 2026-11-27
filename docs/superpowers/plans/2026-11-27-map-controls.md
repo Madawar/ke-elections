@@ -443,3 +443,54 @@ wouldn't it be good to show governor and senator."
   - The strip's rows and their order for county and constituency scope.
   - Nothing overlaps and the safe zones hold, in all sizes, including Nairobi City with its 85
     wards and a single-ward constituency.
+
+### Task 4 is expanded (owner, 2026-11-27): "onboarding is key"
+
+The owner said: "Onboarding is key: on filtering etc., the location button use, the exports etc."
+This replaces the four-tip list above. Keep the behaviour rules above: non-modal, Skip, Done,
+Escape, focus handling, storage with try/catch, reduced motion, missing anchors skipped, and
+"Show tips again".
+
+**1. The first-visit tour.** At most 6 steps, each one short sentence plus an optional second
+line. The steps are anchored to real controls:
+1. **Search:** "Find any county, constituency, ward, politician or party by name."
+2. **The map** (pointing at the map centre): "Tap a county, then tap again to go deeper. Use Back
+   to step out."
+3. **The seat chips:** "Colour the map by who holds each seat: Governor, Senator, Woman Rep, MP or
+   MCA."
+4. **The legend:** "Tap a party to show only its seats. Tap more than one to compare."
+5. **Locate:** "See the ward you're in. Your location stays on your phone." Check the second
+   sentence against the code before using it. It's true only if the location never leaves the
+   device; if not, rewrite it truthfully.
+6. **Share:** "Share what you see as an image for WhatsApp, Instagram, TikTok or X." It points at
+   "Share this view", or at the legend's share button when no unit is selected.
+
+**2. Contextual one-time tips.** Each tip shows once ever, after the tour is done or skipped, and
+never during it. They're small, dismissible popovers or toasts. At most one tip per session
+reaches the user.
+- **The first time a unit is selected:** "Share this view makes an image of exactly this. Sources
+  included." It points at the Share button.
+- **The first party highlight in the legend:** "Showing only <party>. Tap again or Show all to
+  clear."
+- **The first time a county-wide chip is muted:** "Governor, Senator and Woman Rep cover the whole
+  county. Tap one to go back to <county>."
+- **The first time location is denied or fails:** a plain, non-blaming fix-it line, such as
+  "Location is off for this site. You can still search for your ward."
+- **The first time the share dialog opens:** "Pick a size: square for feeds, story for TikTok and
+  Reels, wide for X."
+- Storage key per tip: `kem.tip.<id>`, with the same try/catch rule as the tour.
+
+**3. A help entry point.** The About sheet gets a "How to use this map" section with the same
+steps as text, plus the "Show tips again" button. Everything works without tips, and the tips
+never cover the control they describe.
+
+**Tests (added to Task 4):**
+- The tour has 6 steps in order, and a missing anchor skips its step.
+- Each contextual tip fires on its trigger once only, never during the tour, at most one per
+  session, and its storage failure path works.
+- The locate tip's copy matches what the code actually does with location.
+
+**Playwright:** check on phone and desktop, light and dark:
+- The whole tour.
+- Each contextual tip, triggered.
+- The About help section.
