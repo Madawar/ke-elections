@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1, 27 November 2026
+
+- **Fix:** the map stayed blank on servers that send `.mjs` files with the wrong type. MapLibre's
+  worker is now built as a `.js` file.
+
 ## 0.1.0, 27 November 2026
 
 The first public release of Kenya Electoral Map: a neutral, phone-first map of Kenya's 47 counties,
