@@ -63,6 +63,29 @@ const sinceOf = (row: LeaderRow) =>
         ? `since ${row.holder.startedOn.slice(0, 4)}`
         : '';
 
+/**
+ * Wrap "MPs (outlines): ODM 8, UDA 4, JP 3" between its pairs, never inside one: "ODM 8" and its
+ * comma stay together, and the first pair stays with the label. A pair wider than a line (which
+ * no real party makes) falls back to wrapping on spaces.
+ */
+export function wrapPairs(text: string, maxWidth: number, size: number): string[] {
+    const tokens = text.split(', ').map((t, i, all) => (i < all.length - 1 ? `${t},` : t));
+    if (tokens.some((t) => textWidth(t, size) > maxWidth))
+        return wrapText(text, maxWidth, size);
+    const lines: string[] = [];
+    let line = '';
+    for (const token of tokens) {
+        const next = line ? `${line} ${token}` : token;
+        if (!line || textWidth(next, size) <= maxWidth) line = next;
+        else {
+            lines.push(line);
+            line = token;
+        }
+    }
+    if (line) lines.push(line);
+    return lines;
+}
+
 export function leadersStrip({
     x,
     y,
@@ -146,13 +169,12 @@ export function leadersStrip({
         };
 
     // Every row; with no room for that, the first two and a count of the rest.
-    // The note is the key to the map's outlines: it is never dropped and never cut. It wraps on
-    // its commas' spaces, and its height comes out of the rows' room, not the other way round.
+    // The note is the key to the map's outlines: it is never dropped and never cut. It wraps
+    // between its "party count" pairs, and its height comes out of the rows' room, not the other
+    // way round.
     const noteSize = Math.round(small * 0.94);
     const noteLead = Math.round(noteSize * 1.35);
-    const noteLines = note
-        ? wrapText(note, w - lidW - gap, noteSize)
-        : [];
+    const noteLines = note ? wrapPairs(note, w - lidW - gap, noteSize) : [];
     const noteH = noteLines.length
         ? noteLines.length * noteLead + Math.round(small * 0.2)
         : 0;

@@ -141,7 +141,7 @@ describe('the MP outline layers', () => {
         expect(fill['1448']).toBe(ODM);
     });
 
-    it('is a 4 to 5px party-colour line between two thin ink edges, drawn inside the constituency', () => {
+    it('is a party-colour line between two thin ink edges, drawn inside the constituency: 4 to 5px from zoom 12, thin with a whole county in view', () => {
         const st = build();
         const line = layerOf(st, 'mp-outline');
         const edge = layerOf(st, 'mp-outline-edge');
@@ -182,6 +182,61 @@ describe('the MP outline layers', () => {
         }
         // The edge is drawn first, the colour over it.
         expect(order(st, 'mp-outline-edge')).toBeLessThan(order(st, 'mp-outline'));
+    });
+
+    it('keeps a readable width inside a focused constituency, where there is no neighbour to cross into', () => {
+        const st = build({ focus: { level: 'constituency', code: 290 } });
+        const line = layerOf(st, 'mp-outline');
+        const edge = layerOf(st, 'mp-outline-edge');
+        // A rural constituency fits at zoom 9 to 10: 3px there, not the county view's 1.5px.
+        for (const zoom of [8, 9, 10, 11]) {
+            const w = atZoom(line.paint['line-width'], zoom);
+            expect(w, `zoom ${zoom}`).toBeGreaterThanOrEqual(2.5);
+            expect(w, `zoom ${zoom}`).toBeLessThanOrEqual(4);
+            expect(
+                atZoom(edge.paint['line-width'], zoom) - w,
+                `zoom ${zoom}`,
+            ).toBeCloseTo(2, 5);
+        }
+        for (const zoom of [12, 14])
+            expect(atZoom(line.paint['line-width'], zoom)).toBeGreaterThanOrEqual(4);
+        // A focused county still draws them all, thin.
+        const county = layerOf(
+            build({ focus: { level: 'county', code: 47 } }),
+            'mp-outline',
+        );
+        expect(atZoom(county.paint['line-width'], 10)).toBeLessThanOrEqual(2);
+    });
+
+    it('moves a focused county’s own outline just outside its border, so it does not cover the bands along it', () => {
+        const selected = (over: Parameters<typeof build>[0]) =>
+            layerOf(build(over), 'counties-selected').paint;
+        const county = selected({ focus: { level: 'county', code: 47 } });
+        for (const zoom of [8, 10, 12]) {
+            const offset = atZoom(county['line-offset'], zoom);
+            // Outset by half its own width: its inner edge sits on the border.
+            expect(offset, `zoom ${zoom}`).toBeCloseTo(
+                -atZoom(county['line-width'], zoom) / 2,
+                5,
+            );
+        }
+        // Only while MP outlines are drawn, only for a focused county, only its own layer.
+        expect(
+            selected({
+                focus: { level: 'county', code: 47 },
+                colouring: seatColouring(seats, 'mca', tokens),
+            })['line-offset'],
+        ).toBe(0);
+        expect(selected({})['line-offset']).toBe(0);
+        expect(
+            selected({ focus: { level: 'constituency', code: 290 } })['line-offset'],
+        ).toBe(0);
+        expect(
+            layerOf(
+                build({ focus: { level: 'county', code: 47 } }),
+                'constituencies-selected',
+            ).paint['line-offset'],
+        ).toBe(0);
     });
 
     it('sits above the ward fills and every boundary line, below the labels and the focused unit’s outline', () => {

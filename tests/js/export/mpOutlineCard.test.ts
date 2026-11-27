@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import ViewCard from '@/components/export/ViewCard.vue';
 import type { Box, TextItem } from '@/lib/export/layout';
 import { leadersCardView } from '@/lib/export/leadersCard';
-import { leadersStrip } from '@/lib/export/leadersStrip';
+import { leadersStrip, wrapPairs } from '@/lib/export/leadersStrip';
 import { VIEW_SIZES, type ViewSize } from '@/lib/export/sizes';
 import { textWidth } from '@/lib/export/text';
 import { viewLayout } from '@/lib/export/viewLayout';
@@ -218,6 +218,25 @@ describe('a county’s MCA card: the MPs line', () => {
         const boxes = strip.note.map(textBox);
         for (let i = 1; i < boxes.length; i++)
             expect(apart(boxes[i - 1], boxes[i])).toBe(true);
+    });
+
+    it('wraps between "party count" pairs, never inside one', () => {
+        const note =
+            'MPs (outlines): ODM 8, UDA 4, JP 3, Independent 1, WDM-K 1, ANC 1, DAP-K 1';
+        for (const width of [300, 360, 420, 600]) {
+            const lines = wrapPairs(note, width, 19);
+            expect(lines.join(' '), String(width)).toBe(note);
+            for (const line of lines) {
+                expect(textWidth(line, 19), String(width)).toBeLessThanOrEqual(width);
+                // No line starts with a bare count or ends with a party missing its count.
+                expect(line, String(width)).not.toMatch(/^\d/);
+                expect(line, String(width)).toMatch(/\d,?$/);
+            }
+        }
+        // The label keeps its first pair.
+        expect(wrapPairs(note, 300, 19)[0]).toMatch(/^MPs \(outlines\): ODM 8,/);
+        const strip = leadersStrip({ ...base, w: 380, note })!;
+        for (const t of strip.note) expect(t.text).toMatch(/\d,?$/);
     });
 
     it('never costs a leader row for nothing: the rows shorten only when rows and line together do not fit, and the line still shows', () => {

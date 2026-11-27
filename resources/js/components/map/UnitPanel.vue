@@ -360,7 +360,7 @@ const sourceHost = (url: string) => {
                                     :href="ward.holder.sourceUrl"
                                     target="_blank"
                                     rel="noopener"
-                                    class="text-[13px] text-muted-ink underline underline-offset-2"
+                                    class="inline-flex items-center text-[13px] text-muted-ink underline underline-offset-2 pointer-coarse:min-h-11"
                                     >{{ sourceHost(ward.holder.sourceUrl) }}</a
                                 >
                             </li>

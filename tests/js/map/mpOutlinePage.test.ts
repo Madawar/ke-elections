@@ -194,6 +194,23 @@ describe('MP outlines over the MCA wards, on the page', () => {
         expect(colouringOf(w).outline?.colours.get(289)).toBe('#c8323c');
     });
 
+    it('counts an outline highlight on the map settings button, like a fill highlight', async () => {
+        const w = await mountPage('?seat=mca', at.county);
+        const badge = () =>
+            w
+                .findAll('button')
+                .find((b) => b.text().includes('Map'))!
+                .find('.rounded-full')
+                .text();
+        expect(badge()).toBe('1');
+        legendOf(w).vm.$emit('toggleOutline', 'JP');
+        await flushPromises();
+        expect(badge()).toBe('2');
+        legendOf(w).vm.$emit('toggle', 'UDA');
+        await flushPromises();
+        expect(badge()).toBe('3');
+    });
+
     it('offers "Show all" for an outline highlight too, and clears both', async () => {
         const w = await mountPage('?seat=mca', at.county);
         expect(legendOf(w).props('filtered')).toBe(false);

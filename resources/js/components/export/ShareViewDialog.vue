@@ -4,7 +4,7 @@
 // copy the caption. The view is fixed when the dialog opens, so the card does not change under
 // the person. The PNG is made as soon as the preview is ready, so a tap on "Share" reaches the
 // share sheet while the browser still counts it as the person's tap.
-import { refDebounced, useStorage } from '@vueuse/core';
+import { useStorage, watchDebounced } from '@vueuse/core';
 import {
     DialogClose,
     DialogContent,
@@ -105,21 +105,22 @@ const copy = computed(() => dialogCopy(base.value));
 const HEADLINE_MAX = 120;
 const generated = computed(() => headlineOf(base.value));
 const headlineInput = ref(generated.value);
-/** The card follows the typing after a short pause, so the map is not redrawn on every key. */
-const headlineTyped = refDebounced(headlineInput, 350);
 /**
- * The headline last set by the dialog itself (opening, or switching card): that one goes on the
- * card at once. Only what the person types waits for the pause, so a card never carries the
- * other card's headline while the pause runs.
+ * The headline on the card. It follows the typing after a short pause, so the map is not redrawn
+ * on every key; a headline the dialog sets itself (opening, switching card, "Use the numbers
+ * again") goes on at once, so a card never carries the other card's headline while a pause runs.
  */
-const setHeadline = ref(generated.value);
-const headline = computed(() => {
-    const text =
-        headlineInput.value === setHeadline.value
-            ? headlineInput.value
-            : headlineTyped.value;
-    return text.trim().slice(0, HEADLINE_MAX) || generated.value;
+const headlineTyped = ref(headlineInput.value);
+watchDebounced(headlineInput, (text) => (headlineTyped.value = text), {
+    debounce: 350,
 });
+function setHeadline(text: string) {
+    headlineInput.value = text;
+    headlineTyped.value = text;
+}
+const headline = computed(
+    () => headlineTyped.value.trim().slice(0, HEADLINE_MAX) || generated.value,
+);
 const edited = computed(() => headlineInput.value.trim() !== generated.value);
 
 const url = computed(() => siteUrl(base.value.path));
@@ -289,7 +290,7 @@ watch(
         images.clear();
         which.value = 'view';
         themeName.value = view.theme;
-        setHeadline.value = headlineInput.value = headlineOf(view);
+        setHeadline(headlineOf(view));
     },
 );
 // The other card has its own headline. This runs as the choice changes, before the card is
@@ -297,7 +298,7 @@ watch(
 watch(
     which,
     () => {
-        setHeadline.value = headlineInput.value = headlineOf(base.value);
+        setHeadline(headlineOf(base.value));
     },
     { flush: 'sync' },
 );
@@ -478,7 +479,7 @@ async function copyCaption() {
                                 v-if="edited"
                                 type="button"
                                 class="min-h-11 text-[14px] underline underline-offset-4"
-                                @click="setHeadline = headlineInput = generated"
+                                @click="setHeadline(generated)"
                             >
                                 Use the numbers again
                             </button>

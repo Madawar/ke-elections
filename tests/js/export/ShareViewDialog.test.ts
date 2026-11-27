@@ -314,6 +314,31 @@ describe('ShareViewDialog: the leaders card beside the view', () => {
         ).toBe('County leaders in Nairobi City');
     });
 
+    it('keeps the new card’s headline even when the person had just been typing on the other', async () => {
+        mount(ShareViewDialog, {
+            props: { open: true, view: county, leaders, context },
+            attachTo: document.body,
+        });
+        await settle();
+        // Typing, then switching card before the typing pause is over.
+        const input = headlineInput();
+        input.value = 'Typed on the first card';
+        input.dispatchEvent(new Event('input'));
+        cardOption('leaders')!.click();
+        await nextTick();
+        await nextTick();
+        const shown = () =>
+            [...document.querySelectorAll('[data-preview] [data-headline]')]
+                .map((t) => t.textContent?.trim())
+                .join(' ');
+        expect(shown()).toBe('County leaders in Nairobi City');
+        // ... and after the pause has run out, it is still the leaders card's own.
+        await new Promise((r) => setTimeout(r, 420));
+        await settle();
+        expect(shown()).toBe('County leaders in Nairobi City');
+        expect(headlineInput().value).toBe('County leaders in Nairobi City');
+    });
+
     it('has no card choice without a leaders card, or when it was opened for one', async () => {
         const plain = mount(ShareViewDialog, {
             props: { open: true, view: county, context },

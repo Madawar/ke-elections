@@ -244,6 +244,14 @@ function lineLayers(
                         focus ? [4, 3.4, 12, 5.6] : [4, 2.4, 12, 4],
                     ),
                     'line-opacity': ['case', selected, 1, 0],
+                    // A focused county's outline is centred on its border, and would cover the
+                    // thin MP bands of the constituencies along that border. While those are
+                    // drawn it sits just outside the border instead (a negative offset is an
+                    // outset), so every band shows. Always set, so a restyle puts it back.
+                    'line-offset':
+                        outline && focus?.level === 'county' && source === 'counties'
+                            ? width([4, -1.7, 12, -2.8])
+                            : 0,
                 },
             }),
         ),
@@ -259,6 +267,12 @@ function lineLayers(
 const OUTLINE_WIDTH = [6.4, 1, 9, 1.4, 11, 1.8, 12, 4, 14, 5];
 /** The ink edge on each side of it, by the same zooms: thin with the thin line. */
 const OUTLINE_EDGE = [6.4, 0.5, 9, 0.5, 11, 0.6, 12, 1, 14, 1];
+/**
+ * Inside a focused constituency only that one outline is drawn, so there is no neighbour to
+ * cross into: the band keeps a readable width at the low zooms a rural constituency fits at.
+ */
+const OUTLINE_WIDTH_ALONE = [6.4, 2.5, 9, 3, 11, 3.5, 12, 4, 14, 5];
+const OUTLINE_EDGE_ALONE = [6.4, 1, 9, 1, 11, 1, 12, 1, 14, 1];
 
 /**
  * MP outlines over the MCA wards: inside each constituency, a party-colour line between two thin
@@ -285,14 +299,17 @@ function outlineLayers(
     const colour = outline
         ? codeColour(outline.colours, outline.fallback)
         : theme.noData;
+    const alone = focus?.level === 'constituency';
+    const widths = alone ? OUTLINE_WIDTH_ALONE : OUTLINE_WIDTH;
+    const edges = alone ? OUTLINE_EDGE_ALONE : OUTLINE_EDGE;
     /** The band with its two edges, at the i-th zoom stop. */
-    const edgedAt = (i: number) => OUTLINE_WIDTH[i] + 2 * OUTLINE_EDGE[i];
+    const edgedAt = (i: number) => widths[i] + 2 * edges[i];
     const stops = (f: (i: number) => number) =>
         [
             'interpolate',
             ['linear'],
             ['zoom'],
-            ...OUTLINE_WIDTH.map((v, i) => (i % 2 === 1 ? f(i) : v)),
+            ...widths.map((v, i) => (i % 2 === 1 ? f(i) : v)),
         ] as ExpressionSpecification;
     // A focused constituency's own outline (ink, centred on its border) would cover most of the
     // band, so there the band starts inside that outline.
@@ -300,7 +317,7 @@ function outlineLayers(
         focus?.level === 'constituency'
             ? (3.4 + ((Math.min(12, zoom) - 4) / 8) * 2.2) / 2
             : 0;
-    const offset = stops((i) => edgedAt(i) / 2 + clear(OUTLINE_WIDTH[i - 1]));
+    const offset = stops((i) => edgedAt(i) / 2 + clear(widths[i - 1]));
     const layer = (
         id: string,
         lineColour: unknown,
@@ -323,7 +340,7 @@ function outlineLayers(
         layer(
             'mp-outline',
             outside ? ['case', outside, theme.muted, colour] : colour,
-            stops((i) => OUTLINE_WIDTH[i]),
+            stops((i) => widths[i]),
         ),
     ];
 }

@@ -466,8 +466,11 @@ function applySharedView(data: SeatsData) {
     }
 }
 // What the person set: a colouring, plus each legend row they pressed ("Other" counts once).
-const activeSettings = computed(() =>
-    settingsCount(colourKey.value, legend.value),
+const activeSettings = computed(
+    () =>
+        settingsCount(colourKey.value, legend.value) +
+        // ... and each row pressed in the outlines' own list.
+        (mpLegend.value?.showing.length ?? 0),
 );
 
 // ---- selection and camera ---------------------------------------------------------------

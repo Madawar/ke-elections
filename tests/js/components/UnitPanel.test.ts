@@ -338,6 +338,8 @@ describe('UnitPanel: who represents the unit', () => {
             'https://www.iebc.or.ke/uploads/resources/sample-mca.pdf',
         );
         expect(link.text()).toBe('iebc.or.ke');
+        // A 44px target on touch screens, like the name beside it.
+        expect(link.classes()).toContain('pointer-coarse:min-h-11');
         // A ward with no MCA has no record to cite.
         expect(w.find('[data-mca-ward="1450"] a').exists()).toBe(false);
     });
