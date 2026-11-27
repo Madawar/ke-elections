@@ -1,7 +1,7 @@
 # Roadmap and open decisions
 
-Last updated 2026-11-27, when v0.4.0 (`feature/share-formats`, the first four share formats) was
-released. This is
+Last updated 2026-11-27: v0.4.0 (`feature/share-formats`, the first four share formats) is
+released, and share formats 3, 4 and 7 are built on `feature/share-formats-2`, not yet merged. This is
 the committed record of what comes next. Local execution ledgers are gitignored and deleted when
 a feature finishes.
 
@@ -57,7 +57,11 @@ a feature finishes.
 ## Queue, in order (owner priorities as of 2026-11-27)
 1. **All eight share formats.** The owner said, 2026-11-27: "I loved all."
    - **Done in v0.4.0:** formats 1, 5, 6 and 8 (`2026-11-27-share-formats.md`).
-   - **Next:** 4 (equal-size county tiles), 7 (side by side), 3 (county carousel, slides 1–4).
+   - **Built on `feature/share-formats-2`, waiting for the owner's review:** 4 (county tiles),
+     7 (side by side) and 3 (county carousel, slides 1–4). Plan: `2026-11-27-share-formats-2.md`;
+     rulings and parked minors: `2026-11-27-share-formats-2-progress.md`.
+   - **Left:** 2 (what changed since 2022) and carousel slide 5, with the by-election history
+     work.
    - **Mock-ups:** https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj
    - **Order:**
      - After the leaders branch, because format 1 reuses `leadersFor()`: 1 (who represents this
@@ -181,6 +185,15 @@ a feature finishes.
   - A listed county as small as Mombasa barely shows on the top-10 map. Give it a ring?
   - The ward card's locator marks are ink, not the seat's ballot colour as in the mock-up, so a
     green or beige fill cannot read as a party.
+- **Share formats 3, 4 and 7 (`feature/share-formats-2`), to judge by eye:**
+  - The tile grid (`lib/export/countyTiles.ts`): 24 pairs of neighbouring counties are more than
+    one tile apart, mostly in the north-east and around Nakuru. Tiles are easy to move.
+  - "Side by side" orders the two counties by IEBC code, not by which one was in focus; its
+    story layout (each map beside its words) is not from a mock-up; its link is the national
+    map on that seat, as there is no comparison route.
+  - Every carousel slide links to the county (`/county/<code>`), not to its own seat view, so
+    the four footers match.
+  - Saving or sharing four images at once is untested on real phones.
 - **"Towns: © OpenStreetMap contributors" on cards:** every card with a map prints it, but card
   maps draw no town labels. Dropping it changes the footer of every map card.
 - **Leaders strip on other cards:** only MCA cards for a county or a constituency carry it. Should
