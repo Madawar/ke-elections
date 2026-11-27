@@ -110,6 +110,29 @@ describe('UnitPanel', () => {
         }
     });
 
+    it('describes the surroundings switch with its hint, so its name stays short', () => {
+        const wrapper = mount(UnitPanel, {
+            props: {
+                unit: county,
+                index,
+                seats,
+                towns: [],
+                showSurroundings: false,
+            },
+            attachTo: document.body,
+        });
+        const toggle = wrapper.get('button[role="switch"]').element;
+        const byId = (attr: string) =>
+            document.getElementById(toggle.getAttribute(attr) ?? '');
+        expect(byId('aria-labelledby')?.textContent?.trim()).toBe(
+            'Show surroundings',
+        );
+        expect(byId('aria-describedby')?.textContent?.trim()).toBe(
+            'The rest of the map, faint and in grey',
+        );
+        wrapper.unmount();
+    });
+
     it('offers a labelled switch for showing the surroundings', async () => {
         const wrapper = mount(UnitPanel, {
             props: {
@@ -127,5 +150,49 @@ describe('UnitPanel', () => {
         expect(wrapper.emitted('update:showSurroundings')).toEqual([[true]]);
         await wrapper.setProps({ showSurroundings: true });
         expect(toggle.attributes('aria-checked')).toBe('true');
+    });
+
+    describe('party names open the party profile', () => {
+        const withParties: SeatsData = {
+            ...seats,
+            parties: [
+                { abbrev: 'ODM', name: 'Orange Democratic Movement', coalition_2022: null, colour: '#f80' },
+                { abbrev: 'IND', name: 'Independent', coalition_2022: null, colour: null },
+            ],
+            holders: [
+                ...seats.holders,
+                { ...holder('governor', 'Test Independent'), code: 2, party: 'IND' },
+            ],
+        };
+        const mountWith = (data: SeatsData, unit: Unit = county) =>
+            mount(UnitPanel, {
+                props: { unit, index, seats: data, towns: [] },
+            });
+
+        it('is a button that emits the abbreviation', async () => {
+            const wrapper = mountWith(withParties);
+            const buttons = wrapper.findAll('button[data-party]');
+            expect(buttons).toHaveLength(3);
+            expect(buttons[0].text()).toBe('Orange Democratic Movement');
+            expect(buttons[0].attributes('aria-label')).toBe(
+                'Orange Democratic Movement: all seats',
+            );
+            expect(buttons[0].classes()).toContain('min-h-11');
+            await buttons[0].trigger('click');
+            expect(wrapper.emitted('party')).toEqual([['ODM']]);
+        });
+
+        it('is plain text for an independent, who is not a party', () => {
+            const two: Unit = { l: 'county', c: 2, n: 'Kwale', p: null, b: box };
+            const wrapper = mountWith(withParties, two);
+            expect(wrapper.find('button[data-party]').exists()).toBe(false);
+            expect(wrapper.text()).toContain('Independent');
+        });
+
+        it('is plain text for a party the data has no profile for', () => {
+            const wrapper = mountWith(seats);
+            expect(wrapper.find('button[data-party]').exists()).toBe(false);
+            expect(wrapper.text()).toContain('ODM');
+        });
     });
 });

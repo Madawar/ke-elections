@@ -84,6 +84,24 @@ describe('buildLegend', () => {
         expect(small.members.other).toBeUndefined();
     });
 
+    it('marks the rows that have a party profile: named parties, not Other parties or independents', () => {
+        const withIndependents = buildLegend(
+            {
+                ...seats,
+                holders: [...holders, holder('mp', 900, 'IND')] as SeatsData['holders'],
+            },
+            'mp',
+            null,
+            [],
+        );
+        const profiled = (key: string) =>
+            withIndependents.rows.find((r) => r.key === key)?.party;
+        expect(profiled('A1')).toBe('A1');
+        expect(profiled('A9')).toBe('A9');
+        expect(profiled('other')).toBeUndefined();
+        expect(profiled('IND')).toBeUndefined();
+    });
+
     it('says nothing is highlighted by default', () => {
         expect(legend.showing).toEqual([]);
         expect(legend.highlighted).toEqual([]);
@@ -254,8 +272,14 @@ describe('legendOpenAfterSelect', () => {
         focusing: boolean,
     ) => legendOpenAfterSelect(open, { desktop, wasFocused, focusing });
 
-    it('collapses the legend when a unit is first focused', () => {
-        expect(from(true, true, false, true)).toBe(false);
+    it('keeps the legend as it is, open by default, when a unit is first focused on desktop', () => {
+        expect(from(true, true, false, true)).toBe(true);
+        // ... and respects a person who collapsed it.
+        expect(from(false, true, false, true)).toBe(false);
+    });
+
+    it('collapses the legend to its chip when a unit is first focused on a phone', () => {
+        expect(from(true, false, false, true)).toBe(false);
     });
 
     it('leaves it as the person set it while moving between units', () => {

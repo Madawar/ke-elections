@@ -22,6 +22,8 @@ export interface LegendRow {
     last?: boolean;
     /** How many parties a grouped row stands for ("Other parties (9)" in accessible text). */
     parties?: number;
+    /** The party abbreviation whose profile the row opens; none for "Other parties" and independents. */
+    party?: string;
 }
 
 export const SEAT_LABEL: Record<SeatKey, string> = {
@@ -71,12 +73,17 @@ export function buildLegend(
     const shown = rows.filter((r) => hasOwnColour(r.abbrev, r.colour));
     const folded = rows.filter((r) => !shown.includes(r));
     const other = folded.reduce((n, r) => n + r.seats, 0);
+    const profiled = new Set(seats.parties.map((p) => p.abbrev));
     const mapped: LegendRow[] = shown.map((r) => ({
         key: r.abbrev,
         label: r.abbrev === INDEPENDENT ? 'Independent' : r.abbrev,
         name: r.name,
         colour: r.colour,
         count: r.seats,
+        // Independents are not a party, so they have no profile.
+        ...(r.abbrev !== INDEPENDENT && profiled.has(r.abbrev)
+            ? { party: r.abbrev }
+            : {}),
     }));
     if (other)
         mapped.push({
@@ -177,9 +184,10 @@ export const settingsCount = (
 ): number => (colour !== 'none' ? 1 : 0) + (legend?.showing.length ?? 0);
 
 /**
- * Whether the legend box is open after the selection changes. Focusing a unit from Kenya
- * collapses it to its chip so it never covers the unit; going back to all of Kenya opens it on
- * desktop (phones keep it collapsed); moving between units leaves it as the person set it.
+ * Whether the legend box is open after the selection changes. On desktop it stays open when a unit
+ * is focused (the fitted unit keeps clear of it, see `mapPadding`) unless the person collapsed it;
+ * going back to all of Kenya opens it. On a phone, focusing a unit from Kenya collapses it to its
+ * chip so it never covers the unit; moving between units leaves it as the person set it.
  */
 export function legendOpenAfterSelect(
     open: boolean,
@@ -193,6 +201,6 @@ export function legendOpenAfterSelect(
         focusing: boolean;
     },
 ): boolean {
-    if (focusing) return wasFocused ? open : false;
+    if (focusing) return desktop || wasFocused ? open : false;
     return desktop;
 }

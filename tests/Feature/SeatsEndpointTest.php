@@ -56,8 +56,8 @@ test('serves current holders, parties, seat totals and chamber counts', function
         ->and(collect($json['holders'])->pluck('name'))->not->toContain('Sample Holder Six');
 
     expect($json['parties'])->toContain(
-        ['abbrev' => 'SPA', 'name' => 'Sample Party A', 'coalition_2022' => 'Sample Coalition One', 'colour' => '#aa3344'],
-        ['abbrev' => 'SPC', 'name' => 'Sample Party C', 'coalition_2022' => null, 'colour' => null],
+        ['abbrev' => 'SPA', 'name' => 'Sample Party A', 'coalition_2022' => 'Sample Coalition One', 'colour' => '#aa3344', 'status' => 'fully registered', 'source_url' => 'https://example.org/orpp/register', 'former_names' => []],
+        ['abbrev' => 'SPC', 'name' => 'Sample Party C', 'coalition_2022' => null, 'colour' => null, 'status' => 'deregistered', 'source_url' => 'https://example.org/orpp/register', 'former_names' => []],
     );
 
     $governor = collect($json['holders'])->firstWhere('seat', 'governor');

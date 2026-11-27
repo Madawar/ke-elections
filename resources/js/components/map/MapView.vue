@@ -55,7 +55,7 @@ defineExpose(api);
 </script>
 
 <template>
-    <div class="absolute inset-0">
+    <div class="absolute inset-0" data-onboarding="map">
         <div
             ref="container"
             class="h-full w-full"

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     describePerson,
     normalise,
+    searchParties,
     searchPeople,
     searchUnits,
 } from '@/lib/search';
@@ -309,5 +310,69 @@ describe('describePerson', () => {
         expect(describePerson(r, () => 'Independent candidate')).toBe(
             'Governor, Mombasa County (Independent candidate)',
         );
+    });
+});
+
+describe('searchParties', () => {
+    const parties = [
+        {
+            abbrev: 'UDA',
+            name: 'United Democratic Alliance',
+            former_names: [{ abbrev: 'PDR', effective_on: null }],
+        },
+        { abbrev: 'UDM', name: 'United Democratic Movement' },
+        { abbrev: 'ODM', name: 'Orange Democratic Movement' },
+        {
+            abbrev: 'WDM-K',
+            name: 'Wiper Patriotic Front',
+            former_names: [{ abbrev: 'WDM', effective_on: '2025-08-01' }],
+        },
+        { abbrev: 'DAP-K', name: 'Democratic Action Party-Kenya' },
+        { abbrev: 'IND', name: 'Independent' },
+    ].map((p) => ({
+        coalition_2022: null,
+        colour: null,
+        former_names: [],
+        ...p,
+    }));
+
+    it('matches the abbreviation, in any case, ahead of names', () => {
+        expect(searchParties(parties, 'uda').map((r) => r.party.abbrev)).toEqual(['UDA']);
+        expect(searchParties(parties, 'ODM').map((r) => r.party.abbrev)).toEqual(['ODM']);
+        // "ud" starts both UDA and UDM abbreviations; the names (United) come after
+        expect(searchParties(parties, 'ud').map((r) => r.party.abbrev)).toEqual(['UDA', 'UDM']);
+    });
+
+    it('matches a hyphenated abbreviation however it is typed', () => {
+        expect(searchParties(parties, 'wdm-k')[0].party.abbrev).toBe('WDM-K');
+        expect(searchParties(parties, 'wdm k')[0].party.abbrev).toBe('WDM-K');
+        expect(searchParties(parties, 'dap')[0].party.abbrev).toBe('DAP-K');
+    });
+
+    it('matches the name by word starts', () => {
+        expect(searchParties(parties, 'patriotic').map((r) => r.party.abbrev)).toEqual(['WDM-K']);
+        expect(searchParties(parties, 'democratic mov').map((r) => r.party.abbrev)).toEqual(['ODM', 'UDM']);
+    });
+
+    it('matches a former name and says which one matched', () => {
+        const [hit] = searchParties(parties, 'pdr');
+        expect(hit.party.abbrev).toBe('UDA');
+        expect(hit.formerName).toBe('PDR');
+        const [wdm] = searchParties(parties, 'wdm');
+        expect(wdm.party.abbrev).toBe('WDM-K');
+        // WDM-K matches by its own abbreviation first, so no former name is reported
+        expect(wdm.formerName).toBeNull();
+        expect(searchParties(parties, 'uda')[0].formerName).toBeNull();
+    });
+
+    it('never offers the independents', () => {
+        expect(searchParties(parties, 'ind')).toEqual([]);
+        expect(searchParties(parties, 'independent')).toEqual([]);
+    });
+
+    it('returns nothing for an empty query and honours the limit', () => {
+        expect(searchParties(parties, '  ')).toEqual([]);
+        expect(searchParties(parties, 'd', 2)).toHaveLength(2);
+        expect(searchParties(parties, 'd', 0)).toEqual([]);
     });
 });

@@ -1,25 +1,33 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import {
+    type PartyResult,
     type PersonResult,
     type SearchResult,
     describePerson,
+    searchParties,
     searchPeople,
     searchUnits,
 } from '@/lib/search';
-import type { Holder } from '@/lib/seats';
+import type { Holder, Party } from '@/lib/seats';
 import type { Unit, UnitIndex } from '@/lib/units';
 
 const props = withDefaults(
-    defineProps<{ index: UnitIndex | null; holders?: Holder[] }>(),
-    { holders: () => [] },
+    defineProps<{
+        index: UnitIndex | null;
+        holders?: Holder[];
+        parties?: Party[];
+    }>(),
+    { holders: () => [], parties: () => [] },
 );
 const emit = defineEmits<{
     pick: [unit: Unit];
     pickPerson: [person: PersonResult];
+    /** A party was chosen: its abbreviation, to open its profile. */
+    pickParty: [abbrev: string];
 }>();
 
-// Up to 6 of each group; when only one group has matches it can use up to 8.
+// Up to 6 of each group (places, people, parties); when only one group has matches it can use up to 8.
 const GROUP_LIMIT = 6;
 const SOLO_LIMIT = 8;
 
@@ -28,7 +36,9 @@ const open = ref(false);
 const active = ref(0);
 
 const groups = computed(() => {
-    if (!props.index) return { places: [], people: [] };
+    // Parties need no unit directory, so they can be found before the map data has loaded.
+    const parties = searchParties(props.parties, query.value, SOLO_LIMIT);
+    if (!props.index) return { places: [], people: [], parties };
     const places = searchUnits(props.index, query.value, SOLO_LIMIT);
     const people = searchPeople(
         props.holders,
@@ -36,17 +46,20 @@ const groups = computed(() => {
         query.value,
         SOLO_LIMIT,
     );
-    if (places.length && people.length)
-        return {
-            places: places.slice(0, GROUP_LIMIT),
-            people: people.slice(0, GROUP_LIMIT),
-        };
-    return { places, people };
+    const several = [places, people, parties].filter((g) => g.length).length > 1;
+    return several
+        ? {
+              places: places.slice(0, GROUP_LIMIT),
+              people: people.slice(0, GROUP_LIMIT),
+              parties: parties.slice(0, GROUP_LIMIT),
+          }
+        : { places, people, parties };
 });
 
 type Row =
     | { kind: 'place'; id: string; place: SearchResult }
-    | { kind: 'person'; id: string; person: PersonResult };
+    | { kind: 'person'; id: string; person: PersonResult }
+    | { kind: 'party'; id: string; party: PartyResult };
 const rows = computed<Row[]>(() => [
     ...groups.value.places.map((place, i) => ({
         kind: 'place' as const,
@@ -57,6 +70,11 @@ const rows = computed<Row[]>(() => [
         kind: 'person' as const,
         id: `unit-search-person-${i}`,
         person,
+    })),
+    ...groups.value.parties.map((party, i) => ({
+        kind: 'party' as const,
+        id: `unit-search-party-${i}`,
+        party,
     })),
 ]);
 
@@ -71,7 +89,8 @@ function choose(i: number) {
     const r = rows.value[i];
     if (!r) return;
     if (r.kind === 'place') emit('pick', r.place.unit);
-    else emit('pickPerson', r.person);
+    else if (r.kind === 'person') emit('pickPerson', r.person);
+    else emit('pickParty', r.party.party.abbrev);
     query.value = '';
     open.value = false;
     (document.activeElement as HTMLElement | null)?.blur();
@@ -92,12 +111,11 @@ function onKey(e: KeyboardEvent) {
 }
 
 // A heading goes before the first row of each group.
+const HEADING = { place: 'Places', person: 'People', party: 'Parties' } as const;
 const headingFor = (i: number) =>
     rows.value[i].kind === rows.value[i - 1]?.kind
         ? null
-        : rows.value[i].kind === 'place'
-          ? 'Places'
-          : 'People';
+        : HEADING[rows.value[i].kind];
 
 const areaLine = (u: SearchResult) =>
     u.ancestors
@@ -107,16 +125,16 @@ const areaLine = (u: SearchResult) =>
 </script>
 
 <template>
-    <div class="relative w-full">
+    <div class="relative w-full" data-onboarding="search">
         <label class="sr-only" for="unit-search"
-            >Search places and people</label
+            >Search places, people and parties</label
         >
         <input
             id="unit-search"
             v-model="query"
             type="search"
             autocomplete="off"
-            placeholder="Search a place or a person"
+            placeholder="Search a place, person or party"
             class="h-11 w-full rounded-md border border-hairline bg-surface px-3 text-[15px] text-ink shadow-sm outline-none placeholder:text-muted-ink focus:border-ink"
             role="combobox"
             :aria-expanded="open && rows.length > 0"
@@ -168,6 +186,17 @@ const areaLine = (u: SearchResult) =>
                             class="text-[13px] text-muted-ink"
                             >{{ areaLine(r.place) }}</span
                         >
+                    </template>
+                    <template v-else-if="r.kind === 'party'">
+                        <span class="text-[15px] text-ink"
+                            >{{ r.party.party.name }}
+                            <span class="text-muted-ink">party</span></span
+                        >
+                        <span class="text-[13px] text-muted-ink">{{
+                            r.party.formerName
+                                ? `${r.party.party.abbrev}, formerly ${r.party.formerName}`
+                                : r.party.party.abbrev
+                        }}</span>
                     </template>
                     <template v-else>
                         <span class="text-[15px] text-ink">{{

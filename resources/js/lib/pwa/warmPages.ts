@@ -13,7 +13,8 @@ export const PAGES_CACHE = 'pages';
 export const PUBLIC_PAGE_HEADER = 'X-Public-Page';
 
 /** The public map pages; mirrors the "pages" route pattern in vite.config.ts. */
-export const MAP_PAGE = /^\/((county|constituency|ward)\/\d+)?$/;
+export const MAP_PAGE =
+    /^\/((county|constituency|ward)\/\d+|party\/[a-z0-9]+(-[a-z0-9]+)*)?$/i;
 
 type PageCache = Pick<Cache, 'match' | 'put'>;
 type Fetcher = (request: Request) => Promise<Response>;
