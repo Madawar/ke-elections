@@ -1,6 +1,11 @@
 // The text that goes with a shared view: the headline, the numbers behind it, the source with
 // its date, the link and the tags. Instagram and TikTok allow 2,200 characters; X allows 280.
 import { formatAsOf } from './format';
+import {
+    type LeadersCardView,
+    leadersHeadline,
+    mcaMixLabel,
+} from './leadersCard';
 import { type PartyCardView, TOP_COUNTIES_TITLE, partyHeadline } from './partyCard';
 import { type ViewState, headlineFor } from './viewState';
 
@@ -139,6 +144,44 @@ export function partyCaption(
         '',
         ...lines,
         ...(lines.length ? [''] : []),
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for a leaders card: the headline, each seat with its holder exactly as the data
+ * spells the name and the party in brackets (or "no approved data yet"), a constituency's MCAs by
+ * party, the source with its date, the link and the tags. On X only the headline, source, link
+ * and tags fit.
+ */
+export function leadersCaption(
+    card: LeadersCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = leadersHeadline(card),
+): string {
+    if (platform === 'x') {
+        let tail = '';
+        for (const max of [2, 1]) {
+            tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
+            if (xLength(tail) <= X_MAX - 20) break;
+        }
+        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
+    }
+    const lines = card.rows.map((r) => {
+        const seat = `${r.title}${r.where ? ` (${r.where})` : ''}`;
+        if (!r.holder) return `${seat}: no approved data yet`;
+        return `${seat}: ${r.holder.name}${r.holder.partyLabel ? ` (${r.holder.partyLabel})` : ''}`;
+    });
+    if (card.mcas) lines.push(mcaMixLabel(card));
+    return [
+        clip(headline, 300),
+        '',
+        ...lines,
+        '',
         sourceText(card, 10),
         url,
         '',

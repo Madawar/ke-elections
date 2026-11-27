@@ -15,6 +15,7 @@ import {
     DialogTitle,
 } from 'reka-ui';
 import { computed, nextTick, ref, shallowRef, watch } from 'vue';
+import LeadersCard from './LeadersCard.vue';
 import PartyCard from './PartyCard.vue';
 import ViewCard from './ViewCard.vue';
 import { CARD_FONTS } from '@/lib/export/fonts';
@@ -38,10 +39,13 @@ import {
     dialogCopy,
     headlineOf,
     inTheme,
+    isLeadersCard,
     isPartyCard,
     layoutOf,
+    leadersLabel,
     mapBoxOf,
 } from '@/lib/export/shareView';
+import type { LeadersCardView } from '@/lib/export/leadersCard';
 import {
     type ViewMapContext,
     renderViewMap,
@@ -52,11 +56,25 @@ import { THEMES, type ThemeName } from '@/lib/map/theme';
 import { TIPS, claimTip } from '@/lib/onboarding';
 
 const props = defineProps<{
-    /** A seat view ("Share this view") or a party card. */
+    /** A seat view ("Share this view"), a party card or a leaders card. */
     view: ShareableView;
+    /**
+     * The focused unit's leaders card, offered beside the view: "County leaders" whenever a
+     * county is focused, whatever the seat mode.
+     */
+    leaders?: LeadersCardView | null;
     context: ViewMapContext;
 }>();
 const open = defineModel<boolean>('open', { default: false });
+
+/** Which card is being made: the view the dialog was opened for, or the leaders card. */
+const which = ref<'view' | 'leaders'>('view');
+const offersLeaders = computed(
+    () => !!props.leaders && !isLeadersCard(props.view),
+);
+const base = computed<ShareableView>(() =>
+    which.value === 'leaders' && props.leaders ? props.leaders : props.view,
+);
 
 const SIZES = Object.keys(VIEW_SIZES) as ViewSize[];
 const stored = useStorage<ViewSize>('km.viewSize', 'square');
@@ -64,24 +82,28 @@ const size = computed<ViewSize>({
     get: () => (SIZES.includes(stored.value) ? stored.value : 'square'),
     set: (v) => (stored.value = v),
 });
-const themeName = ref<ThemeName>(props.view.theme);
+const themeName = ref<ThemeName>(base.value.theme);
 const theme = computed(() => THEMES[themeName.value]);
 const shown = computed(() =>
-    inTheme(props.view, themeName.value, props.context),
+    inTheme(base.value, themeName.value, props.context),
 );
 /** The two kinds of card each have their own component; these narrow `shown` for the template. */
 const seatView = computed(() => {
     const v = shown.value;
-    return isPartyCard(v) ? null : v;
+    return isPartyCard(v) || isLeadersCard(v) ? null : v;
+});
+const leadersCard = computed(() => {
+    const v = shown.value;
+    return isLeadersCard(v) ? v : null;
 });
 const partyCard = computed(() => {
     const v = shown.value;
     return isPartyCard(v) ? v : null;
 });
-const copy = computed(() => dialogCopy(props.view));
+const copy = computed(() => dialogCopy(base.value));
 
 const HEADLINE_MAX = 120;
-const generated = computed(() => headlineOf(props.view));
+const generated = computed(() => headlineOf(base.value));
 const headlineInput = ref(generated.value);
 /** The card follows the typing after a short pause, so the map is not redrawn on every key. */
 const headlineTyped = refDebounced(headlineInput, 350);
@@ -90,7 +112,7 @@ const headline = computed(
 );
 const edited = computed(() => headlineInput.value.trim() !== generated.value);
 
-const url = computed(() => siteUrl(props.view.path));
+const url = computed(() => siteUrl(base.value.path));
 const caption = computed(() =>
     captionOf(
         shown.value,
@@ -99,7 +121,7 @@ const caption = computed(() =>
         headline.value,
     ),
 );
-const mapAspect = computed(() => viewMapAspect(props.view));
+const mapAspect = computed(() => viewMapAspect(base.value));
 /** When this size has no room for every row, say how many it lists and which size lists all. */
 const rowsHint = computed(() => {
     const v = seatView.value;
@@ -118,7 +140,7 @@ const rowsHint = computed(() => {
     );
     return `This size lists ${here.mixRows.length} of the ${all} ${v.mix.rowWord}.${fits.length ? ` ${fits.join(' and ')} ${fits.length === 1 ? 'lists' : 'list'} them all.` : ''}`;
 });
-const filename = computed(() => viewFilename(props.view, size.value));
+const filename = computed(() => viewFilename(base.value, size.value));
 
 const mapImage = ref<string | null>(null);
 const mapStatus = ref('Drawing the map…');
@@ -238,7 +260,7 @@ watch(
 );
 
 watch(
-    [open, size, themeName, headline],
+    [open, size, themeName, headline, which],
     ([isOpen]) => {
         if (isOpen) {
             canShare.value = canShareFiles();
@@ -255,10 +277,16 @@ watch(
     () => props.view,
     (view) => {
         images.clear();
+        which.value = 'view';
         themeName.value = view.theme;
         headlineInput.value = headlineOf(view);
     },
 );
+// The other card has its own headline (and its own map: the images are per card).
+watch(which, () => {
+    images.clear();
+    headlineInput.value = headlineOf(base.value);
+});
 
 async function share() {
     if (!blob.value) return;
@@ -316,6 +344,38 @@ async function copyCaption() {
                 </div>
 
                 <div class="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-2">
+                    <fieldset v-if="offersLeaders && leaders" class="mb-3">
+                        <legend class="mb-2 text-[15px] font-semibold">
+                            Card
+                        </legend>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <label
+                                v-for="option in [
+                                    { key: 'view', label: 'This view' },
+                                    {
+                                        key: 'leaders',
+                                        label: leadersLabel(leaders),
+                                    },
+                                ] as const"
+                                :key="option.key"
+                                class="flex min-h-11 cursor-pointer items-center justify-center rounded-md border px-2 text-center text-[14px] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ink"
+                                :class="
+                                    which === option.key
+                                        ? 'border-ink bg-ground'
+                                        : 'border-hairline'
+                                "
+                            >
+                                <input
+                                    v-model="which"
+                                    type="radio"
+                                    name="view-card"
+                                    class="sr-only"
+                                    :value="option.key"
+                                />
+                                {{ option.label }}
+                            </label>
+                        </div>
+                    </fieldset>
                     <fieldset>
                         <legend class="mb-2 text-[15px] font-semibold">
                             Size
@@ -436,6 +496,17 @@ async function copyCaption() {
                         <PartyCard
                             v-if="partyCard"
                             :view="partyCard"
+                            :size="size"
+                            :headline="headline"
+                            :map-image="mapImage"
+                            :map-placeholder="mapStatus"
+                            :map-aspect="mapAspect"
+                            :url="url"
+                            :theme="theme"
+                        />
+                        <LeadersCard
+                            v-else-if="leadersCard"
+                            :view="leadersCard"
                             :size="size"
                             :headline="headline"
                             :map-image="mapImage"

@@ -6,7 +6,12 @@
 // `ViewState` union later with its own `kind`; the card and caption switch on `kind`.
 import { type LeaderRow, leaderSources, leadersFor } from '@/lib/leaders';
 import { SEAT_LABEL, buildLegend, shareOf } from '@/lib/legend';
-import { type SeatKey, SEAT_LEVEL } from '@/lib/map/colouring';
+import {
+    COUNTY_SEATS,
+    type SeatKey,
+    type SeatMode,
+    SEAT_LEVEL,
+} from '@/lib/map/colouring';
 import type { FocusSelection } from '@/lib/map/focus';
 import { OTHER, THEMES, type ThemeName } from '@/lib/map/theme';
 import { unitPath } from '@/lib/map/urls';
@@ -174,10 +179,16 @@ export function viewPath(
 export function parseViewQuery(
     search: string,
     seats: SeatsData,
-): { seat: SeatKey | null; parties: string[] } {
+): { seat: SeatMode | null; parties: string[] } {
     const q = new URLSearchParams(search);
     const raw = q.get('seat');
-    const seat = SEAT_KEYS.includes(raw as SeatKey) ? (raw as SeatKey) : null;
+    // `seat=county_seats` is the striped view of the three county seats.
+    const seat: SeatMode | null =
+        raw === COUNTY_SEATS
+            ? COUNTY_SEATS
+            : SEAT_KEYS.includes(raw as SeatKey)
+              ? (raw as SeatKey)
+              : null;
     const known = new Map<string, string>();
     for (const p of seats.parties) known.set(p.abbrev.toLowerCase(), p.abbrev);
     for (const h of seats.holders)

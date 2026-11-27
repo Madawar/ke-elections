@@ -38,12 +38,15 @@ import {
     announcePerson,
     announceSelection,
 } from '@/lib/map/announce';
-import { mapPadding } from '@/lib/map/camera';
+import { CHIPS_BESIDE_SEARCH, mapPadding } from '@/lib/map/camera';
 import {
+    COUNTY_SEATS,
+    COUNTY_SEAT_KEYS,
     type ColourKey,
     type Colouring,
     type SeatKey,
     NO_COLOURING,
+    isSeatMode as isSeatColouring,
 } from '@/lib/map/colouring';
 import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
 import {
@@ -69,6 +72,10 @@ import { fileUrl } from '@/lib/map/style';
 import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
 import { formatAsOf } from '@/lib/export/format';
+import {
+    type LeadersCardView,
+    leadersCardView,
+} from '@/lib/export/leadersCard';
 import { partyCardView } from '@/lib/export/partyCard';
 import type { ShareableView } from '@/lib/export/shareView';
 import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
@@ -77,6 +84,7 @@ import { parsePartyPath } from '@/lib/map/urls';
 import {
     type SeatsData,
     EMPTY_SEATS,
+    countySeatsColouring,
     legendScope,
     loadSeats,
     seatColouring,
@@ -228,13 +236,17 @@ const overlays = ref<MapOverlay[]>(OVERLAYS);
 const seatCount = (seat: SeatKey) =>
     Object.values(seats.value.totals[seat] ?? {}).reduce((a, b) => a + b, 0);
 // The chips for seats with no approved data yet cannot be chosen (all stay open until it loads).
-const unavailableSeats = computed(() =>
-    loadedSeats.value === EMPTY_SEATS
-        ? []
-        : (Object.keys(SEAT_LABEL) as SeatKey[]).filter(
-              (seat) => seatCount(seat) === 0,
-          ),
-);
+type ChipKey = Exclude<ColourKey, 'province'>;
+const unavailableSeats = computed<ChipKey[]>(() => {
+    if (loadedSeats.value === EMPTY_SEATS) return [];
+    const off: ChipKey[] = (Object.keys(SEAT_LABEL) as SeatKey[]).filter(
+        (seat) => seatCount(seat) === 0,
+    );
+    // "County seats" needs at least one of the three county seats.
+    if (COUNTY_SEAT_KEYS.every((seat) => off.includes(seat)))
+        off.push(COUNTY_SEATS);
+    return off;
+});
 watch(unavailableSeats, (off) => {
     if ((off as ColourKey[]).includes(colourKey.value))
         colourKey.value = 'none';
@@ -274,11 +286,14 @@ const colouring = computed<Colouring>(() => {
     if (k === 'province')
         return { ...NO_COLOURING, mode: { kind: 'province' } };
     const t = THEMES[theme.value];
-    return seatColouring(seats.value, k, {
+    const tokens = {
         noData: t.noData,
         faded: t.faded,
         only: new Set(onlyParties.value),
-    });
+    };
+    return k === COUNTY_SEATS
+        ? countySeatsColouring(seats.value, tokens)
+        : seatColouring(seats.value, k, tokens);
 });
 
 const asOfText = computed(() =>
@@ -367,7 +382,7 @@ watch(isDesktop, (d) => (legendOpen.value = d));
 // The open legend is capped to the room under the controls at the top (the search bar, the seat
 // chips, and the back button while a unit is focused), so it is never pushed under them. The
 // chips sit beside the search bar on wide desktops, and under it everywhere else.
-const isWide = useMediaQuery('(min-width: 1280px)');
+const isWide = useMediaQuery(`(min-width: ${CHIPS_BESIDE_SEARCH}px)`);
 const legendTopClearance = computed(
     () => (isWide.value ? 64 : 116) + (selection.value ? 52 : 0),
 );
@@ -550,6 +565,7 @@ function showPartyOnMap(seat: SeatKey) {
 function shareParty() {
     const abbrev = partyAbbrev.value;
     if (!abbrev) return;
+    sharedLeaders.value = null;
     sharedView.value = partyCardView({
         seats: seats.value,
         abbrev,
@@ -655,7 +671,7 @@ const mapInset = computed(() =>
 /** The share step points inside the sheet: on a phone, open it so the button shows. */
 async function prepareStep(id: string) {
     if (id !== 'share' || isDesktop.value || snap.value !== 'peek') return;
-    if (!isSeatMode.value) return;
+    if (!canShareView.value) return;
     snap.value = 'half';
     await new Promise((r) => setTimeout(r, 300));
 }
@@ -957,13 +973,31 @@ function shareUnit() {
 
 // ---- share this view --------------------------------------------------------------------
 // The view is fixed when the dialog opens, so the card doesn't change under the person.
-const isSeatMode = computed(
-    () => colourKey.value !== 'none' && colourKey.value !== 'province',
+const isSeatMode = computed(() => isSeatColouring(colourKey.value));
+// A seat view can be shared as it is. "County seats" has a card only for a county (its leaders).
+const canShareView = computed(
+    () =>
+        isSeatMode.value &&
+        (colourKey.value !== COUNTY_SEATS ||
+            focusOf(selection.value)?.level === 'county'),
 );
 const sharedView = shallowRef<ShareableView | null>(null);
+// The focused unit's leaders card, offered in the dialog beside the view being shared.
+const sharedLeaders = shallowRef<LeadersCardView | null>(null);
+const leadersOf = (focus: FocusSelection | null) =>
+    index.value && focus
+        ? leadersCardView({
+              seats: seats.value,
+              index: index.value,
+              focus,
+              theme: theme.value,
+          })
+        : null;
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
+    if (k === COUNTY_SEATS) return shareLeaders();
+    sharedLeaders.value = leadersOf(focusOf(selection.value));
     sharedView.value = snapshotView({
         seats: seats.value,
         index: index.value,
@@ -973,6 +1007,12 @@ function shareView() {
         showSurroundings: showSurroundings.value,
         theme: theme.value,
     });
+}
+
+/** The leaders card of the focused unit ("County leaders in <county>", "Leaders of <unit>"). */
+function shareLeaders() {
+    sharedLeaders.value = null;
+    sharedView.value = leadersOf(focusOf(selection.value));
 }
 
 const showView = (v: typeof view.value) => {
@@ -1049,11 +1089,11 @@ const showView = (v: typeof view.value) => {
             </button>
         </div>
 
-        <!-- Seat chips: under the search bar on phones, beside it on wide desktops. Hidden while the
+        <!-- Seat chips: under the search bar on phones, beside it on wide desktops (2xl: seven chips). Hidden while the
              sheet is at full height, as the legend is. -->
         <div
             v-if="!(snap === 'full' && !isDesktop)"
-            class="pointer-events-none absolute top-[64px] right-3 left-3 z-20 md:left-[400px] xl:top-3 xl:left-[864px]"
+            class="pointer-events-none absolute top-[64px] right-3 left-3 z-20 md:left-[400px] 2xl:top-3 2xl:left-[864px]"
         >
             <SeatChips
                 :model-value="colourKey"
@@ -1068,7 +1108,7 @@ const showView = (v: typeof view.value) => {
         <!-- Back button: under the search bar and the chips (beside them on wide desktops). -->
         <div
             v-if="!(snap === 'full' && !isDesktop)"
-            class="pointer-events-none absolute top-[116px] left-3 z-20 flex flex-col items-start gap-2 md:left-[400px] xl:top-[64px]"
+            class="pointer-events-none absolute top-[116px] left-3 z-20 flex flex-col items-start gap-2 md:left-[400px] 2xl:top-[64px]"
         >
             <BackButton :parent="parentName" @step-up="stepBack" />
         </div>
@@ -1078,7 +1118,7 @@ const showView = (v: typeof view.value) => {
         <div
             v-if="!(snap === 'full' && !isDesktop)"
             data-testid="outside-hint-slot"
-            class="pointer-events-none absolute right-[72px] left-3 z-20 md:top-[168px] md:right-auto md:left-[400px] xl:top-[116px]"
+            class="pointer-events-none absolute right-[72px] left-3 z-20 md:top-[168px] md:right-auto md:left-[400px] 2xl:top-[116px]"
             :style="isDesktop ? undefined : { bottom: `${sheetHeight + 12}px` }"
         >
             <OutsideHint
@@ -1128,9 +1168,9 @@ const showView = (v: typeof view.value) => {
                 :note="legend.note"
                 :highlighted="legend.highlighted"
                 :filtered="legend.filtered"
-                :shareable="isSeatMode"
+                :shareable="canShareView"
                 :share-emphasis="
-                    isSeatMode &&
+                    canShareView &&
                     (onlyParties.length > 0 || !!focusOf(selection))
                 "
                 @toggle="toggleParty"
@@ -1277,17 +1317,18 @@ const showView = (v: typeof view.value) => {
                     :towns="townsIn"
                     :highlight-seat="highlightSeat"
                     v-model:show-surroundings="showSurroundings"
-                    :can-share-view="isSeatMode"
+                    :can-share-view="canShareView"
                     @go="(u) => selectUnit(u)"
                     @party="openParty"
                     @share="shareUnit"
                     @share-view="shareView"
+                    @share-leaders="shareLeaders"
                 />
                 <NationalOverview
                     v-else
                     :seats="seats"
                     :highlight-party="highlightParty"
-                    :can-share-view="isSeatMode"
+                    :can-share-view="canShareView"
                     @colour-by="chooseMode"
                     @party="openParty"
                     @share="exportNational = true"
@@ -1313,6 +1354,7 @@ const showView = (v: typeof view.value) => {
             v-if="sharedView && index && manifest"
             :open="true"
             :view="sharedView"
+            :leaders="sharedLeaders"
             :context="{
                 manifest,
                 provinceOfCounty,

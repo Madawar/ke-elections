@@ -7,9 +7,11 @@ import {
     type Colouring,
     NO_COLOURING,
     fillColor,
+    fillPattern,
     isFinerThanSeat,
     pinnedLevel,
 } from './colouring';
+import { patternId } from './stripes';
 import { type MapLevel, levelOpacityStops } from './levels';
 import type { MapTheme } from './theme';
 
@@ -370,11 +372,24 @@ export function buildStyle({
         promoteId: 'code',
     });
     const fills = (['county', 'constituency', 'ward'] as MapLevel[]).map(
-        (level): LayerSpecification => ({
+        (level): LayerSpecification => {
+            // "County seats": each county's stripes. Outside the focused unit it is one neutral
+            // grey, as every other colour is.
+            const pattern = fillPattern(colouring, level);
+            const outside = focus?.outside?.[SOURCE_OF[level]];
+            const neutral = patternId([theme.muted, theme.muted, theme.muted]);
+            return {
             id: `${SOURCE_OF[level]}-fill`,
             type: 'fill',
             source: SOURCE_OF[level],
             paint: {
+                ...(pattern === undefined
+                    ? {}
+                    : {
+                          'fill-pattern': (outside
+                              ? ['case', outside, neutral, pattern]
+                              : pattern) as never,
+                      }),
                 'fill-color': focusedColour(
                     fillColor(
                         colouring,
@@ -394,7 +409,8 @@ export function buildStyle({
                     seatFillOpacity,
                 ),
             },
-        }),
+            };
+        },
     );
     return {
         version: 8,

@@ -8,7 +8,11 @@ import { SEAT_LEVEL } from '@/lib/map/colouring';
 import { KENYA_BOUNDS, type MapLevel } from '@/lib/map/levels';
 import { buildStyle } from '@/lib/map/style';
 import type { MapTheme } from '@/lib/map/theme';
-import { type SeatsData, seatColouring } from '@/lib/seats';
+import {
+    type SeatsData,
+    countySeatsColouring,
+    seatColouring,
+} from '@/lib/seats';
 import type { UnitIndex } from '@/lib/units';
 import type { Box } from './layout';
 import { unitStyle } from './locator';
@@ -22,7 +26,10 @@ import type { ViewState } from './viewState';
 export type ViewMapSpec = Pick<
     ViewState,
     'seat' | 'only' | 'focus' | 'showSurroundings'
->;
+> & {
+    /** A county leaders card: stripe the counties by their three seats instead of `seat`. */
+    stripes?: boolean;
+};
 
 export interface ViewMapContext {
     manifest: Record<string, string>;
@@ -37,11 +44,14 @@ export function viewColouring(
     seats: SeatsData,
     theme: MapTheme,
 ): Colouring {
-    return seatColouring(seats, view.seat, {
+    const tokens = {
         noData: theme.noData,
         faded: theme.faded,
         only: new Set(view.only),
-    });
+    };
+    return view.stripes
+        ? countySeatsColouring(seats, tokens)
+        : seatColouring(seats, view.seat, tokens);
 }
 
 /** Width over height of the area the card's map shows, in Web Mercator. */
@@ -84,7 +94,7 @@ export function viewStyle(
                   theme,
                   colouring,
                   provinceOfCounty: ctx.provinceOfCounty,
-                  wards: SEAT_LEVEL[view.seat] === 'ward',
+                  wards: !view.stripes && SEAT_LEVEL[view.seat] === 'ward',
                   seatFillOpacity: 1,
               });
     // The card's background goes behind the map, so the shape stands on the card. Place names
@@ -92,9 +102,10 @@ export function viewStyle(
     // only kept where they carry the colouring (MCA seats) or the unit is a constituency or
     // smaller, so a county or all of Kenya reads as its seats, not as a mesh.
     const wardLines =
-        SEAT_LEVEL[view.seat] === 'ward' ||
-        view.focus?.level === 'constituency' ||
-        view.focus?.level === 'ward';
+        !view.stripes &&
+        (SEAT_LEVEL[view.seat] === 'ward' ||
+            view.focus?.level === 'constituency' ||
+            view.focus?.level === 'ward');
     const layers = base.layers
         .filter(
             (l) =>

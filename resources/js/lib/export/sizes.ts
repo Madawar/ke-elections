@@ -61,6 +61,9 @@ export function viewFilename(
         .slice(0, 4)
         .map((a) => a.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
         .join('-');
+    // `kenya-electoral-map-leaders-county-47-square.png`
+    if (view.kind === 'leaders')
+        return `kenya-electoral-map-leaders-${where}-${size}.${ext}`;
     // `kenya-electoral-map-party-uda-county-47-square.png`
     if (view.kind === 'partyCard')
         return `kenya-electoral-map-party-${parties}-${where}-${size}.${ext}`;

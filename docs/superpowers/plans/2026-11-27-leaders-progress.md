@@ -14,8 +14,8 @@ no release. The release is done afterwards from another session.
 | 5a | `leadersFor()` in `lib/leaders.ts`; the panel's "Who represents"; the legend's "Leaders here" strip | done | `65333b4` |
 | 5a | The leaders strip on MCA cards (`lib/export/leadersStrip.ts`, `cardLeaders`) | done | see `git log` (`feat(export): leaders strip on MCA cards…`) |
 | 5b | Bigger card maps on the "Share this view" cards | done | same commit |
-| 5b | "Leaders of <unit>" and "County leaders in <county>" cards | not started | |
-| 5c | Striped "County seats" chip, map mode and legend | not started | |
+| 5b | "Leaders of <unit>" and "County leaders in <county>" cards, in all four sizes | done | see `git log` (`feat(map): county leaders card and striped county seats view`) |
+| 5c | Striped "County seats" chip, map mode and legend | done | same commit |
 | 6 | MP outlines over MCA wards, badges, two-section legend, MP block on cards, MCA names on wards | not started | |
 
 ### How much bigger the card maps are (5b)
@@ -116,10 +116,64 @@ Each one: what was decided, why, and what it costs if it is wrong.
   "Share this view" card. This is the one part of "about 15% on all cards" not done — cost if
   wrong: the same padding-and-gaps change in two more files; listed under "What is next".
 
+- **Ruling: the leaders card lives in `lib/export/leadersCard.ts` and `leadersLayout.ts`, not in
+  `countyLeaders.ts`** — the plan names `countyLeaders.ts`, but the later addition makes the county
+  card "the county version of the same card", so one view model covers county, constituency and
+  ward. `countyLeaders(seats, index, code)` is still exported, and is `leadersFor` — cost if
+  wrong: a file name.
+- **Ruling: `stripePattern(colours, size)` takes no theme** — the plan writes
+  `stripePattern(colours[], theme, size)`, but the colours passed in are already the theme's (the
+  party colours, the no-data and faded tokens), so a new theme is simply new colours and a new
+  id. It returns raw RGBA pixels (`{ width, height, data }`), which MapLibre's `addImage` takes
+  and which can be made without a canvas — cost if wrong: none.
+- **Ruling: pattern images are made from their id** — `patternId` spells the three colours, so
+  the visible map and the export map each make an image when the style asks for it
+  (`styleimagemissing`) and neither keeps a list. The visible map also adds them before it sets
+  the paint; the export map adds them as soon as its style is in (a tile laid out before its
+  pattern exists stays empty: seen in the first export) — cost if wrong: none.
+- **Ruling: stripes are 9px bands (an 18px tile at pixel ratio 2), finer than first drawn** — at
+  phone size the smallest counties must still show all three stripes; MapLibre scales a pattern
+  up to 2x between zoom levels — cost if wrong: `STRIPE_SIZE`.
+- **Ruling: "County seats" is the seventh and last chip, with the three county ballot colours as
+  a small mark and the ink face when active** — it has no ballot colour of its own, and a striped
+  chip face would need a gradient, which the UI rules forbid — cost if wrong: its place in
+  `CHIPS` and its face class.
+- **Ruling: the chips sit beside the search bar from 1536px (Tailwind 2xl), not 1280px** — seven
+  chips need about 640px beside the panel and the search bar; at 1440 the row overflowed and
+  scrolled "None" out of view. Between 1280 and 1535 they now sit under the search bar, as on
+  smaller screens — cost if wrong: `CHIPS_BESIDE_SEARCH` and three classes in `Map.vue`.
+- **Ruling: "County seats" has no share card for all of Kenya** — the plan specifies the county
+  leaders card and the striped map, not a national striped card. With Kenya in view the legend
+  has no "Share this view"; with a county focused it opens that county's leaders card — cost if
+  wrong: a national card is a new layout (not built).
+- **Ruling: the deep link `?seat=county_seats` opens the striped view**, and is the link printed
+  on a county leaders card — cost if wrong: none.
+- **Ruling: how the leaders card is reached** — (1) "Share as image" beside "Who represents" in
+  the panel, at every level and with any colouring, even none; (2) in the share dialog, a "Card"
+  choice, "This view" or "County leaders" ("Leaders" for a constituency or a ward), whenever a
+  unit is focused; (3) "Share this view" in the County seats view of a county — cost if wrong:
+  the button's wording or place.
+- **Ruling: leader blocks are rows, and the map sits beside them when that keeps the type
+  bigger** — on a square card three to five rows under a full-width map came out too small to
+  read, so the layout prefers the arrangement with the larger type and more detail, then the
+  larger map. The unit's own seat always says since when and gives its source; the rows held
+  above it drop that line when the room is short (their sources are in the footer) — cost if
+  wrong: the chooser in `leadersLayout`.
+- **Ruling: the line under a leaders headline is the longest wording that fits** ("Ward in
+  Mathare constituency, Nairobi City County", then "Ward in Nairobi City County", then "Ward") —
+  so it is never cut — cost if wrong: wording.
+- **Ruling: a constituency's leaders card ends with "MCAs in 6 wards: ODM 3, UDA 3" over one
+  bar**, with a no-data part for wards without an approved MCA — the plan asks for "an MCA mix
+  bar with 'of N wards'" — cost if wrong: wording.
+
 ## Parked minor findings
 
 - The legend box exists only while a colouring is on, so with "None" chosen there is no "Leaders
   here" strip. The panel still lists the leaders.
+- Labels over the stripes of a focused county are harder to read than over a flat fill (the
+  label halo is the land colour). A darker halo in the County seats view would help.
+- The "Share image" (locator) card and the party card do not know the County seats view: they
+  draw their maps as before.
 - A fresh visitor who opens a ward or a constituency from Kenya with "None" chosen keeps "None"
   (`modeForFocus` only switches a mode that does not fit). The plan's "MCA is the default inside a
   constituency" holds only when the mode in use is a county seat.
@@ -134,5 +188,5 @@ Each one: what was decided, why, and what it costs if it is wrong.
 
 ## What is next
 
-- 5b's leaders cards, then 5c and Task 6, in that order.
+- Task 6.
 - Bigger maps on the party card and the "Share image" card (see the ruling).

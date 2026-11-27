@@ -675,8 +675,36 @@ function callouts(
     });
 }
 
+/**
+ * The frame every card of this family shares: where the content starts under the ballot strip,
+ * the footer at its full height, the gap between blocks, and the width that stays clear of the
+ * story apps' buttons. The leaders card is laid out inside it.
+ */
+export function cardFrame(
+    size: ViewSize,
+    view: Pick<ViewState, 'source' | 'asOf'>,
+    url: string,
+) {
+    const { w, h } = VIEW_SIZES[size];
+    const spec = SPECS[size];
+    const { pad, gap } = spec;
+    const innerW =
+        size === 'x' ? w - 2 * pad : w - pad - Math.max(pad, spec.insetRight ?? 0);
+    const top = Math.round(
+        Math.max(spec.stripH * 2 + pad * TIGHT.top, spec.safeTop),
+    );
+    const fh = footerHeight(innerW, spec.footer, view, url);
+    const footerBox = box(
+        pad,
+        Math.round(h - Math.max(spec.safeBottom, pad * TIGHT.foot) - fh),
+        innerW,
+        fh,
+    );
+    return { w, h, spec, innerW, top, footerBox, tight: Math.round(gap * TIGHT.gap) };
+}
+
 /** Area of a shape with this aspect (w/h) drawn as large as fits in the box. */
-const fittedArea = (b: Box, aspect: number) => {
+export const fittedArea = (b: Box, aspect: number) => {
     if (b.w <= 0 || b.h <= 0) return 0;
     const w = Math.min(b.w, b.h * aspect);
     return w * (w / aspect);

@@ -38,6 +38,8 @@ const emit = defineEmits<{
     party: [abbrev: string];
     share: [];
     shareView: [];
+    /** "Share as image" beside "Who represents": the unit's leaders card. */
+    shareLeaders: [];
     'update:showSurroundings': [on: boolean];
 }>();
 
@@ -183,9 +185,20 @@ const sourceHost = (url: string) => {
         </nav>
 
         <section v-if="rows.length" data-leaders>
-            <h3 class="mb-2 text-[15px] font-semibold">
-                Who represents {{ unit.n }}
-            </h3>
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="text-[15px] font-semibold">
+                    Who represents {{ unit.n }}
+                </h3>
+                <button
+                    type="button"
+                    data-share-leaders
+                    class="min-h-11 shrink-0 text-[14px] underline underline-offset-4"
+                    :aria-label="`Share the leaders of ${unit.n} as an image`"
+                    @click="emit('shareLeaders')"
+                >
+                    Share as image
+                </button>
+            </div>
             <ul
                 ref="seatList"
                 class="divide-y divide-hairline border-y border-hairline"

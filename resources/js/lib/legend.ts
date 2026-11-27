@@ -1,6 +1,6 @@
 // The map legend as data: the rows, what each row stands for, which parties are highlighted and
 // how the heading and chip describe that. The page only wires this to the legend and the map.
-import type { SeatKey } from './map/colouring';
+import { COUNTY_SEATS, type SeatKey, type SeatMode } from './map/colouring';
 import { OTHER, PROVINCE_TINTS } from './map/theme';
 import {
     INDEPENDENT,
@@ -62,11 +62,14 @@ export interface LegendModel {
  */
 export function buildLegend(
     seats: SeatsData,
-    seat: SeatKey,
+    seat: SeatMode,
     scope: { codes: Set<number>; unitName: string } | null,
     only: readonly string[],
     asOf: string | null = '',
 ): LegendModel {
+    const label = seat === COUNTY_SEATS ? COUNTY_SEATS_LABEL : SEAT_LABEL[seat];
+    // "MP seats", but "County seats": the label already says seats.
+    const subject = seat === COUNTY_SEATS ? label : `${label} seats`;
     const rows = seatLegend(seats, seat, scope?.codes);
     // Every party drawn in a colour of its own on the map has a row (party_colours.csv is a
     // curated list), and so do independents; "Other parties" is only the parties without one.
@@ -108,16 +111,33 @@ export function buildLegend(
         ...[...chosen].filter((a) => !covered.has(a)),
     ];
     return {
-        title: legendTitle(SEAT_LABEL[seat], scope?.unitName, showing),
-        chipLabel: `${SEAT_LABEL[seat]} seats${showing.length ? `: ${showing.length > 3 ? `${showing.length} parties` : showing.join(', ')}` : ''}`,
+        title: legendTitle(label, scope?.unitName, showing, subject),
+        chipLabel: `${subject}${showing.length ? `: ${showing.length > 3 ? `${showing.length} parties` : showing.join(', ')}` : ''}`,
         rows: mapped,
         members,
         highlighted: on.map((r) => r.key),
         showing,
         filtered: chosen.size > 0,
-        note: `${mapped.length ? '' : 'No approved holder for this seat yet. '}Elected 2022, with changes since. Source: IEBC gazette notices${asOf ? `, as of ${asOf}` : ''}`,
+        note: `${seat === COUNTY_SEATS ? `${COUNTY_SEATS_NOTE} ` : ''}${mapped.length ? '' : 'No approved holder for this seat yet. '}Elected 2022, with changes since. Source: IEBC gazette notices${asOf ? `, as of ${asOf}` : ''}`,
     };
 }
+
+export const COUNTY_SEATS_LABEL = 'County seats';
+/** What the stripes are: said in the legend of the "County seats" view. */
+export const COUNTY_SEATS_NOTE =
+    'Each county is striped by its Governor, Senator and Woman Rep.';
+
+/**
+ * The legend of the "County seats" view: the parties present, with the county seats each holds
+ * across all three seat types (141 in all, less the vacancies), from the same rows as every
+ * seat legend.
+ */
+export const buildCountySeatsLegend = (
+    seats: SeatsData,
+    scope: { codes: Set<number>; unitName: string } | null,
+    only: readonly string[],
+    asOf: string | null = '',
+): LegendModel => buildLegend(seats, COUNTY_SEATS, scope, only, asOf);
 
 /**
  * A row was pressed: the highlighted parties after switching on or off every party the row stands
@@ -142,7 +162,7 @@ export function toggleParty(
 /** A different seat keeps the highlighted parties that hold it nationally and drops the rest. */
 export function pruneParties(
     seats: SeatsData,
-    seat: SeatKey | 'none' | 'province',
+    seat: SeatMode | 'none' | 'province',
     only: readonly string[],
 ): string[] {
     if (!only.length) return [...only];
