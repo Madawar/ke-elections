@@ -22,27 +22,28 @@ const emit = defineEmits<{
 }>();
 const model = defineModel<ColourKey>({ required: true });
 
-// Fills follow the IEBC ballot colours (`seat-*` tokens). The text colour is fixed per chip, not
-// the theme's ink, which turns light in dark mode and would vanish on the yellow and beige.
+// Fills follow the IEBC ballot colours (`seat-*` tokens; MP's face is a touch darker for contrast).
+// The text colours are fixed `seat-ink` and `seat-paper`, not the theme's ink, which turns light
+// in dark mode and would vanish on the yellow and beige.
 const CHIPS: { key: ChipKey; label: string; face: string }[] = [
     { key: 'none', label: 'None', face: 'bg-ink text-surface' },
     {
         key: 'governor',
         label: 'Governor',
-        face: 'bg-seat-governor text-[#13233a]',
+        face: 'bg-seat-governor text-seat-ink',
     },
     {
         key: 'senator',
         label: 'Senator',
-        face: 'bg-seat-senator text-[#13233a]',
+        face: 'bg-seat-senator text-seat-ink',
     },
     {
         key: 'woman_rep',
         label: 'Woman Rep',
-        face: 'bg-seat-woman-rep text-white',
+        face: 'bg-seat-woman-rep text-seat-paper',
     },
-    { key: 'mp', label: 'MP', face: 'bg-seat-mp text-white' },
-    { key: 'mca', label: 'MCA', face: 'bg-seat-mca text-[#13233a]' },
+    { key: 'mp', label: 'MP', face: 'bg-seat-mp-chip text-seat-paper' },
+    { key: 'mca', label: 'MCA', face: 'bg-seat-mca text-seat-ink' },
 ];
 
 const buttons = ref<HTMLButtonElement[]>([]);

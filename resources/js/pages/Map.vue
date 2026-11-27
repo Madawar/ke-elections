@@ -35,6 +35,7 @@ import {
     type RememberedModes,
     modeForFocus,
     rememberLevel,
+    validSeatModes,
 } from '@/lib/map/seatMode';
 import type { FocusSelection } from '@/lib/map/focus';
 import { findContaining } from '@/lib/map/locate';
@@ -179,9 +180,11 @@ watch(unavailableSeats, (off) => {
 const remembered = ref<RememberedModes>({});
 /** The person chose a mode: use it, and remember it for the level they are looking at. */
 function chooseMode(mode: ColourKey) {
+    const focus = focusOf(selection.value)?.level ?? null;
+    // A mode that means nothing at this level (the province tint inside a constituency) is refused.
+    if (!validSeatModes(focus).includes(mode)) return;
     colourKey.value = mode;
-    const level = rememberLevel(focusOf(selection.value)?.level ?? null);
-    remembered.value = { ...remembered.value, [level]: mode };
+    remembered.value = { ...remembered.value, [rememberLevel(focus)]: mode };
 }
 /** The mode that fits the focus: the person's choice for that level, else one that fits. */
 function modeFor(unit: Unit | null): ColourKey {
@@ -854,6 +857,11 @@ const showView = (v: typeof view.value) => {
             <LayersPanel
                 v-if="view === 'layers'"
                 :colour="colourKey"
+                :province-available="
+                    validSeatModes(focusOf(selection)?.level ?? null).includes(
+                        'province',
+                    )
+                "
                 @update:colour="chooseMode"
                 v-model:enabled="enabledOverlays"
                 v-model:theme="themePref"

@@ -8,6 +8,13 @@
     --color-seat-woman-rep: #7a4fa0;
     --color-seat-mp: #2e8b57;
     --color-seat-mca: #c8a97e;
+    /* The MP chip's face: the ballot green, darkened a little so white text on it reaches 4.5:1
+       (the map itself keeps --color-seat-mp). */
+    --color-seat-mp-chip: #2a8052;
+    /* Text on the seat chips. Fixed in both themes (the ink token turns light in dark mode and
+       would vanish on the yellow and beige faces). */
+    --color-seat-ink: #13233a;
+    --color-seat-paper: #ffffff;
     --color-ground: var(--km-ground);
     --color-surface: var(--km-surface);
     --color-ink: var(--km-ink);

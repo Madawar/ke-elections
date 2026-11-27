@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import SeatChips from '@/components/map/SeatChips.vue';
@@ -202,5 +204,91 @@ describe('SeatChips inside a constituency or a ward', () => {
             '0',
             '-1',
         ]);
+    });
+});
+
+// WCAG 2.x contrast ratio between two #rrggbb colours.
+const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5]
+        .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+};
+
+describe('SeatChips colours', () => {
+    // The tokens the chips use, read from the stylesheet so the test follows the real values.
+    const css = readFileSync(
+        resolve(import.meta.dirname, '../../../resources/css/map-theme.css'),
+        'utf8',
+    );
+    const block = (selector: string) =>
+        css.slice(css.indexOf(selector)).split('}')[0];
+    const tokens = (text: string) =>
+        Object.fromEntries(
+            [...text.matchAll(/--([a-z-]+):\s*(#[0-9a-fA-F]{6})/g)].map((m) => [
+                m[1],
+                m[2],
+            ]),
+        );
+    const fixed = tokens(css.slice(0, css.indexOf(':root {')));
+    const modes = {
+        light: tokens(block(':root {')),
+        dark: tokens(block('.dark {')),
+    };
+    /** A utility class's colour: a `seat-*` token, or the theme's ink and surface in this mode. */
+    const colourOf = (utility: string, mode: 'light' | 'dark') => {
+        const name = utility.replace(/^(bg|text)-/, '');
+        if (name === 'ink') return modes[mode]['km-ink'];
+        if (name === 'surface') return modes[mode]['km-surface'];
+        return fixed[`color-${name}`];
+    };
+
+    for (const mode of ['light', 'dark'] as const) {
+        it(`reads at 4.5:1 or better on every active chip, in ${mode} mode`, () => {
+            const w = mountChips('none');
+            const keys = [
+                'none',
+                'governor',
+                'senator',
+                'woman_rep',
+                'mp',
+                'mca',
+            ];
+            for (const key of keys) {
+                const chip =
+                    mountChips(key).findAll('[role="radio"]')[
+                        keys.indexOf(key)
+                    ];
+                const classes = chip.find('[data-chip-face]').classes();
+                const face = classes.find((c) => /^bg-(seat-|ink)/.test(c))!;
+                const text = classes.find((c) =>
+                    /^text-(seat-|surface)/.test(c),
+                )!;
+                const bg = colourOf(face, mode);
+                const fg =
+                    colourOf(text, mode);
+                expect(bg, `${key} face ${face}`).toBeTruthy();
+                expect(fg, `${key} text ${text}`).toBeTruthy();
+                expect(
+                    contrast(bg, fg),
+                    `${key}: ${text} on ${face}`,
+                ).toBeGreaterThanOrEqual(4.5);
+            }
+            expect(w.exists()).toBe(true);
+        });
+    }
+
+    it("keeps the map's ballot green; only the chip face is darker", () => {
+        expect(fixed['color-seat-mp']).toBe('#2e8b57');
+        expect(fixed['color-seat-mp-chip']).toBe('#2a8052');
+    });
+
+    it('measures contrast the WCAG way', () => {
+        expect(contrast('#000000', '#ffffff')).toBeCloseTo(21, 0);
+        expect(contrast('#2e8b57', '#ffffff')).toBeLessThan(4.5);
     });
 });

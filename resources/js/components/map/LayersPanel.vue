@@ -4,10 +4,15 @@
 import type { ColourKey } from '@/lib/map/colouring';
 import type { MapOverlay } from '@/lib/map/overlays';
 
-defineProps<{
-    overlays: MapOverlay[];
-    swatchFor: (o: MapOverlay) => string | undefined;
-}>();
+withDefaults(
+    defineProps<{
+        overlays: MapOverlay[];
+        swatchFor: (o: MapOverlay) => string | undefined;
+        /** The tint colours counties, so it means nothing inside a constituency or a ward. */
+        provinceAvailable?: boolean;
+    }>(),
+    { provinceAvailable: true },
+);
 // Only the former-province tint is switched here; every seat colouring is a chip on the map.
 const colour = defineModel<ColourKey>('colour', { required: true });
 const enabled = defineModel<string[]>('enabled', { required: true });
@@ -25,10 +30,14 @@ const toggle = (list: string[], v: string) =>
             <legend class="mb-2 text-[15px] font-semibold">
                 Show on the map
             </legend>
-            <label class="flex min-h-11 cursor-pointer items-center gap-3">
+            <label
+                class="flex min-h-11 items-center gap-3"
+                :class="provinceAvailable ? 'cursor-pointer' : 'opacity-60'"
+            >
                 <input
                     type="checkbox"
                     class="size-5 accent-current"
+                    :disabled="!provinceAvailable"
                     :checked="colour === 'province'"
                     @change="
                         colour = colour === 'province' ? 'none' : 'province'
@@ -37,7 +46,11 @@ const toggle = (list: string[], v: string) =>
                 <span class="text-[14px]"
                     >Former provinces<span
                         class="block text-[12px] text-muted-ink"
-                        >Tint each county by its former province</span
+                        >{{
+                            provinceAvailable
+                                ? 'Tint each county by its former province'
+                                : 'Available for Kenya and counties'
+                        }}</span
                     ></span
                 >
             </label>

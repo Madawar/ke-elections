@@ -358,6 +358,83 @@ describe('the seat chips and the legend share one colour mode', () => {
             expect(checked(w)).toEqual(['Governor']);
         });
 
+        const openSettings = async (
+            w: Awaited<ReturnType<typeof mountPage>>,
+        ) => {
+            await w
+                .findAll('button')
+                .find((b) => b.text().includes('Map'))!
+                .trigger('click');
+            await flushPromises();
+            return w.findComponent(LayersPanel);
+        };
+
+        it('does not let the former-province tint be switched on below a county', async () => {
+            const w = await mountPage();
+            await pick(w, MATHARE);
+            const panel = await openSettings(w);
+            const label = panel
+                .findAll('label')
+                .find((l) => l.text().includes('Former provinces'))!;
+            expect(label.find('input').attributes('disabled')).toBeDefined();
+            expect(label.text()).toContain('Available for Kenya and counties');
+            await label.find('input').setValue(true);
+            // Still None: no province tint and no "Former provinces" legend for one constituency.
+            expect(checked(w)).toEqual(['None']);
+            expect(w.findComponent(Legend).exists()).toBe(false);
+        });
+
+        it('turns the tint back on for Kenya and counties', async () => {
+            const w = await mountPage();
+            await pick(w, NAIROBI);
+            const panel = await openSettings(w);
+            const box = panel
+                .findAll('label')
+                .find((l) => l.text().includes('Former provinces'))!
+                .find('input');
+            expect(box.attributes('disabled')).toBeUndefined();
+            await box.setValue(true);
+            expect(checked(w)).toEqual([]);
+            expect(w.findComponent(Legend).props('title')).toMatch(/province/i);
+        });
+
+        it('keeps a mode that does not fit the focus from being chosen at all', async () => {
+            const w = await mountPage();
+            await pick(w, MATHARE);
+            // The national overview and the share link can ask for any mode; the page refuses
+            // the ones that mean nothing inside a constituency.
+            w.findComponent(MapView).vm.$emit('zoomOut', null);
+            await flushPromises();
+            w.findComponent(NationalOverview).vm.$emit('colourBy', 'governor');
+            await flushPromises();
+            expect(checked(w)).toEqual(['Governor']);
+            await pick(w, MATHARE);
+            expect(checked(w)).toEqual(['MCA']);
+            const panel = await openSettings(w);
+            // Even if the panel is driven directly, province is refused here.
+            panel.vm.$emit('update:colour', 'province');
+            await flushPromises();
+            expect(checked(w)).toEqual(['MCA']);
+        });
+
+        it('restores the tint, when it was chosen at county level, after stepping back out', async () => {
+            const w = await mountPage();
+            await pick(w, NAIROBI);
+            const panel = await openSettings(w);
+            await panel
+                .findAll('label')
+                .find((l) => l.text().includes('Former provinces'))!
+                .find('input')
+                .setValue(true);
+            await pick(w, MATHARE);
+            // Inside the constituency the tint is dropped for the mode that fits.
+            expect(checked(w)).toEqual(['None']);
+            expect(w.findComponent(Legend).exists()).toBe(false);
+            w.findComponent(MapView).vm.$emit('zoomOut', NAIROBI);
+            await flushPromises();
+            expect(w.findComponent(Legend).props('title')).toMatch(/province/i);
+        });
+
         it('shares the seat that fits the unit, never a county-wide seat for a constituency', async () => {
             const w = await mountPage();
             await chip(w, 'Governor').trigger('click');
