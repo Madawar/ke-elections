@@ -407,11 +407,12 @@ describe('where a party holds the most MCA seats', () => {
                 .filter((c) => c.count > 0)
                 .sort((a, b) => b.count - a.count || a.code - b.code);
             const got = topCounties(SCOPED, index, { seat: 'mp', group });
+            // The fixture has MPs of both groups, so the lists compared are never both empty.
+            expect(got.length, group).toBeGreaterThan(0);
             expect(got.map((c) => ({ code: c.code, count: c.count, total: c.total })), group).toEqual(
                 want,
             );
-            if (got.length)
-                expect(got[0].value).toBe(
+            expect(got[0].value).toBe(
                     `${got[0].count} of ${got[0].total} ${got[0].total === 1 ? 'constituency' : 'constituencies'}`,
                 );
         }

@@ -252,6 +252,24 @@ export function topCountiesCaption(
 }
 
 /**
+ * The key in words: the party colours in their order, the parties folded into "Other parties" (as
+ * the card's note says), and the seats with no approved holder, which are not a party colour.
+ */
+function fiveSeatsKeyLine(card: FiveSeatsCardView): string {
+    const parties = card.key.filter((k) => k.key !== 'none').map((k) => k.label);
+    const n = card.folded.length;
+    return [
+        `Party colours, in order of seats held across all five: ${parties.join(', ')}.`,
+        n ? `The ${n.toLocaleString('en-GB')} with the fewest are drawn as Other parties.` : '',
+        card.vacant
+            ? `No approved holder yet for ${card.vacant.toLocaleString('en-GB')} ${card.vacant === 1 ? 'seat' : 'seats'}.`
+            : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+}
+
+/**
  * The caption for "Kenya, five ways": the headline, the scope, one line per seat (as "By the
  * numbers" writes it), the key in its order, the source with its date, the link and the tags. On X
  * only the headline, source, link and tags fit.
@@ -269,7 +287,7 @@ export function fiveSeatsCaption(
         `${fiveSeatsScope(card)}.`,
         ...card.rows.map(numbersRowLine),
         '',
-        `Party colours, in order of seats held across all five: ${card.key.map((k) => k.label).join(', ')}.`,
+        fiveSeatsKeyLine(card),
         '',
         sourceText(card, 10),
         url,

@@ -14,6 +14,7 @@ from here.
 | C | "Top 10 counties for a group" (mock-up 8), square and story, from the national seat view (MP/MCA, one group highlighted) and the party profile | done | see `git log` (`feat(export): "Top 10 counties"…`) |
 | Top-10 fixes | The map in the bars' colour (no count scale, no key), rows that keep their size, the story's map centred under the rows | done | see `git log` (`fix(export): top-10 map…`) |
 | D | "Kenya, five ways" (mock-up 5), square and story, offered as "Five seats" with nothing focused | done | see `git log` (`feat(export): "Kenya, five ways"…`) |
+| Review fixes 2 | Top-10: ties by code tested against an index out of code order, "with any" when the list is complete, singular wordings tested, the name column gives way before the rows shrink. Five seats: the story three across, the key inside its width, one title gap, the caption's key line. National "County seats" shares the national cards; closing the dialog stops its queued maps | done | see `git log` (`fix(export): …` after `1e439f9`) |
 | E | "Who represents this ward" (mock-up 1) | not started | |
 
 ### Task A: what did not change
@@ -189,6 +190,17 @@ Each one: what was decided, why, and what it costs if it is wrong.
   scope size; otherwise the first is the scope line and "The 10 counties with the most:" a line
   of its own above the rows** (the story for independents) — the title block's scope line is one
   line and would otherwise be cut — cost if wrong: one threshold.
+- **Ruling: the scope says "The 10 counties with any:" when the list holds every county the group
+  has any in** (exactly ten), and "with the most:" only when counties were left out — "with the
+  most" would suggest a cut that did not happen — cost if wrong: one condition in
+  `topCountiesScope`.
+- **Ruling: on a long right-hand column the name column gives way before the rows shrink**: after
+  the "of" column narrows (OF_MIN) and the bars' track reaches BAR_FLOOR (20%), the name column
+  narrows to the widest name at NAME_SHRINK (0.82, where `nameLines` already lets a name shrink or
+  wrap), and the track may go to BAR_LAST (16%). An MP card listing Nairobi City ("of 17
+  constituencies"), Elgeyo/Marakwet, Tharaka - Nithi and Trans Nzoia now keeps the MCA card's 27px
+  rows, 57 high, on the square (it had 22px rows, 46 high); "Elgeyo/Marakwet", with no space to
+  break at, is drawn at 22px — cost if wrong: `BAR_LAST`, `NAME_SHRINK` in `topCountiesLayout.ts`.
 - **Ruling: wordings the plan leaves open** — one county: "The one county with any:", "The one
   county shaded"; none: "No county has any." (nothing listed) and "No county shaded" (no key);
   one seat held: "1 of 290 MPs nationally is UDA." / "is an independent."; "of 1 ward" in the
@@ -247,12 +259,39 @@ Each one: what was decided, why, and what it costs if it is wrong.
   the usual size or more (the square: 50px), as in the mock-up; otherwise the usual two lines with
   no word alone on the last (the story) — `balanced` moved from the top-10 layout to `viewLayout`
   for this — cost if wrong: `ONE_LINE` in `fiveSeatsLayout.ts`.
-- **Ruling: the story keeps the plan's two across, three down**, and its maps are 171 × 208: the
-  three rows, the key's 12 entries at the story's small text (26px) and the safe zones leave no
-  more height (body 365 to 1286; three headers of 60, two gaps of 25, the key row 333). Most of
-  each cell's width is empty. A larger story map would need a different arrangement (for example
-  the key across the full width under the grid); left for the owner — cost if wrong: `GRID` in
-  `fiveSeatsLayout.ts`.
+- ~~**Ruling: the story keeps the plan's two across, three down**, and its maps are 171 × 208~~
+  **Superseded** (owner's eye, after Task D): the plan's "two across, three down" was wrong for the
+  story's shape; most of each cell was empty. Now:
+- **Ruling: the story is three across, two down, as the square** (Governors, Senators, Woman Reps /
+  MPs, MCAs). The key goes in the sixth cell only when its entries fit there in two columns at the
+  card's small text with nothing past the cell's edge; on the story they do not (a cell is 272
+  wide; "Independent" and "FORD-K" side by side at 26px need about 338), so the sixth cell is left
+  empty, nothing is centred, and the key runs across the full width under the grid in four
+  columns (three if four do not fit). Measured with the real data: the story's maps were 171 × 208
+  and are now 242 × 294 (41% wider, 1.99 times the area), the same size as the square's. Not the
+  270–280 wide hoped for: two rows of maps, their titles, the key (title line and three rows) and
+  the safe zones leave 294 of height, and the map is as wide as that height allows — cost if
+  wrong: `GRID` and `acrossColumns` in `fiveSeatsLayout.ts`.
+- **Ruling: on the full-width key, its note sits at the right of the "Party colours" line** (muted,
+  right-aligned) when it fits there; otherwise under the entries as before. It saves a line of
+  height for the maps — cost if wrong: about 40px of map height (`noteAbove`).
+- **Ruling: the five titles are one type size, the largest at which each fits its cell** (25px on
+  the story's narrower cells, 23px on the square as before). Each is drawn as one `<text>` with two
+  `<tspan>`s, the count `dx` = 0.3 × size after the name, so the browser sets the gap from the real
+  name: "Woman Reps 47 seats" has the same gap as the others (the measure over-estimated that bold
+  run). The layout keeps the count's estimated x for its checks — cost if wrong: `titleGapAt`.
+- **Ruling: "Other parties" goes on a line of its own under the key's two columns (as "No approved
+  holder yet" does) when that is what lets the columns fit in the cell.** On the square with the
+  real data "Other parties" ended about 7px past the cell (into the right margin, past the
+  footer's edge); now the second column holds only abbreviations. A test checks every key label
+  and the note end inside the key's width, in every case and size — cost if wrong: one more line
+  in the square's key (it still fits its cell).
+- **Ruling: `KEY_MAX` (14) counts the party entries only**; "No approved holder yet" is one more
+  line. Tested with folded parties and a vacancy together — cost if wrong: a doc comment.
+- **Ruling: the five-seats caption's key line** lists the party colours (not "No approved holder
+  yet"), then "The N with the fewest are drawn as Other parties." when parties are folded, then
+  "No approved holder yet for N seats." ("1 seat") when any seat has none — cost if wrong: strings
+  in `fiveSeatsKeyLine` (`caption.ts`).
 - **Ruling: the key's note is broken into even lines** ("Parties in order of seats" / "held
   across all five") so no word sits alone — cost if wrong: `evenLines`.
 - **Ruling: the dialog copy is "Share five seats" / "All five elected seats on one card, each map
@@ -263,6 +302,16 @@ Each one: what was decided, why, and what it costs if it is wrong.
   wrong: strings.
 - **Ruling: the card's sources are the five seats' holders** (as the plan says; no nominated
   members are counted here) — cost if wrong: one line.
+
+- **Ruling: the national "County seats" (striped) view can be shared: "Share this view" offers
+  "Five seats" and "By the numbers"**, opening on "Five seats"; there is no "This view" of the
+  stripes (no card draws them). A focused county still shares its leaders card; inside a
+  constituency the view gives way to MCA as before. The plan's "All of Kenya, any seat view"
+  asked for it; before, the button was not shown there — cost if wrong: `canShareView` and
+  `shareView` in `Map.vue`.
+- **Ruling: closing the dialog while maps are queued drops them**: `wanted` is emptied on close,
+  so the queued slots are skipped rather than drawn (up to four for "Five seats"), and a quick
+  reopen does not wait behind them — cost if wrong: none.
 
 ## Parked minor findings
 
@@ -280,13 +329,11 @@ Each one: what was decided, why, and what it costs if it is wrong.
 - `npm run check` (vp check) reports formatting issues in 118 files across the repository,
   as it did before this branch; not fixed here.
 
-- "Woman Reps" and its "47 seats" sit a little further apart than the other titles: the text
-  measure over-estimates that bold run slightly.
 - Task D's tests were all written before its code, but run against it only once the modules
   existed (the first run would have failed on the missing imports).
-- On the national "County seats" view with nothing focused, "Share this view" goes to the leaders
-  card path (`shareLeaders`), which has no card for all of Kenya; "Five seats" is not offered
-  there. Unchanged from before.
+- ~~On the national "County seats" view with nothing focused, "Share this view" goes the
+  leaders-card way~~: it was not offered there at all (`canShareView` was false). Now it offers
+  "Five seats" and "By the numbers" (see the ruling).
 
 ## What is next
 

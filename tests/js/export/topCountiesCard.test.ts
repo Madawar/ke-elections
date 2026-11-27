@@ -36,6 +36,8 @@ import {
     seatLegend,
     withIndependentColour,
 } from '@/lib/seats';
+import { topCounties } from '@/lib/party';
+import { UnitIndex } from '@/lib/units';
 import { NUMBERS_SEATS } from './numbersFixtures';
 import { index, placed } from './topCountiesFixtures';
 
@@ -174,6 +176,73 @@ describe('topCountiesCardView', () => {
             lead: '2 of 1,450 MCAs nationally are independents.',
             list: 'The one county with any:',
         });
+    });
+
+    it('breaks a tie by the IEBC county code, not by the order the unit index lists the counties in', () => {
+        // The same units with every row reversed: counties come 47, 46, ..., 1.
+        const reversed = UnitIndex.fromRows([...index.all()].reverse());
+        const counties = reversed.all().filter((u) => u.l === 'county');
+        expect(counties[0].c).toBeGreaterThan(counties.at(-1)!.c);
+        const data = placed('mca', 'IND', { 36: 4, 3: 4, 19: 4, 40: 2, 8: 2 });
+        expect(
+            topCounties(data, reversed, { seat: 'mca', group: 'IND' }).map(
+                (c) => [c.code, c.count],
+            ),
+        ).toEqual([
+            [3, 4],
+            [19, 4],
+            [36, 4],
+            [8, 2],
+            [40, 2],
+        ]);
+        const card = topCountiesCardView({
+            seats: data,
+            index: reversed,
+            seat: 'mca',
+            group: 'IND',
+            theme: 'light',
+        });
+        expect(card.rows.map((r) => r.code)).toEqual([3, 19, 36, 8, 40]);
+    });
+
+    it('says "with any" when the ten listed are every county the group has any in', () => {
+        const ten = Object.fromEntries(
+            [15, 8, 44, 32, 12, 17, 21, 3, 19, 36].map((c, i) => [c, 10 - i]),
+        );
+        const exactly = view(placed('mca', 'IND', ten));
+        expect(exactly.rows).toHaveLength(10);
+        expect(exactly.counties).toBe(10);
+        expect(topCountiesScope(exactly).list).toBe(
+            'The 10 counties with any:',
+        );
+        // Eleven with any: the ten listed are the ones with the most.
+        expect(eleven.counties).toBe(11);
+        expect(topCountiesScope(eleven).list).toBe(
+            'The 10 counties with the most:',
+        );
+    });
+
+    it('writes one seat in the singular, for a party and for independents', () => {
+        // One MP for a placeholder group, the rest ODM; then that one renamed UDA.
+        const base = placed('mp', 'ONE', { 15: 1 });
+        const oneUdaData = {
+            ...base,
+            holders: base.holders.map((h) =>
+                h.seat !== 'mp'
+                    ? h
+                    : { ...h, party: h.party === 'ONE' ? 'UDA' : 'ODM' },
+            ),
+        };
+        const oneUda = view(oneUdaData, 'mp', 'UDA');
+        expect(oneUda.held).toBe(1);
+        expect(topCountiesScope(oneUda).lead).toBe(
+            '1 of 290 MPs nationally is UDA.',
+        );
+        const oneInd = view(placed('mp', 'IND', { 15: 1 }), 'mp', 'IND');
+        expect(topCountiesScope(oneInd).lead).toBe(
+            '1 of 290 MPs nationally is an independent.',
+        );
+        expect(oneInd.rows[0].of).toMatch(/^of \d+ constituenc(y|ies)$/);
     });
 
     it('lists nothing, and says so, when no county has any: nothing is invented', () => {
@@ -337,6 +406,23 @@ const CASES = {
     party: view(NUMBERS_SEATS, 'mp', 'UDA'),
     three: view(placed('mca', 'IND', { 15: 3, 8: 2, 1: 1 })),
     nobody: view(placed('mca', 'IND', {})),
+    /** MP seats with "of 17 constituencies" and long names, one with no space to break at. */
+    mpLongNames: view(
+        placed('mp', 'WDM-K', {
+            47: 11,
+            22: 9,
+            32: 8,
+            37: 7,
+            39: 6,
+            12: 6,
+            26: 5,
+            45: 5,
+            28: 4,
+            13: 3,
+        }),
+        'mp',
+        'WDM-K',
+    ),
 };
 
 describe('topCountiesLayout', () => {
@@ -494,6 +580,29 @@ describe('topCountiesLayout', () => {
                 (end - l.scopeLine.y) / (l.footerBox.y - l.scopeLine.y),
                 c.group,
             ).toBeGreaterThanOrEqual(0.8);
+        }
+    });
+
+    it('keeps the rows’ size on an MP card with long names and "of 17 constituencies": the name column gives way first', () => {
+        const mp = CASES.mpLongNames;
+        expect(mp.rows.map((r) => r.name)).toEqual(
+            expect.arrayContaining(['Elgeyo/Marakwet', 'Trans Nzoia', 'Nairobi City']),
+        );
+        expect(mp.rows.some((r) => r.name.startsWith('Tharaka'))).toBe(true);
+        expect(mp.rows.map((r) => r.of)).toContain('of 17 constituencies');
+        for (const size of SIZES) {
+            const a = layout(eleven, size);
+            const b = layout(mp, size);
+            // On the square the rows are the MCA card's exactly. On the story the MCA card's scope
+            // takes a line more, so the MP rows have more room: never smaller than the MCA card's.
+            if (size === 'square') {
+                expect(b.rows[0].count.size, size).toBe(a.rows[0].count.size);
+                expect(b.rows[0].rank.size, size).toBe(a.rows[0].rank.size);
+                expect(b.rows[0].box.h, size).toBe(a.rows[0].box.h);
+            } else {
+                expect(b.rows[0].count.size, size).toBeGreaterThanOrEqual(a.rows[0].count.size);
+                expect(b.rows[0].box.h, size).toBeGreaterThanOrEqual(a.rows[0].box.h);
+            }
         }
     });
 

@@ -135,12 +135,13 @@ export const topCountiesHeadline = (
 
 /**
  * The scope, in two sentences: how many the group holds across Kenya, then what the list is.
- * "114 of 1,450 MCAs nationally are independents." "The 10 counties with the most:"
+ * "114 of 1,450 MCAs nationally are independents." "The 10 counties with the most:" ("with any"
+ * when the list holds every county the group has any in).
  */
 export function topCountiesScope(
     card: Pick<
         TopCountiesCardView,
-        'held' | 'seats' | 'seat' | 'group' | 'groupLabel' | 'rows'
+        'held' | 'seats' | 'seat' | 'group' | 'groupLabel' | 'rows' | 'counties'
     >,
 ): { lead: string; list: string } {
     const n = card.rows.length;
@@ -156,7 +157,8 @@ export function topCountiesScope(
                 ? 'No county has any.'
                 : n === 1
                   ? 'The one county with any:'
-                  : n < TOP_N
+                  : // Every county with any is listed (ten or fewer): the list is not a cut.
+                    card.counties <= n
                     ? `The ${n} counties with any:`
                     : `The ${n} counties with the most:`,
     };

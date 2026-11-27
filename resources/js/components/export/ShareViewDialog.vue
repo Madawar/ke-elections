@@ -310,6 +310,8 @@ watch(
             void build();
         } else {
             token++;
+            // Nobody waits for the queued maps any more: they are skipped, not drawn.
+            wanted = new Set();
             images.clear();
             finished.clear();
         }

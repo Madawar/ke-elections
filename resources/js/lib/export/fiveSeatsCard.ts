@@ -18,8 +18,11 @@ export const FIVE_SEATS_KEY_TITLE = 'Party colours';
 export const FIVE_SEATS_KEY_NOTE =
     'Parties in order of seats held across all five';
 /**
- * The most entries the key lists: two columns of seven. Past it, the parties with the fewest seats
- * are drawn as "Other parties", on the maps and in the key, and the key says how many.
+ * The most party entries the key lists: the parties with a colour of its own, the independents and
+ * "Other parties". "No approved holder yet", when a seat has none, is one more line, not counted
+ * here. Past it, the parties with the fewest seats are drawn as "Other parties", on the maps and in
+ * the key, and the key says how many. The layout puts "Other parties" and "No approved holder yet"
+ * on lines of their own under the columns when the columns need it.
  */
 export const KEY_MAX = 14;
 

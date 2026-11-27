@@ -2,9 +2,15 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { leadersCardView } from '@/lib/export/leadersCard';
+import { fiveSeatsCardView } from '@/lib/export/fiveSeatsCard';
 import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
-import { shareCards } from '@/lib/export/shareView';
+import { inTheme, shareCards } from '@/lib/export/shareView';
+import {
+    topCountiesCardView,
+    topCountiesColouring,
+} from '@/lib/export/topCountiesCard';
+import { THEMES } from '@/lib/map/theme';
 import { seatsInTheme, snapshotView } from '@/lib/export/viewState';
 import { PARTY_SEATS } from '../party/partyFixtures';
 import { NUMBERS_SEATS, numbersIndex } from './numbersFixtures';
@@ -13,6 +19,7 @@ import { VIEW_SEATS, viewIndex } from './viewFixtures';
 // Map drawing is a deferred we resolve by hand; rasterising returns a PNG at once.
 const renders: {
     size: string;
+    spec: unknown;
     resolve: (v: string) => void;
     reject: (e: unknown) => void;
 }[] = [];
@@ -20,13 +27,18 @@ vi.mock('@/lib/export/viewMap', async (actual) => ({
     ...(await actual<typeof import('@/lib/export/viewMap')>()),
     renderViewMap: vi.fn(
         (
-            _v: unknown,
+            spec: unknown,
             _c: unknown,
             _t: unknown,
             box: { w: number; h: number },
         ) =>
             new Promise<string>((resolve, reject) =>
-                renders.push({ size: `${box.w}x${box.h}`, resolve, reject }),
+                renders.push({
+                    size: `${box.w}x${box.h}`,
+                    spec,
+                    resolve,
+                    reject,
+                }),
             ),
     ),
 }));
@@ -439,7 +451,19 @@ describe('ShareViewDialog: "By the numbers" beside the national view', () => {
             abbrev: 'UDA',
             theme: 'dark',
         })!;
-        for (const card of [kenya, numbers, leaders, party]) {
+        const top = topCountiesCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            seat: 'mca',
+            group: 'IND',
+            theme: 'dark',
+        });
+        const five = fiveSeatsCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, 'dark'),
+            index: numbersIndex,
+            theme: 'dark',
+        });
+        for (const card of [kenya, numbers, leaders, party, top, five]) {
             const w = mount(ShareViewDialog, {
                 props: { open: true, view: card, context: numbersContext },
                 attachTo: document.body,
@@ -455,5 +479,57 @@ describe('ShareViewDialog: "By the numbers" beside the national view', () => {
             w.unmount();
             document.body.innerHTML = '';
         }
+    });
+
+    const topOf = (theme: 'light' | 'dark') =>
+        topCountiesCardView({
+            seats: seatsInTheme(NUMBERS_SEATS, theme),
+            index: numbersIndex,
+            seat: 'mca',
+            group: 'IND',
+            theme,
+        });
+
+    it('redraws the top-10 card in the other theme through the registry, with the independents’ bars in that theme’s colour', async () => {
+        const dark = topOf('dark');
+        // The registry's own answer: the card taken again from the seats in that theme.
+        const light = inTheme(dark, 'light', numbersContext) as ReturnType<typeof topOf>;
+        expect(light.colour).toBe(THEMES.light.independent);
+        expect(THEMES.light.independent).not.toBe(THEMES.dark.independent);
+        mount(ShareViewDialog, {
+            props: { open: true, view: dark, context: numbersContext },
+            attachTo: document.body,
+        });
+        await settle();
+        const bars = () =>
+            new Set(
+                [...document.querySelectorAll('[data-preview] [data-bar]')].map(
+                    (b) => b.getAttribute('fill'),
+                ),
+            );
+        expect(bars()).toEqual(new Set([THEMES.dark.independent]));
+        document
+            .querySelector<HTMLInputElement>('input[name="view-theme"][value="light"]')!
+            .click();
+        await settle();
+        expect(bars()).toEqual(new Set([THEMES.light.independent]));
+    });
+
+    it('draws the top-10 card’s map with the card’s own colouring', async () => {
+        const dark = topOf('dark');
+        mount(ShareViewDialog, {
+            props: { open: true, view: dark, context: numbersContext },
+            attachTo: document.body,
+        });
+        await settle();
+        expect(renders).toHaveLength(1);
+        const spec = renders[0].spec as {
+            colouring?: unknown;
+            haloCountyLines?: boolean;
+            focus: unknown;
+        };
+        expect(spec.colouring).toEqual(topCountiesColouring(dark, THEMES.dark));
+        expect(spec.haloCountyLines).toBe(true);
+        expect(spec.focus).toBeNull();
     });
 });

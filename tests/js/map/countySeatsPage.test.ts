@@ -204,9 +204,18 @@ describe('the "County seats" view on the page', () => {
         );
     });
 
-    it('has no card for all of Kenya, and shares a county as its leaders card', async () => {
+    it('offers "Five seats" and "By the numbers" for all of Kenya (no "This view" of the stripes), and shares a county as its leaders card', async () => {
         const kenya = await mountPage('?seat=county_seats');
-        expect(kenya.findComponent(Legend).props('shareable')).toBe(false);
+        expect(kenya.findComponent(Legend).props('shareable')).toBe(true);
+        kenya.findComponent(Legend).vm.$emit('share');
+        await flushPromises();
+        const national = kenya.get('[data-share-kind]');
+        expect(national.attributes('data-share-kind')).toBe('fiveSeats');
+        expect(national.attributes('data-share-cards')).toBe(
+            'Five seats|By the numbers',
+        );
+        kenya.unmount();
+        document.body.innerHTML = '';
         const w = await mountPage('?seat=county_seats', county);
         expect(w.findComponent(Legend).props('shareable')).toBe(true);
         w.findComponent(Legend).vm.$emit('share');

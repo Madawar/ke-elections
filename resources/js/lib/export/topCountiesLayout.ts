@@ -8,7 +8,7 @@
 // Each row is rank, county name (bold), a bar on one scale from zero, the count (bold) right after
 // the bar, and "of 40 wards" in a column of its own, with a hairline under the row. The rows' type
 // and height come from the room there is; a long "of 12 constituencies" narrows its own column's
-// type and the bars' track, never the rows.
+// type and the bars' track, then the name column (its names shrink a little or wrap), never the rows.
 import type { Box, FooterFonts, TextItem } from './layout';
 import type { ViewSize } from './sizes';
 import { fitFontSize, textWidth, wrapText } from './text';
@@ -78,12 +78,16 @@ const ROW_MAX = 2.1;
 const BAR_MIN = 0.28;
 /** The least the bars' track may then shrink to, before the rows' type would have to. */
 const BAR_FLOOR = 0.2;
+/** With the name column given way as well, the bars' track may go down to this share. */
+const BAR_LAST = 0.16;
 /** The right-hand column's type may narrow to this share of the rows' (not below the card's small text). */
 const OF_MIN = 0.75;
 /** The story's map, under the rows, is at least this share of the width tall. */
 const STORY_MAP_MIN = 0.42;
 /** A name takes at most this share of the rows' width before it shrinks, then wraps. */
 const NAME_MAX = 0.36;
+/** A name shrinks to this share of the rows' size before it wraps. */
+const NAME_SHRINK = 0.82;
 
 interface Columns {
     size: number;
@@ -102,7 +106,8 @@ interface Columns {
 /**
  * Where a row's parts go at one type size, or null when the bars would be too short. A long
  * right-hand column first narrows its own type (to OF_MIN, not below `small`), then the bars'
- * track shortens (to BAR_FLOOR): the rank, name and count keep the rows' size.
+ * track shortens (to BAR_FLOOR), then the name column gives way (its names shrink to NAME_SHRINK
+ * or wrap) and the track may go to BAR_LAST: the rank and count keep the rows' size.
  */
 function columnsAt(
     card: TopCountiesCardView,
@@ -118,7 +123,7 @@ function columnsAt(
     const widestName = Math.ceil(
         Math.max(0, ...card.rows.map((r) => textWidth(r.name, size, true))),
     );
-    const nameW = Math.min(widestName, Math.floor(w * NAME_MAX));
+    const fullW = Math.min(widestName, Math.floor(w * NAME_MAX));
     const countW = Math.ceil(
         Math.max(
             0,
@@ -126,9 +131,9 @@ function columnsAt(
         ),
     );
     const nameX = x + rankW + Math.round(size * 0.45);
-    const barX = nameX + nameW + gap;
     const countGap = Math.round(size * 0.35);
-    const at = (ofSize: number) => {
+    const at = (ofSize: number, nameW: number) => {
+        const barX = nameX + nameW + gap;
         const ofW = Math.ceil(
             Math.max(0, ...card.rows.map((r) => textWidth(r.of, ofSize))),
         );
@@ -138,11 +143,18 @@ function columnsAt(
     };
     const least = Math.min(size, Math.max(small, Math.round(size * OF_MIN)));
     for (let ofSize = size; ofSize >= least; ofSize--) {
-        const cols = at(ofSize);
+        const cols = at(ofSize, fullW);
         if (cols.barMax >= w * BAR_MIN) return cols;
     }
-    const cols = at(least);
-    return cols.barMax >= w * BAR_FLOOR ? cols : null;
+    // Then the name column gives way, to the width its names take at the least size `nameLines`
+    // shrinks them to (a longer one wraps, or one with no space shrinks), before the bars go
+    // below BAR_FLOOR: the rows keep their size.
+    const wide = at(least, fullW);
+    if (wide.barMax >= w * BAR_FLOOR) return wide;
+    const narrow = at(least, Math.min(fullW, Math.ceil(widestName * NAME_SHRINK)));
+    if (narrow.barMax >= w * BAR_FLOOR) return narrow;
+    // Last, the bars' track a little shorter still (BAR_LAST), rather than smaller rows.
+    return narrow.barMax >= w * BAR_LAST ? narrow : null;
 }
 
 /** A name at the row's size, or a little smaller, or on two lines: never cut. */
@@ -151,11 +163,11 @@ function nameLines(name: string, cols: Columns): { size: number; lines: string[]
         name,
         cols.nameW,
         cols.size,
-        Math.round(cols.size * 0.82),
+        Math.round(cols.size * NAME_SHRINK),
         true,
     );
     if (textWidth(name, fit, true) <= cols.nameW) return { size: fit, lines: [name] };
-    const size = Math.round(cols.size * 0.82);
+    const size = Math.round(cols.size * NAME_SHRINK);
     const lines = wrapText(name, cols.nameW, size, 2, true);
     // A name with no space to break at shrinks until it fits on one line.
     if (lines.length === 1 || lines.some((l) => l.endsWith('…')))

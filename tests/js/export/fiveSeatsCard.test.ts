@@ -268,8 +268,8 @@ describe('the five maps', () => {
                 expect(b.w, size).toBe(boxes[0].w);
                 expect(b.h, size).toBe(boxes[0].h);
             }
-            const across = size === 'square' ? 3 : 2;
-            // A row's maps share a top; a column's share a left edge.
+            // Three across in both sizes. A row's maps share a top; a column's share a left edge.
+            const across = 3;
             for (let i = 0; i < boxes.length; i++) {
                 const row = Math.floor(i / across);
                 const col = i % across;
@@ -337,6 +337,13 @@ const CASES = {
     fixtures: card,
     light: view(NUMBERS_SEATS, 'light'),
     folded: view(manyParties(20)),
+    foldedVacant: (() => {
+        const data = manyParties(20);
+        return view({
+            ...data,
+            holders: data.holders.filter((h) => !(h.seat === 'mca' && h.code < 3)),
+        });
+    })(),
     vacant: view({
         ...NUMBERS_SEATS,
         holders: NUMBERS_SEATS.holders.filter(
@@ -389,15 +396,17 @@ describe('fiveSeatsLayout', () => {
             }
     });
 
-    it('puts the five maps and the key in a grid: three across on the square, two on the story', () => {
+    it('puts the five maps in a grid of three across and two down, in both sizes, with the key in the sixth cell when it fits there', () => {
         for (const size of SIZES) {
             const l = layout(card, size);
-            const across = size === 'square' ? 3 : 2;
             expect(l.maps.map((m) => m.seat)).toEqual([...BALLOT]);
-            // The key is the sixth cell: the last row, the last column.
-            expect(l.key.rule.x).toBe(l.maps[across - 1].rule.x);
-            expect(l.key.rule.w).toBe(l.maps[across - 1].rule.w);
-            expect(l.key.rule.y).toBe(l.maps[across === 3 ? 3 : 4].rule.y);
+            // Three across, two down: Governors, Senators, Woman Reps / MPs, MCAs.
+            const rows = [...new Set(l.maps.map((m) => m.rule.y))];
+            expect(rows, size).toHaveLength(2);
+            expect(l.maps.slice(0, 3).every((m) => m.rule.y === rows[0])).toBe(true);
+            expect(l.maps.slice(3).every((m) => m.rule.y === rows[1])).toBe(true);
+            expect(l.maps[3].rule.x).toBe(l.maps[0].rule.x);
+            expect(l.maps[4].rule.x).toBe(l.maps[1].rule.x);
             // Each cell: its seat's ballot colour as a rule, "Governors" bold and "47 seats".
             for (const [i, m] of l.maps.entries()) {
                 expect(m.title.map((t) => t.text)).toEqual([
@@ -410,9 +419,60 @@ describe('fiveSeatsLayout', () => {
             }
             expect(l.key.title.map((t) => t.text)).toEqual(['Party colours']);
         }
+        // The square: the key is the sixth cell (its entries fit there in two columns).
+        const sq = layout(card, 'square');
+        expect(sq.key.across).toBe(false);
+        expect(sq.key.rule.x).toBe(sq.maps[2].rule.x);
+        expect(sq.key.rule.w).toBe(sq.maps[2].rule.w);
+        expect(sq.key.rule.y).toBe(sq.maps[3].rule.y);
     });
 
-    it('never makes the key smaller than the card’s small text, in two columns', () => {
+    it('puts the story’s key across the full width under the grid, in three or four columns, when two columns do not fit in the sixth cell', () => {
+        for (const [name, c] of Object.entries(CASES)) {
+            const l = layout(c, 'story');
+            const cellW = l.maps[0].rule.w;
+            // Two columns of the key at the card's small text are wider than a cell.
+            const widest = Math.max(
+                ...l.key.entries.map((e) => e.label.x + textWidth(e.label.text, e.label.size) - e.chip.x),
+            );
+            expect(2 * widest, name).toBeGreaterThan(cellW);
+            expect(l.key.across, name).toBe(true);
+            // The sixth cell is left empty, nothing centred: the maps stay in their columns.
+            expect(l.maps[3].rule.x).toBe(l.maps[0].rule.x);
+            expect(l.key.rule.x).toBe(l.maps[0].rule.x);
+            expect(l.key.rule.x + l.key.rule.w).toBe(l.maps[2].rule.x + l.maps[2].rule.w);
+            // Under the grid.
+            const gridBottom = Math.max(...l.maps.map((m) => m.box.y + m.box.h));
+            expect(l.key.rule.y).toBeGreaterThan(gridBottom);
+            const xs = new Set(l.key.entries.filter((e) => e.key !== 'none').map((e) => e.chip.x));
+            expect([3, 4], name).toContain(xs.size);
+        }
+    });
+
+    it('keeps every key entry inside the key’s own width, in every case and size', () => {
+        expect(CASES.foldedVacant.folded.length).toBeGreaterThan(0);
+        expect(CASES.foldedVacant.key.at(-1)!.key).toBe('none');
+        for (const [name, c] of Object.entries(CASES))
+            for (const size of SIZES) {
+                const l = layout(c, size);
+                const right = l.key.rule.x + l.key.rule.w;
+                for (const e of l.key.entries) {
+                    expect(e.chip.x, `${name} ${size} ${e.key}`).toBeGreaterThanOrEqual(l.key.rule.x);
+                    expect(
+                        e.label.x + textWidth(e.label.text, e.label.size),
+                        `${name} ${size} ${e.label.text}`,
+                    ).toBeLessThanOrEqual(right);
+                }
+                for (const t of l.key.note) {
+                    const w = textWidth(t.text, t.size);
+                    const x0 = t.anchor === 'end' ? t.x - w : t.x;
+                    expect(x0, `${name} ${size} note`).toBeGreaterThanOrEqual(l.key.rule.x);
+                    expect(x0 + w, `${name} ${size} note`).toBeLessThanOrEqual(right);
+                }
+            }
+    });
+
+    it('never makes the key smaller than the card’s small text, two columns in a cell', () => {
         for (const [name, c] of Object.entries(CASES))
             for (const size of SIZES) {
                 const l = layout(c, size);
@@ -421,13 +481,25 @@ describe('fiveSeatsLayout', () => {
                         SPECS[size].callout.sub,
                     );
                 const xs = new Set(l.key.entries.filter((e) => e.key !== 'none').map((e) => e.chip.x));
-                expect(xs.size, `${name} ${size}`).toBeLessThanOrEqual(2);
+                if (!l.key.across) expect(xs.size, `${name} ${size}`).toBeLessThanOrEqual(2);
             }
     });
 
-    it('gives the maps the room there is: at least 230 wide on the square and 165 on the story', () => {
+    it('gives the maps the room there is: at least 230 wide on the square and 240 on the story', () => {
         expect(layout(card, 'square').maps[0].box.w).toBeGreaterThanOrEqual(230);
-        expect(layout(card, 'story').maps[0].box.w).toBeGreaterThanOrEqual(165);
+        expect(layout(card, 'story').maps[0].box.w).toBeGreaterThanOrEqual(240);
+        for (const size of SIZES) {
+            const l = layout(card, size);
+            expect(new Set(l.maps.map((m) => `${m.box.w}x${m.box.h}`)).size).toBe(1);
+        }
+    });
+
+    it('sets the same gap between every title’s name and its count', () => {
+        for (const size of SIZES) {
+            const l = layout(card, size);
+            expect(new Set(l.maps.map((m) => m.titleGap)).size, size).toBe(1);
+            expect(l.maps[0].titleGap).toBeGreaterThan(0);
+        }
     });
 
     it('puts the headline on one line when it fits there, and never leaves a word alone on the last', () => {
@@ -517,6 +589,22 @@ describe('FiveSeatsCard', () => {
         expect(w.findAll('[data-key-entry]')).toHaveLength(card.key.length);
     });
 
+    it('draws each title as one line of text, the count a span after the name, so the browser sets the gap', () => {
+        for (const size of SIZES) {
+            const w = draw(card, size);
+            const l = layout(card, size);
+            for (const m of l.maps) {
+                const title = w.get(`[data-seat="${m.seat}"] [data-title]`);
+                const spans = title.findAll('tspan');
+                expect(spans.map((t) => t.text())).toEqual(m.title.map((t) => t.text));
+                expect(spans[0].attributes('font-weight')).toBe('700');
+                // The count follows the name where the browser ends it, then the gap.
+                expect(spans[1].attributes('x')).toBeUndefined();
+                expect(spans[1].attributes('dx')).toBe(String(m.titleGap));
+            }
+        }
+    });
+
     it('says a map is being drawn where its image has not come yet', () => {
         const w = draw(card, 'square', { governor: images.governor });
         expect(w.findAll('image[data-map]')).toHaveLength(1);
@@ -568,10 +656,30 @@ describe('sharing "Five seats"', () => {
         expect(ig).toContain(
             `Party colours, in order of seats held across all five: ${card.key.map((k) => k.label).join(', ')}.`,
         );
+        expect(ig).not.toContain('drawn as Other parties');
+        expect(ig).not.toContain('No approved holder');
         expect(ig).toContain('Source: IEBC gazette notices, data as of 16 July 2026.');
         expect(ig).toContain(URL);
         const x = fiveSeatsCaption(card, URL, 'x');
         expect(xLength(x)).toBeLessThanOrEqual(280);
         expect(x).toContain(FIVE_SEATS_HEADLINE);
+    });
+
+    it('keeps "No approved holder yet" out of the party colours in the caption, says how many seats, and says what was folded', () => {
+        const c = CASES.foldedVacant;
+        const ig = fiveSeatsCaption(c, URL, 'instagram');
+        const parties = c.key.filter((k) => k.key !== 'none').map((k) => k.label);
+        expect(ig).toContain(
+            `Party colours, in order of seats held across all five: ${parties.join(', ')}. The ${c.folded.length} with the fewest are drawn as Other parties.`,
+        );
+        expect(c.vacant).toBe(2);
+        expect(ig).toContain('No approved holder yet for 2 seats.');
+        const one = view({
+            ...NUMBERS_SEATS,
+            holders: NUMBERS_SEATS.holders.filter((h) => !(h.seat === 'mp' && h.code === 1)),
+        });
+        expect(fiveSeatsCaption(one, URL, 'instagram')).toContain(
+            'No approved holder yet for 1 seat.',
+        );
     });
 });

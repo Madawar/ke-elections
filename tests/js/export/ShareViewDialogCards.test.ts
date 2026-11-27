@@ -211,6 +211,23 @@ describe('ShareViewDialog: cards of other shapes', () => {
         });
     });
 
+    it('starts no more drawings once the dialog is closed while the first of several maps is drawing', async () => {
+        const w = open([leaders]);
+        await settle();
+        expect(renders).toHaveLength(1);
+        await w.setProps({ open: false });
+        await settle();
+        renders[0].resolve('data:image/png;base64,A');
+        await settle();
+        // The other two maps were queued for nothing: none of them is drawn.
+        expect(renders).toHaveLength(1);
+        expect(svgToPng).not.toHaveBeenCalled();
+        // Opened again, the card draws its maps from the first.
+        await w.setProps({ open: true });
+        await settle();
+        expect(renders.map((r) => r.box)).toEqual(['300x200', '300x200']);
+    });
+
     it('draws the maps a card skipped once more when the person comes back, clearing the preview once', async () => {
         open([view, leaders]);
         await settle();

@@ -1094,13 +1094,14 @@ function shareUnit() {
 // ---- share this view --------------------------------------------------------------------
 // The view is fixed when the dialog opens, so the card doesn't change under the person.
 const isSeatMode = computed(() => isSeatColouring(colourKey.value));
-// A seat view can be shared as it is. "County seats" has a card only for a county (its leaders).
-const canShareView = computed(
-    () =>
-        isSeatMode.value &&
-        (colourKey.value !== COUNTY_SEATS ||
-            focusOf(selection.value)?.level === 'county'),
-);
+// A seat view can be shared as it is. "County seats" has cards for all of Kenya (five seats, by
+// the numbers) and for a county (its leaders); its stripes have no "This view".
+const canShareView = computed(() => {
+    if (!isSeatMode.value) return false;
+    if (colourKey.value !== COUNTY_SEATS) return true;
+    const level = focusOf(selection.value)?.level;
+    return !level || level === 'county';
+});
 // The cards the share dialog offers, the first being the one it opens on; empty while it is shut.
 const sharedCards = shallowRef<ShareCard[]>([]);
 const leadersOf = (focus: FocusSelection | null) =>
@@ -1131,8 +1132,16 @@ function topCountiesOf(seat: ColourKey, only: readonly string[]) {
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
-    if (k === COUNTY_SEATS) return shareLeaders();
     const focus = focusOf(selection.value);
+    if (k === COUNTY_SEATS) {
+        if (focus) return shareLeaders();
+        // All of Kenya on the striped map: the national cards, with no "This view".
+        sharedCards.value = shareCards([
+            fiveSeatsCardView({ seats: seats.value, index: index.value, theme: theme.value }),
+            numbersCardView({ seats: seats.value, index: index.value, theme: theme.value }),
+        ]);
+        return;
+    }
     // "This view", then the other cards for what is in view: one line each.
     sharedCards.value = shareCards([
         snapshotView({

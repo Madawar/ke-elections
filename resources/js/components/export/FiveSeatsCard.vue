@@ -111,17 +111,21 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                     :height="m.rule.h"
                     :fill="m.rule.colour"
                 />
+                <!-- One line: the count follows the name where the browser ends it -->
                 <text
-                    v-for="(t, i) in m.title"
-                    :key="i"
-                    :x="t.x"
-                    :y="t.y"
-                    :font-size="t.size"
-                    :font-weight="t.weight ?? 400"
-                    :fill="tone(t.tone)"
+                    data-title
+                    :x="m.title[0].x"
+                    :y="m.title[0].y"
+                    :font-size="m.title[0].size"
+                    ><tspan
+                        v-for="(t, i) in m.title"
+                        :key="i"
+                        :dx="i ? m.titleGap : undefined"
+                        :font-weight="t.weight ?? 400"
+                        :fill="tone(t.tone)"
+                        >{{ t.text }}</tspan
+                    ></text
                 >
-                    {{ t.text }}
-                </text>
                 <image
                     v-if="mapImages[m.seat]"
                     :data-map="m.seat"
@@ -192,6 +196,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                     v-if="layout.key.note.length"
                     data-key-note
                     :font-size="layout.key.note[0].size"
+                    :text-anchor="layout.key.note[0].anchor"
                     :fill="theme.muted"
                 >
                     <tspan
