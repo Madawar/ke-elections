@@ -32,6 +32,12 @@ import {
     topCountiesScope,
 } from './topCountiesCard';
 import { TILES_SCOPE, type TilesCardView, tilesHeadline } from './tilesCard';
+import {
+    VERSUS_EMPTY,
+    VERSUS_SCOPE,
+    type VersusCardView,
+    versusHeadline,
+} from './versusCard';
 import { type ViewState, headlineFor } from './viewState';
 
 export type CaptionPlatform = 'instagram' | 'x';
@@ -358,6 +364,62 @@ export function tilesCaption(
                     .map((t) => t.name)
                     .join(', ')}.`,
         ),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/** "Mombasa: ODM 23, UDA 4, Independent 2, WDM-K 1." with at most `max` entries named. */
+function versusCounts(h: VersusCardView['halves'][number], max = Infinity): string {
+    const named = h.key.slice(0, max).map((k) => `${k.label} ${fmt(k.count)}`);
+    const rest = h.key.length - named.length;
+    return `${h.name}: ${named.join(', ')}${rest ? ` and ${rest} more` : ''}.`;
+}
+
+/**
+ * The caption for "Side by side": the headline, both counties' counts in the card's order (lower
+ * code first), for Instagram also each county's seat count and the party of its three county
+ * seats, then the source with its date, the link and the tags. On X it stays within 280: the
+ * counts name fewer parties ("and 3 more") until it fits.
+ */
+export function versusCaption(
+    card: VersusCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = versusHeadline(card),
+): string {
+    if (platform === 'x') {
+        const most = Math.max(...card.halves.map((h) => h.key.length));
+        for (const sourcesMax of [2, 1])
+            for (let max = most; max >= 1; max--) {
+                const text = [
+                    headline,
+                    '',
+                    ...card.halves.map((h) => versusCounts(h, max)),
+                    '',
+                    sourceText(card, sourcesMax),
+                    url,
+                    TAGS,
+                ].join('\n');
+                if (xLength(text) <= X_MAX) return text;
+            }
+        return xCaption(card, url, headline);
+    }
+    return [
+        clip(headline, 300),
+        '',
+        VERSUS_SCOPE,
+        ...card.halves.flatMap((h) => [
+            '',
+            `${h.name} (${h.units}):`,
+            versusCounts(h).slice(h.name.length + 2),
+            `${h.leaders
+                .map((l) => `${l.label}: ${l.party ? l.party.label : VERSUS_EMPTY.toLowerCase()}`)
+                .join('. ')}.`,
+        ]),
         '',
         sourceText(card, 10),
         url,

@@ -44,6 +44,12 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
             const top = cards.find((c) => c.key === 'topCounties')?.view as
                 | { group: string; seat: string }
                 | undefined;
+            const versus = cards.find((c) => c.key === 'versus') as
+                | {
+                      view: { seat: string; halves: { code: number }[] };
+                      choice: { label: string; options: unknown[]; value: string };
+                  }
+                | undefined;
             const tiles = cards.find((c) => c.key === 'tiles')?.view as
                 | { seat: string; tiles: { colour: string }[] }
                 | undefined;
@@ -54,6 +60,9 @@ vi.mock('@/components/export/ShareViewDialog.vue', () => ({
                 'data-share-cards': cards.map((c) => c.label).join('|'),
                 'data-share-top': top && `${top.group} ${top.seat}`,
                 'data-share-tiles': tiles && `${tiles.seat} ${tiles.tiles.length}`,
+                'data-share-versus':
+                    versus &&
+                    `${versus.view.seat} ${versus.view.halves.map((x) => x.code).join(',')} ${versus.choice.label} ${versus.choice.options.length} ${versus.choice.value}`,
             });
         },
     }),
@@ -251,8 +260,41 @@ describe('sharing the leaders of a unit', () => {
         document.body.innerHTML = '';
     });
 
+    it('offers "Side by side" for a county on the MP or MCA view, after the cards v0.4.0 offers there, with its "Compare with" choice', async () => {
+        for (const seat of ['mp', 'mca']) {
+            const w = await mountPage(`?seat=${seat}`, county);
+            w.findComponent(Legend).vm.$emit('share');
+            await flushPromises();
+            const d = w.get('[data-share-kind]');
+            expect(d.attributes('data-share-cards'), seat).toBe('This view|County leaders|Side by side');
+            // Nairobi City (47) against the next code, Mombasa (1), lower code first.
+            expect(d.attributes('data-share-versus'), seat).toBe(`${seat} 1,47 Compare with 46 1`);
+            w.unmount();
+            document.body.innerHTML = '';
+        }
+    });
+
+    it('offers no "Side by side" on other seats, for a constituency or a ward, or for all of Kenya', async () => {
+        const cards = async (search: string, unit: { name: string } | null = null) => {
+            const w = await mountPage(search, unit);
+            w.findComponent(Legend).vm.$emit('share');
+            await flushPromises();
+            const out = w.find('[data-share-kind]').attributes('data-share-cards') ?? '';
+            w.unmount();
+            document.body.innerHTML = '';
+            return out;
+        };
+        for (const seat of ['governor', 'senator', 'woman_rep', 'county_seats'])
+            expect(await cards(`?seat=${seat}`, county), seat).not.toContain('Side by side');
+        for (const seat of ['mp', 'mca']) {
+            expect(await cards(`?seat=${seat}`, constituency), seat).not.toContain('Side by side');
+            expect(await cards(`?seat=${seat}`, ward), seat).not.toContain('Side by side');
+            expect(await cards(`?seat=${seat}`), seat).not.toContain('Side by side');
+        }
+    });
+
     it('offers "County leaders" beside the view whenever a county is focused, whatever the seat mode', async () => {
-        for (const seat of ['governor', 'mp', 'mca']) {
+        for (const seat of ['governor']) {
             const w = await mountPage(`?seat=${seat}`, county);
             w.findComponent(Legend).vm.$emit('share');
             await flushPromises();
@@ -325,7 +367,7 @@ describe('sharing the leaders of a unit', () => {
             undefined,
         ]);
         expect(await offered('?seat=mca&parties=ind', county)).toEqual([
-            'This view|County leaders',
+            'This view|County leaders|Side by side',
             undefined,
         ]);
     });

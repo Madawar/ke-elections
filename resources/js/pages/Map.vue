@@ -87,7 +87,7 @@ import { ballotsCardView } from '@/lib/export/ballotsCard';
 import { fiveSeatsCardView } from '@/lib/export/fiveSeatsCard';
 import { numbersCardView } from '@/lib/export/numbersCard';
 import { partyCardView } from '@/lib/export/partyCard';
-import { type ShareCard, shareCards } from '@/lib/export/shareView';
+import { type ShareCard, shareCards, versusCard } from '@/lib/export/shareView';
 import { TILE_SEATS, type TileSeat, tilesCardView } from '@/lib/export/tilesCard';
 import { topCountiesCardView } from '@/lib/export/topCountiesCard';
 import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
@@ -1152,6 +1152,19 @@ function shareView() {
         ]);
         return;
     }
+    // A county on the MP or MCA view: "Side by side" with another county, after the others.
+    const versus =
+        focus?.level === 'county' && (k === 'mp' || k === 'mca')
+            ? [
+                  versusCard({
+                      seats: seats.value,
+                      index: index.value,
+                      seat: k,
+                      county: focus.code,
+                      theme: theme.value,
+                  }),
+              ]
+            : [];
     // "This view", then the other cards for what is in view: one line each.
     sharedCards.value = shareCards([
         snapshotView({
@@ -1188,7 +1201,7 @@ function shareView() {
                 theme: theme.value,
             }),
         !focus && topCountiesOf(k, onlyParties.value),
-    ]);
+    ]).concat(versus);
 }
 
 /**

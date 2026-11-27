@@ -19,6 +19,7 @@ import {
     partyCaption,
     tilesCaption,
     topCountiesCaption,
+    versusCaption,
     type CaptionPlatform,
 } from './caption';
 import {
@@ -53,6 +54,18 @@ import {
     topCountiesHeadline,
 } from './topCountiesCard';
 import { type TopCountiesLayout, topCountiesLayout } from './topCountiesLayout';
+import {
+    type VersusCardView,
+    type VersusSeat,
+    readVersusPick,
+    rememberVersusPick,
+    versusCardView,
+    versusDefault,
+    versusHeadline,
+    versusOptions,
+    versusSpec,
+} from './versusCard';
+import { type VersusLayout, type VersusSize, versusLayout } from './versusLayout';
 import type { Box } from './layout';
 import { type ViewLayout, viewLayout } from './viewLayout';
 import { type ViewMapSpec, viewMapAspect } from './viewMap';
@@ -69,6 +82,7 @@ import NumbersCard from '@/components/export/NumbersCard.vue';
 import PartyCard from '@/components/export/PartyCard.vue';
 import TilesCard from '@/components/export/TilesCard.vue';
 import TopCountiesCard from '@/components/export/TopCountiesCard.vue';
+import VersusCard from '@/components/export/VersusCard.vue';
 import ViewCard from '@/components/export/ViewCard.vue';
 import { type MapTheme, THEMES, type ThemeName } from '@/lib/map/theme';
 import type { SeatsData } from '@/lib/seats';
@@ -83,7 +97,8 @@ export type ShareableView =
     | TopCountiesCardView
     | FiveSeatsCardView
     | BallotsCardView
-    | TilesCardView;
+    | TilesCardView
+    | VersusCardView;
 export type ShareLayout =
     | ViewLayout
     | PartyLayout
@@ -92,7 +107,8 @@ export type ShareLayout =
     | TopCountiesLayout
     | FiveSeatsLayout
     | BallotsLayout
-    | TilesLayout;
+    | TilesLayout
+    | VersusLayout;
 export type ShareKind = ShareableView['kind'];
 
 /** What a layout is laid out for besides the card: its headline, link and map shape. */
@@ -473,6 +489,43 @@ const TILES: CardKind<TilesCardView> = {
     component: TilesCard,
 };
 
+const VERSUS: CardKind<VersusCardView> = {
+    key: 'versus',
+    // Two halves side by side: X; on the story the second county is under the first.
+    sizes: ['x', 'story'],
+    // The two counties are the person's pick; the headline is a fixed template so it stays neutral.
+    editableHeadline: false,
+    label: () => 'Side by side',
+    headline: versusHeadline,
+    caption: versusCaption,
+    layout: (size, view, text) => versusLayout(size as VersusSize, view, text),
+    // One map per county, by position: "a" is the lower code, "b" the higher; one box size.
+    maps: (layout: VersusLayout, view) =>
+        view.halves.map((h, i) => ({
+            key: i === 0 ? 'a' : 'b',
+            box: layout.halves[i].map,
+            spec: versusSpec(view, h),
+        })),
+    aspect: () => 1,
+    copy: (view) => ({
+        title: 'Share side by side',
+        description: `Two counties’ ${SEAT_LABEL[view.seat]} seats on one card, each with its map, sized for X or stories.`,
+    }),
+    // Taken again from the seats in that theme, so independents and no-data follow it.
+    inTheme: (view, theme, ctx) =>
+        versusCardView({
+            seats: seatsInTheme(ctx.seats, theme),
+            index: ctx.index,
+            seat: view.seat,
+            counties: [view.halves[0].code, view.halves[1].code],
+            theme,
+            sample: view.sample,
+        }),
+    filename: (view, size) =>
+        `kenya-electoral-map-side-by-side-${view.halves[0].code}-${view.halves[1].code}-${view.seat}-${size}.png`,
+    component: VersusCard,
+};
+
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
 
 const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
@@ -484,6 +537,7 @@ const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
     fiveSeats: FIVE_SEATS,
     ballots: BALLOTS,
     tiles: TILES,
+    versus: VERSUS,
 };
 
 // TypeScript cannot follow a union of views to the matching entry, so this one lookup says it.
@@ -574,3 +628,44 @@ export const shareCards = (
             label: kindOf(view).label(view),
             view,
         }));
+
+/**
+ * "Side by side" for a county in focus, with its "Compare with" choice: every other county by name,
+ * starting on the remembered pick (or the next code). The pick is remembered in this browser; the
+ * dialog only calls back.
+ */
+export function versusCard({
+    seats,
+    index,
+    seat,
+    county,
+    theme,
+    sample = false,
+    remembered = readVersusPick(),
+    remember = rememberVersusPick,
+}: {
+    seats: SeatsData;
+    index: UnitIndex;
+    seat: VersusSeat;
+    county: number;
+    theme: ThemeName;
+    sample?: boolean;
+    remembered?: number | null;
+    remember?: (code: string) => void;
+}): ShareCard {
+    const make = (value: string): VersusCardView =>
+        versusCardView({ seats, index, seat, counties: [county, Number(value)], theme, sample });
+    const value = String(versusDefault(index, county, remembered));
+    return {
+        key: VERSUS.key,
+        label: VERSUS.label(make(value)),
+        view: make(value),
+        choice: {
+            label: 'Compare with',
+            options: versusOptions(index, county),
+            value,
+            make,
+            remember,
+        },
+    };
+}

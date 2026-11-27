@@ -9,8 +9,8 @@ resume from here.
 | Task | What | State | Commit |
 |---|---|---|---|
 | F | "Every county the same size" (county tiles, mock-up 4), portrait and story, from the national Governor, Senator and Woman Rep views | done | `0c28c80` (grid), `9f9be59` (card), `ce9535b` (entry point, sweep), `37f241b` (key columns), then the commit that updates this row (log) |
-| G1 | The dialog's general ability: a card may carry one choice of its own | done | the `feat(export): a card can carry one choice…` commit |
-| G2 | "Side by side" (mock-up 7), X and story | not started | |
+| G1 | The dialog's general ability: a card may carry one choice of its own | done | `ec2037e` |
+| G2 | "Side by side" (mock-up 7), X and story, from a county on the MP or MCA view | done | the `feat(export): "Side by side"…` commit; tiles review fixes `7beca8d`; Mount Kenya tiles `4e51799` |
 | H1 | The dialog's general ability: a card may be a series | not started | |
 | H2 | The county carousel (mock-up 3), portrait and story | not started | |
 
@@ -238,11 +238,60 @@ Each one: what was decided, why, and what it costs if it is wrong.
 - **Ruling: `make` is not called for the card's own `value`**: its view is the entry's `view`, so the
   page builds that one once — cost if wrong: none.
 
+- **Ruling: "Side by side" on the story stands each county's map at the right of its half, as tall
+  as the half (42% of the width), with the words in the column beside it** — the plan only says the
+  second county is under the first; with the map under the words, as on X, it would be about 200px
+  tall in an 888px-wide box. The words may grow to 1.3 of their base size to fill the half — cost if
+  wrong: `STORY_MAP` and the story's `SCALES` in `versusLayout.ts`.
+- **Ruling: one type scale for both halves, the largest at which the rows fit** (X: the map keeps at
+  least 40% of the half's height; story: the words fit the half), every row as tall as the taller
+  half's, and the county names alone may shrink further so no word of either is wider than its
+  column; nothing below the footer's small text — cost if wrong: `X_MAP_MIN`, `SCALES`.
+- **Ruling: the headline goes on one line when it fits at 80% of the size or more, else on two
+  broken before " and "**, both lines at the largest size that fits; never cut — cost if wrong:
+  `ONE_LINE` in `versusLayout.ts`.
+- **Ruling: the key is the legend's rows for that county and seat (own colours by count, ties by
+  abbreviation, "Other parties" last), then "No approved holder yet N" in the no-data colour when a
+  seat in the county has no holder with a party**; the bar's parts are the same entries in the same
+  order (no folding of small parties, unlike the seat view's mix bar, so bar, key and legend agree
+  entry for entry); a count is printed in a part only when it fits with padding — cost if wrong:
+  `half` in `versusCard.ts`.
+- **Ruling: a county seat whose holder has no party reads "No approved data yet"** on the leaders
+  line, as a vacancy does (no name is shown, so a holder without a party would show nothing); no
+  holder in the data lacks a party — cost if wrong: one condition.
+- **Ruling: the remembered pick is `km.versusWith` in `localStorage` (the code), read and written
+  with try/catch in `versusCard.ts`**; the page passes it as the starting value through
+  `versusCard(...)`, and the dialog calls `remember` — cost if wrong: one key.
+- **Ruling: map slots are `a` (lower code) and `b`; the spec is the county in focus on that seat,
+  nothing highlighted, `outline: false`, the seat's usual ward lines** — cost if wrong: none.
+- **Ruling: the X caption gives the headline, both counties' counts in card order, the source (two
+  sites, else one), the link and the tags, naming fewer parties per county ("and 3 more") until it is
+  within 280; Instagram adds the scope, each county's seat count and its three county seats'
+  parties** — cost if wrong: strings in `versusCaption`.
+- **Ruling: dialog copy "Share side by side" / "Two counties’ MCA seats on one card, each with its
+  map, sized for X or stories."; label "Side by side"; the choice "Compare with"** — cost if wrong:
+  strings.
+- **Ruling: "Side by side" is added after the cards the page offered there before**, so a county on
+  MP or MCA lists "This view|County leaders|Side by side" (Carousel comes after it in Task H) —
+  cost if wrong: one `concat` in `Map.vue`.
+
 ## Parked minor findings
 
 - The card's own tests (`tilesCard.test.ts`, `tilesLayout.test.ts`) first failed on the missing
   modules, not against wrong code; the grid test and the page test failed for the right reason
   first (29 > 23; the card absent from the list).
+- Task G2's code (`versusCard.ts`, `versusLayout.ts`, the component, the registry entry) was written
+  before its tests; the tests were then written against the plan and the mock-up and passed on their
+  first run, apart from two wrong expectations in the tests themselves. The checks were shown to
+  fail: a half moved by 4px is reported as out of line (tested), and the sweep reported the cut
+  "Elgeyo/Marakwet" before the name fix. The page test for the entry point failed first, as it
+  should, and G1's dialog tests failed first on the missing select.
+- Existing tests changed in G2: `countySeatsPage.test.ts`, "offers County leaders … whatever the seat
+  mode" now covers the Governor view only (MP and MCA moved to the new "Side by side" test, which
+  expects "This view|County leaders|Side by side"), and the top-10 test's county case on
+  `?seat=mca&parties=ind` now expects "Side by side" too.
+- On the story, Kakamega against Vihiga stays at scale 1 (Kakamega's key takes four lines in the
+  narrower column), so its words are smaller than Mombasa against Nairobi City's.
 - One existing test changed: `countySeatsPage.test.ts`, `?seat=governor&parties=uda` now lists
   "This view|County tiles|Five seats|By the numbers" (the plan adds the card there); its mocked
   dialog also reports the tiles card's seat.
@@ -257,4 +306,5 @@ Each one: what was decided, why, and what it costs if it is wrong.
 
 ## What is next
 
-Owner's look at Task F, then Task G1 (a card's own choice in the dialog).
+Owner's look at Tasks F (with the Mount Kenya tiles back) and G, then Task H1 (a card can be a
+series) and H2 (the county carousel, which adds "Carousel" after "Side by side").

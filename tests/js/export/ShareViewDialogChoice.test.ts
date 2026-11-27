@@ -9,6 +9,7 @@ import type { ShareCard, ShareableView } from '@/lib/export/shareView';
 import { snapshotView } from '@/lib/export/viewState';
 import type { SeatKey } from '@/lib/seats';
 import { VIEW_SEATS, viewIndex } from './viewFixtures';
+import { NUMBERS_SEATS, numbersIndex } from './numbersFixtures';
 
 // Map drawing is a deferred we resolve by hand; rasterising returns a PNG at once.
 const renders: {
@@ -274,5 +275,37 @@ describe('ShareViewDialog: a card with a choice of its own', () => {
         await pick('governor');
         expect(make).toHaveBeenCalledWith('governor');
         expect(headlineInput().value).toContain('Governor seat in');
+    });
+
+    it('makes "Side by side" with its "Compare with" choice: the fixed headline follows the pick', async () => {
+        const remember = vi.fn();
+        const card = shareView.versusCard({
+            seats: NUMBERS_SEATS,
+            index: numbersIndex,
+            seat: 'mca',
+            county: 47,
+            theme: 'light',
+            remembered: null,
+            remember,
+        });
+        mount(ShareViewDialog, {
+            props: {
+                open: true,
+                view: card.view,
+                cards: [card],
+                context: { ...context, index: numbersIndex, seats: NUMBERS_SEATS },
+            },
+            attachTo: document.body,
+        });
+        await settle();
+        const fixed = () => document.querySelector('[data-fixed-headline]')?.textContent?.trim();
+        expect(fixed()).toBe('MCA seats: Mombasa and Nairobi City');
+        expect(document.querySelector('label[for="view-card-choice"]')?.textContent?.trim()).toBe('Compare with');
+        expect(select()!.options).toHaveLength(46);
+        expect(select()!.value).toBe('1');
+        await pick('22');
+        expect(fixed()).toBe('MCA seats: Kiambu and Nairobi City');
+        expect(remember).toHaveBeenCalledWith('22');
+        expect(document.body.textContent).toContain('This card’s headline is fixed, so it stays neutral.');
     });
 });
