@@ -1,10 +1,11 @@
 // The county carousel (Task H2): the cover's layout and component, the four slides (their kinds,
 // order and sizes), and slides 2 to 4 being byte for byte the cards they are outside the series
-// (made by the same functions the page uses), apart from the page text in their footers.
+// (made by the same functions the page uses), apart from the link line of their footers (in a
+// series every slide has the series' link and its page text).
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import CoverCard from '@/components/export/CoverCard.vue';
-import { coverCardView, coverHeadline } from '@/lib/export/coverCard';
+import { coverCardView, coverHeadline, coverScope } from '@/lib/export/coverCard';
 import { coverLayout } from '@/lib/export/coverLayout';
 import { leadersCardView } from '@/lib/export/leadersCard';
 import {
@@ -71,6 +72,20 @@ describe('coverLayout', () => {
             '1 governor, 1 senator, 1 woman rep, 12 MPs and 60 MCAs. Swipe for each.',
         );
         for (const t of l.scopeLines) expect(textWidth(t.text, t.size)).toBeLessThanOrEqual(l.footerBox.w + 0.5);
+    });
+
+    it('keeps "Swipe for each." together, breaking before "Swipe" where the line cannot hold it (Nairobi City, story)', () => {
+        const l = layout(47, 'story');
+        const lines = l.scopeLines.map((t) => t.text);
+        expect(lines.length).toBeGreaterThan(1);
+        expect(lines.join(' ')).toBe(coverScope(cover(47)));
+        expect(lines.some((t) => t.includes('Swipe for each.'))).toBe(true);
+        for (const t of lines) expect(t).not.toMatch(/Swipe$/);
+        expect(lines.at(-1)).toBe('Swipe for each.');
+        // Every county and size: never split.
+        for (const c of index.all().filter((u) => u.l === 'county'))
+            for (const size of SIZES)
+                expect(layout(c.c, size).scopeLines.some((t) => t.text.includes('Swipe for each.')), `${c.n} ${size}`).toBe(true);
     });
 
     it('draws the map with the county’s shape, as large as the room allows, the note under it', () => {
@@ -163,8 +178,8 @@ describe('carouselCard', () => {
         expect(carouselCard({ seats, index, county: 99, theme: 'light' })).toBeNull();
     });
 
-    // What a card draws, as markup with the page text taken out.
-    const drawn = (view: ShareableView, size: 'portrait' | 'story', page?: string) => {
+    // What a card draws, as markup with the footer's link line (brand, page text, link) taken out.
+    const drawn = (view: ShareableView, size: 'portrait' | 'story', url: string, page?: string) => {
         const w = mount(componentOf(view), {
             props: {
                 view,
@@ -174,40 +189,45 @@ describe('carouselCard', () => {
                 mapImages: { map: 'data:image/png;base64,MAP' },
                 mapPlaceholder: 'Drawing the map…',
                 mapAspect: aspectOf(view),
-                url: `https://example.org${view.path}`,
+                url,
                 theme: THEMES.light,
                 page,
+                pageWidest: page ? '4 of 4' : undefined,
             },
         });
         const page$ = w.find('[data-page]');
         const pageText = page$.exists() ? page$.text() : null;
-        if (page$.exists()) page$.element.remove();
-        // The link drawn with its page text is one element of plain text again once it is out.
-        for (const link of w.element.querySelectorAll('[data-link]')) {
-            link.textContent = link.textContent;
-            link.removeAttribute('data-link');
-        }
-        const texts = w.findAll('text').map((t) => t.text());
-        return { html: w.html(), texts, pageText };
+        const footer = w.get('[data-footer]').element;
+        const texts = [...footer.querySelectorAll('text')];
+        const linkLine = texts.at(-1)!;
+        const link = linkLine.lastChild!.textContent;
+        for (const t of texts)
+            if (t === linkLine || t.textContent === 'Kenya Electoral Map') t.remove();
+        return { html: w.html(), texts: w.findAll('text').map((t) => t.text()), pageText, link };
     };
 
-    it('draws slides 2 to 4 exactly as outside the series, apart from the page text', () => {
+    it('draws slides 2 to 4 exactly as outside the series, apart from the footer’s link and page text', () => {
         const focus = { level: 'county' as const, code: 37 };
         const outside: ShareableView[] = [
             leadersCardView({ seats, index, focus, theme: 'light' })!,
             snapshotView({ seats, index, seat: 'mp', focus, only: [], theme: 'light', ...settings }),
             snapshotView({ seats, index, seat: 'mca', focus, only: [], theme: 'light', ...settings }),
         ];
+        const series = `https://example.org${slides[0].path}`;
         for (const size of SIZES)
             for (let i = 1; i < 4; i++) {
-                const inside = drawn(slides[i], size, `${i + 1} of 4`);
-                const alone = drawn(outside[i - 1], size);
+                const own = `https://example.org${outside[i - 1].path}`;
+                const inside = drawn(slides[i], size, series, `${i + 1} of 4`);
+                const alone = drawn(outside[i - 1], size, own);
                 expect(inside.pageText).toBe(`${i + 1} of 4`);
                 expect(alone.pageText).toBeNull();
+                // The series' link inside, the card's own outside.
+                expect(inside.link).toBe('example.org/county/37');
+                expect(alone.link).toBe(own.replace('https://', ''));
                 expect(inside.texts, `${size} slide ${i + 1}`).toEqual(alone.texts);
                 expect(inside.html, `${size} slide ${i + 1}`).toBe(alone.html);
-                const text = { headline: headlineOf(slides[i]), url: `https://example.org${slides[i].path}`, mapAspect: aspectOf(slides[i]) };
-                expect(layoutOf(size, slides[i], text)).toEqual(layoutOf(size, outside[i - 1], text));
+                const at = (url: string) => layoutOf(size, slides[i], { headline: headlineOf(slides[i]), url, mapAspect: aspectOf(slides[i]) });
+                expect(at(series)).toEqual(layoutOf(size, outside[i - 1], { headline: headlineOf(slides[i]), url: own, mapAspect: aspectOf(slides[i]) }));
             }
     });
 });

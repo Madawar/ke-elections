@@ -14,7 +14,8 @@
         "boundaries:build": "node boundaries/pipeline/build.mjs",
         "boundaries:towns": "node boundaries/pipeline/towns.mjs",
         "boundaries:stations": "node boundaries/pipeline/stations.mjs",
-        "boundaries:rebuild": "npm run boundaries:build && npm run boundaries:towns && npm run boundaries:stations"
+        "boundaries:neighbours": "node boundaries/pipeline/neighbours.mjs",
+        "boundaries:rebuild": "npm run boundaries:build && npm run boundaries:towns && npm run boundaries:stations && npm run boundaries:neighbours"
     },
     "dependencies": {
         "@fontsource-variable/archivo": "^5.3.0",

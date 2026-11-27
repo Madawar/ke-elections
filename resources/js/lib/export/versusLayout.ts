@@ -407,8 +407,3 @@ export function versusLayout(
         footerFonts: spec.footer,
     };
 }
-
-/** The sizes the card comes in. */
-export const VERSUS_SIZES: readonly VersusSize[] = ['x', 'story'];
-/** The spec of each size, for the tests. */
-export const versusSpecOf = (size: VersusSize) => SPECS[size];

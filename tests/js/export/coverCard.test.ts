@@ -106,6 +106,18 @@ describe('coverCardView', () => {
         expect(c.asOf).toBe(NUMBERS_SEATS.data_as_of ?? NUMBERS_SEATS.as_of ?? null);
     });
 
+    it('names the MCA holders’ sources only, not the county seats’ or the MPs’', () => {
+        // Each seat's holders cite a site of their own.
+        const bySeat = {
+            ...NUMBERS_SEATS,
+            holders: NUMBERS_SEATS.holders.map((h) => ({ ...h, source_url: `https://${h.seat.replace('_', '-')}.example.org/record` })),
+        };
+        const c = coverCardView({ seats: bySeat, index, county: 37, theme: 'light' })!;
+        expect(c.source).toBe('mca.example.org');
+        expect(c.sources).toEqual(['mca.example.org']);
+        for (const other of ['governor', 'senator', 'woman-rep', 'mp']) expect(c.sources).not.toContain(`${other}.example.org`);
+    });
+
     it('keeps the MCA counts of the legend for its caption', () => {
         const c = view(37);
         const wards = legendScope(index, 'mca', { level: 'county', code: 37 })!.codes;

@@ -3,10 +3,10 @@
 // the headline (whole: it shrinks a little, then wraps, never cut), the seats spelled out (shrunk
 // a little, then wrapped), the county's map as large as the room left allows, and the line that
 // says what the map's colours are. Every line is placed here; CoverCard.vue only draws it.
-import { type CoverCardView, COVER_NOTE, coverKicker, coverScope } from './coverCard';
+import { type CoverCardView, COVER_NOTE, COVER_SWIPE, coverKicker, coverScope } from './coverCard';
 import type { Box, FooterFonts, TextItem } from './layout';
 import type { ViewSize } from './sizes';
-import { fitFontSize, wrapText } from './text';
+import { fitFontSize, textWidth, wrapText } from './text';
 import { type StripSegment, box, cardFrame, strip, titleBlock } from './viewLayout';
 
 export interface CoverLayout {
@@ -58,7 +58,14 @@ export function coverLayout(size: ViewSize, card: CoverCardView, text: CoverText
     const scope = coverScope(card);
     const sSize = fitFontSize(scope, innerW, spec.scope, Math.round(spec.scope * 0.85));
     const sLead = Math.round(sSize * 1.3);
-    const scopeLines: TextItem[] = wrapText(scope, innerW, sSize, Infinity).map((line, i) => ({
+    // "Swipe for each." stays together: the rest is wrapped, and it goes on the last line where
+    // it fits there, else on a line of its own.
+    const head = scope.slice(0, scope.length - COVER_SWIPE.length).trimEnd();
+    const wrapped = wrapText(head, innerW, sSize, Infinity);
+    const last = `${wrapped[wrapped.length - 1]} ${COVER_SWIPE}`;
+    if (textWidth(last, sSize) <= innerW) wrapped[wrapped.length - 1] = last;
+    else wrapped.push(COVER_SWIPE);
+    const scopeLines: TextItem[] = wrapped.map((line, i) => ({
         x: pad,
         y: Math.round(headBottom + sSize * 1.45 + i * sLead),
         text: line,

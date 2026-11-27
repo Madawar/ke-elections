@@ -31,6 +31,8 @@ const props = withDefaults(
         mapAspect?: number;
         /** A slide's place in its series ("2 of 4"), for the footer; none outside a series. */
         page?: string;
+        /** The widest page text of its series, which the footer is measured with. */
+        pageWidest?: string;
     }>(),
     {
         mapImages: () => ({}),
@@ -243,6 +245,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 :url="url"
                 :theme="theme"
                 :page="page"
+                :page-widest="pageWidest"
             />
             <SampleWatermark
                 v-if="view.sample"

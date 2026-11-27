@@ -170,6 +170,28 @@ describe('versusLayout', () => {
         expect(layoutOf('x', card, { headline: versusHeadline(card), url: URL, mapAspect: 1 })).toEqual(layout(card, 'x'));
         expect(componentOf(card)).toBe(VersusCard);
     });
+
+    it('steps the type down when a long key entry is what does not fit the words’ column (story)', () => {
+        // No real abbreviation is wide enough to bind, so a party is labelled with the longest real
+        // party name (data/sources/parties.csv): Nairobi City's MCAs all hold it.
+        const LONG = 'National Ordinary People Empowerment Union';
+        const wards = legendScope(index, 'mca', { level: 'county', code: 47 })!.codes;
+        const seats: SeatsData = {
+            ...NUMBERS_SEATS,
+            parties: [...NUMBERS_SEATS.parties, { abbrev: LONG, name: LONG, coalition_2022: null, colour: '#2a5c8a' }],
+            holders: NUMBERS_SEATS.holders.map((h) => (h.seat === 'mca' && wards.has(h.code) ? { ...h, party: LONG } : h)),
+        };
+        const plain = layout(view(1, 47)!, 'story');
+        const long = layout(view(1, 47, seats)!, 'story');
+        expect(plain.scale).toBe(1.3);
+        expect(long.scale).toBeLessThan(plain.scale);
+        const entry = long.halves[1].key.find((k) => k.label.text.startsWith(LONG))!;
+        expect(entry).toBeDefined();
+        // Whole, and inside the words' column: it does not run into the map beside it.
+        const col = long.halves[1].keyBox;
+        expect(entry.label.x + textWidth(entry.label.text, entry.label.size)).toBeLessThanOrEqual(col.x + col.w + 0.5);
+        expect(versusFaults(long, 'story', view(1, 47, seats)!)).toEqual([]);
+    });
 });
 
 describe('VersusCard', () => {

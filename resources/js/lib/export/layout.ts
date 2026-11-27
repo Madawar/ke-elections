@@ -289,18 +289,22 @@ export interface FooterInput {
     url: string; // shown without the protocol
     /** A slide's place in its series ("2 of 4"), on the link's line; none outside a series. */
     page?: string;
+    /**
+     * The widest page text of the series ("4 of 4"), which the line is measured with in place of
+     * `page`, so every slide of a series (each given the series' link) decides alike.
+     */
+    pageWidest?: string;
 }
 
 const BRAND = 'Kenya Electoral Map';
 
 /**
- * A slide's page text in the footer. Where it sits right beside the link (`joins`: just before
- * or just after it), it is drawn in the link's own text element, `gap` apart, so the space
- * between them is the renderer's and not an estimate of the link's width; its `x` is where the
- * estimate puts it, for the layout's checks.
+ * A slide's page text in the footer. It sits just before the link and is drawn in the link's own
+ * text element, `gap` apart, so the space between them is the renderer's and not an estimate of
+ * the link's width; its `x` (where its end is, `anchor: 'end'`) is where the estimate puts it,
+ * for the layout's checks.
  */
 export interface FooterPage extends TextItem {
-    joins: 'before' | 'after' | null;
     gap: number;
 }
 
@@ -335,9 +339,9 @@ export function footerBlock(
     // A deep link is never cut: a long one shrinks further than other text, and when even the
     // floor size is too wide the footer shows the plain page address without the query.
     const floor = Math.round(fonts.small * 0.75);
+    const bare = (u: string) => u.replace(/[?#].*$/, '').replace(/\/$/, '');
     let url = input.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    if (textWidth(url, floor, true) > area.w)
-        url = url.replace(/[?#].*$/, '').replace(/\/$/, '');
+    if (textWidth(url, floor, true) > area.w) url = bare(url);
     const urlSize = fitFontSize(
         url,
         area.w,
@@ -346,44 +350,48 @@ export function footerBlock(
         true, // drawn at weight 600
     );
     const brandW = textWidth(BRAND, fonts.url, true);
-    const brandFits =
+    let showBrand =
         brandW + textWidth(url, urlSize, true) + fonts.url * 1.5 <= area.w;
-    // A slide's page text sits on this line too, so the footer is no taller for it, and the link
-    // keeps its size: between the brand and the link where the three fit; else right after the
-    // link, which then starts the line as it does on a card whose brand does not fit (the brand
-    // gives way); only where even the page text and the link do not fit side by side does the
-    // link shrink to make room (down to its floor, then without its query), the page text first.
-    // A card outside a series takes none of these steps.
-    let page: FooterPage | null = null;
-    let showBrand = brandFits;
     let linkText = url;
     let linkSize = urlSize;
-    let linkAtEnd = brandFits;
+    let linkAtEnd = showBrand;
+    // A slide's page text sits on this line too, so the footer is no taller for it: just before
+    // the link, which ends at the footer's right edge. The line is measured with the series'
+    // widest page text, so every slide (all with the series' link) decides alike: the brand at
+    // the left where the three fit, else no brand; only where the page text and the link alone
+    // do not fit does the link shrink (down to its floor, then without its query). A card
+    // outside a series takes none of these steps.
+    let page: FooterPage | null = null;
     if (input.page) {
-        const text = input.page;
         const gap = Math.round(fonts.url * 0.6);
-        const pageW = textWidth(text, urlSize, false);
-        const urlW = textWidth(url, urlSize, true);
-        const muted = { y, text, size: urlSize, weight: 400, tone: 'muted' as const, gap };
-        if (brandFits && brandW + fonts.url * 1.5 + pageW + gap + urlW <= area.w) {
-            page = { ...muted, x: Math.round(area.x + area.w - urlW - gap), anchor: 'end', joins: 'before' };
-        } else if (urlW + gap + pageW <= area.w) {
-            // Right after the link, which starts the line as it does when the brand does not fit:
-            // the link keeps its size, and the brand gives way when it was on the line.
-            showBrand = false;
-            linkAtEnd = false;
-            page = { ...muted, x: Math.round(area.x + urlW + gap), anchor: 'start', joins: 'after' };
+        const pageW = Math.max(
+            textWidth(input.page, urlSize, false),
+            input.pageWidest ? textWidth(input.pageWidest, urlSize, false) : 0,
+        );
+        let urlW = textWidth(url, urlSize, true);
+        if (pageW + gap + urlW <= area.w) {
+            showBrand = brandW + fonts.url * 1.5 + pageW + gap + urlW <= area.w;
         } else {
             showBrand = false;
-            linkAtEnd = true;
             const room = area.w - pageW - gap;
             linkSize = fitFontSize(url, room, urlSize, floor, true);
             if (textWidth(url, linkSize, true) > room) {
-                linkText = url.replace(/[?#].*$/, '').replace(/\/$/, '');
+                linkText = bare(url);
                 linkSize = fitFontSize(linkText, room, urlSize, floor, true);
             }
-            page = { ...muted, x: area.x, size: linkSize, anchor: 'start', joins: null };
+            urlW = textWidth(linkText, linkSize, true);
         }
+        linkAtEnd = true;
+        page = {
+            x: Math.round(area.x + area.w - urlW - gap),
+            y,
+            text: input.page,
+            size: linkSize,
+            weight: 400,
+            anchor: 'end',
+            tone: 'muted',
+            gap,
+        };
     }
     if (showBrand)
         lines.push({
@@ -394,14 +402,13 @@ export function footerBlock(
             weight: 600,
             tone: 'ink',
         });
-    const end = linkAtEnd;
     lines.push({
-        x: end ? area.x + area.w : area.x,
+        x: linkAtEnd ? area.x + area.w : area.x,
         y,
         text: linkText,
         size: linkSize,
         weight: 600,
-        anchor: end ? 'end' : 'start',
+        anchor: linkAtEnd ? 'end' : 'start',
         tone: 'ink',
     });
     return { rule: area.y, lines, page, bottom: y + fonts.url * 0.25 };

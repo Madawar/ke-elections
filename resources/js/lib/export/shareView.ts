@@ -53,6 +53,7 @@ import { type NumbersLayout, numbersLayout } from './numbersLayout';
 import { type PartyCardView, partyHeadline } from './partyCard';
 import { type PartyLayout, partyLayout } from './partyLayout';
 import { VIEW_SIZES, type ViewSize, viewFilename } from './sizes';
+import { textWidth } from './text';
 import { type TilesCardView, tilesCardView, tilesHeadline } from './tilesCard';
 import { type TilesLayout, tilesLayout } from './tilesLayout';
 import {
@@ -223,7 +224,7 @@ interface CardKind<V extends ShareableView> {
     /**
      * The component that draws the card. The dialog gives every card the same props (`view`,
      * `size`, `headline`, `mapImage`, `mapImages`, `mapPlaceholder`, `mapAspect`, `url`,
-     * `theme`, `page`; see `CardProps`), and each card declares them all, using what it needs.
+     * `theme`, `page`, `pageWidest`; see `CardProps`), and each card declares them all, using what it needs.
      */
     component: Component;
 }
@@ -244,6 +245,8 @@ export interface CardProps {
     theme: MapTheme;
     /** A slide's place in its series ("2 of 4"), for its footer; none outside a series. */
     page?: string;
+    /** The widest page text of the series (`widestPlace`), which every slide's footer is measured with. */
+    pageWidest?: string;
 }
 
 const ALL_SIZES = Object.keys(VIEW_SIZES) as ViewSize[];
@@ -735,6 +738,19 @@ export function seriesCard(
 
 /** "2 of 4": a slide's place in its series, as its footer prints it. */
 export const slidePlace = (i: number, total: number): string => `${i + 1} of ${total}`;
+
+/**
+ * The widest of a series' page texts as the footer measures them ("4 of 4"; the later one on a
+ * tie): every slide's footer is measured with it, so all slides of a series lay out alike.
+ */
+export const widestPlace = (total: number): string => {
+    let widest = slidePlace(0, total);
+    for (let i = 1; i < total; i++) {
+        const p = slidePlace(i, total);
+        if (textWidth(p, 1) >= textWidth(widest, 1)) widest = p;
+    }
+    return widest;
+};
 
 /** A slide's own file name with its place: `…-2-of-4.png`. */
 export const slideFilename = (

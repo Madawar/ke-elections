@@ -227,7 +227,7 @@ describe('the "County seats" view on the page', () => {
         );
     });
 
-    it('offers "Five seats" and "By the numbers" for all of Kenya (no "This view" of the stripes), and shares a county as its leaders card', async () => {
+    it('offers "Five seats" and "By the numbers" for all of Kenya (no "This view" of the stripes), and a county’s leaders card, then its carousel', async () => {
         const kenya = await mountPage('?seat=county_seats');
         expect(kenya.findComponent(Legend).props('shareable')).toBe(true);
         kenya.findComponent(Legend).vm.$emit('share');
@@ -247,7 +247,7 @@ describe('the "County seats" view on the page', () => {
         expect(dialog.attributes('data-share-kind')).toBe('leaders');
         expect(dialog.attributes('data-share-unit')).toBe('Nairobi City');
         expect(dialog.attributes('data-share-offers')).toBeUndefined();
-        expect(dialog.attributes('data-share-cards')).toBe('County leaders');
+        expect(dialog.attributes('data-share-cards')).toBe('County leaders|Carousel');
     });
 });
 
@@ -309,6 +309,8 @@ describe('sharing the leaders of a unit', () => {
             woman_rep: 'This view|County leaders|Carousel',
             mp: 'This view|County leaders|Side by side|Carousel',
             mca: 'This view|County leaders|Side by side|Carousel',
+            // "County seats" has no "This view": the leaders card first, as the dialog opens on it.
+            county_seats: 'County leaders|Carousel',
         };
         for (const [seat, cards] of Object.entries(expected)) {
             const w = await mountPage(`?seat=${seat}`, county);
@@ -325,7 +327,7 @@ describe('sharing the leaders of a unit', () => {
         }
     });
 
-    it('offers no "Carousel" for all of Kenya, a constituency or a ward, or on "County seats" (the leaders way)', async () => {
+    it('offers no "Carousel" for all of Kenya, a constituency or a ward', async () => {
         const cards = async (search: string, unit: { name: string } | null = null) => {
             const w = await mountPage(search, unit);
             w.findComponent(Legend).vm.$emit('share');
@@ -341,8 +343,6 @@ describe('sharing the leaders of a unit', () => {
             expect(await cards(`?seat=${seat}`, constituency), seat).not.toContain('Carousel');
             expect(await cards(`?seat=${seat}`, ward), seat).not.toContain('Carousel');
         }
-        // A county on "County seats" shares its leaders card alone, as v0.4.0 does.
-        expect(await cards('?seat=county_seats', county)).toBe('County leaders');
     });
 
     it('offers "County leaders" beside the view whenever a county is focused, whatever the seat mode', async () => {

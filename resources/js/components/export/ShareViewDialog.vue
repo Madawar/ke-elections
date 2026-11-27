@@ -50,6 +50,7 @@ import {
     sizesOf,
     slideFilename,
     slidePlace,
+    widestPlace,
 } from '@/lib/export/shareView';
 import { type ViewMapContext, renderViewMap } from '@/lib/export/viewMap';
 import { seatsInTheme } from '@/lib/export/viewState';
@@ -99,6 +100,18 @@ const step = computed(() => {
 });
 function setStep(i: number) {
     if (slides.value) steps.value = { ...steps.value, [which.value]: i };
+}
+/**
+ * The stepper's buttons are marked `aria-disabled` at the ends and during "Download all", not
+ * `disabled`, so a button that reaches the end keeps the keyboard focus; a press then does nothing.
+ */
+const atStart = computed(() => step.value === 0 || batching.value);
+const atEnd = computed(
+    () => !slides.value || step.value === slides.value.length - 1 || batching.value,
+);
+function stepBy(by: -1 | 1) {
+    if (by < 0 ? atStart.value : atEnd.value) return;
+    setStep(step.value + by);
 }
 /** "2 of 4" in each slide's footer; none for a card outside a series. */
 const place = computed(() =>
@@ -183,12 +196,20 @@ const headline = computed(() =>
 );
 const edited = computed(() => headlineInput.value.trim() !== generated.value);
 
-const url = computed(() => siteUrl(base.value.path));
+/**
+ * The card's link. A series has one link, its first slide's, which every slide is given in place
+ * of its own, so the footers of a series are alike; a card outside a series has its own.
+ */
+const url = computed(() => siteUrl((slides.value?.[0] ?? base.value).path));
+/** The widest page text of the series, which every slide's footer is measured with. */
+const pageWidest = computed(() =>
+    slides.value ? widestPlace(slides.value.length) : undefined,
+);
 const caption = computed(() => {
     const first = slides.value?.[0];
     return captionOf(
         first ? inTheme(first, themeName.value, props.context) : shown.value,
-        first ? siteUrl(first.path) : url.value,
+        url.value,
         size.value === 'x' ? 'x' : 'instagram',
         first ? headlineOf(first) : headline.value,
     );
@@ -522,7 +543,32 @@ async function saveEach(files: SlideFile[]): Promise<boolean> {
     return true;
 }
 
+/** "Download all" (and the series' other saving buttons) can start: the card is ready, no run on. */
+const canSave = computed(() => status.value === 'ready' && !batching.value);
+type SeriesAction = 'shareAll' | 'download' | 'downloadAll' | 'copy';
+/** A series' buttons, the primary one first. */
+const seriesActions = computed<SeriesAction[]>(() =>
+    canShare.value
+        ? ['shareAll', 'download', 'downloadAll', 'copy']
+        : ['downloadAll', 'download', 'copy'],
+);
+const actionHandlers: Record<SeriesAction, () => unknown> = {
+    shareAll: () => shareAll(),
+    download: () => download(),
+    downloadAll: () => downloadAll(),
+    copy: () => copyCaption(),
+};
+function actionLabel(action: SeriesAction): string {
+    const n = slides.value?.length ?? 0;
+    return {
+        shareAll: `Share all ${n}`,
+        download: 'Download PNG',
+        downloadAll: `Download all ${n}`,
+        copy: 'Copy caption',
+    }[action];
+}
 async function downloadAll() {
+    if (!canSave.value) return;
     const files = await makeAll();
     if (files) await saveEach(files);
 }
@@ -651,25 +697,27 @@ async function copyCaption() {
                             <button
                                 type="button"
                                 aria-label="Previous slide"
-                                class="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-hairline px-3 text-[14px] focus-visible:outline-2 focus-visible:outline-ink disabled:opacity-40"
-                                :disabled="step === 0 || batching"
-                                @click="setStep(step - 1)"
+                                class="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-hairline px-3 text-[14px] focus-visible:outline-2 focus-visible:outline-ink aria-disabled:cursor-default aria-disabled:opacity-40"
+                                :aria-disabled="atStart"
+                                @click="stepBy(-1)"
                             >
                                 <ChevronLeft class="size-4" aria-hidden="true" />
                                 Previous
                             </button>
+                            <!-- During "Download all" the progress line speaks for it. -->
                             <span
                                 data-slide-place
                                 role="status"
+                                :aria-live="batching ? 'off' : undefined"
                                 class="flex-1 text-center text-[15px] tabular-nums"
                                 >{{ place }}</span
                             >
                             <button
                                 type="button"
                                 aria-label="Next slide"
-                                class="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-hairline px-3 text-[14px] focus-visible:outline-2 focus-visible:outline-ink disabled:opacity-40"
-                                :disabled="step === slides.length - 1 || batching"
-                                @click="setStep(step + 1)"
+                                class="flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-hairline px-3 text-[14px] focus-visible:outline-2 focus-visible:outline-ink aria-disabled:cursor-default aria-disabled:opacity-40"
+                                :aria-disabled="atEnd"
+                                @click="stepBy(1)"
                             >
                                 Next
                                 <ChevronRight class="size-4" aria-hidden="true" />
@@ -823,6 +871,7 @@ async function copyCaption() {
                             :url="url"
                             :theme="theme"
                             :page="place"
+                            :page-widest="pageWidest"
                         />
                     </div>
 
@@ -852,43 +901,45 @@ async function copyCaption() {
                     >
                         {{ progress || message }}
                     </p>
-                    <div v-if="slides" class="grid grid-cols-2 gap-2">
+                    <!--
+                        A series: the primary action first ("Share all 4" where the device shares
+                        files, else "Download all 4"), then "Download PNG", then the rest. Four
+                        sit two by two; three put the primary across the row on a phone, the
+                        other two under it, and sit three across from md up.
+                    -->
+                    <div
+                        v-if="slides"
+                        data-series-actions
+                        class="grid grid-cols-2 gap-2"
+                        :class="seriesActions.length === 3 ? 'md:grid-cols-3' : ''"
+                    >
+                        <!--
+                            "Download all" is marked, not disabled, while it cannot start, so it
+                            keeps the keyboard focus while it runs; a press then does nothing.
+                        -->
                         <button
-                            v-if="canShare"
+                            v-for="(action, i) in seriesActions"
+                            :key="action"
                             type="button"
-                            class="flex h-11 items-center justify-center rounded-md bg-ink px-3 text-[15px] font-medium text-surface disabled:opacity-50"
-                            :disabled="status !== 'ready' || batching"
-                            @click="shareAll"
-                        >
-                            Share all {{ slides.length }}
-                        </button>
-                        <button
-                            type="button"
-                            class="flex h-11 items-center justify-center rounded-md border border-hairline px-3 text-[15px] font-medium disabled:opacity-50"
-                            :disabled="status !== 'ready' || batching"
-                            @click="download"
-                        >
-                            Download PNG
-                        </button>
-                        <button
-                            type="button"
-                            class="flex h-11 items-center justify-center rounded-md px-3 text-[15px] font-medium disabled:opacity-50"
-                            :class="
-                                canShare
-                                    ? 'border border-hairline'
-                                    : 'bg-ink text-surface'
+                            class="flex h-11 items-center justify-center rounded-md px-3 text-[15px] font-medium disabled:opacity-50 aria-disabled:cursor-default aria-disabled:opacity-50"
+                            :class="[
+                                i === 0
+                                    ? 'bg-ink text-surface'
+                                    : 'border border-hairline',
+                                i === 0 && seriesActions.length === 3
+                                    ? 'col-span-2 md:col-span-1'
+                                    : '',
+                            ]"
+                            :disabled="
+                                (action === 'shareAll' || action === 'download') &&
+                                !canSave
                             "
-                            :disabled="status !== 'ready' || batching"
-                            @click="downloadAll"
+                            :aria-disabled="
+                                action === 'downloadAll' ? !canSave : undefined
+                            "
+                            @click="actionHandlers[action]()"
                         >
-                            Download all {{ slides.length }}
-                        </button>
-                        <button
-                            type="button"
-                            class="flex h-11 items-center justify-center rounded-md border border-hairline px-3 text-[15px] font-medium"
-                            @click="copyCaption"
-                        >
-                            Copy caption
+                            {{ actionLabel(action) }}
                         </button>
                     </div>
                     <div v-else class="flex gap-2">

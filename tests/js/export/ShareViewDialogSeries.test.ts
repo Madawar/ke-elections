@@ -6,6 +6,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
+import { siteUrl } from '@/lib/export/format';
 import { leadersCardView } from '@/lib/export/leadersCard';
 import type { ShareCard, ShareableView } from '@/lib/export/shareView';
 import { snapshotView } from '@/lib/export/viewState';
@@ -106,11 +107,16 @@ const caption = () => document.querySelector<HTMLTextAreaElement>('#view-caption
 const status = () => document.querySelector('[aria-live="polite"]')?.textContent?.trim() ?? '';
 const sizes = () =>
     [...document.querySelectorAll<HTMLInputElement>('input[name="view-size"]')].map((i) => i.value);
-const open = (cards: ShareCard[]) =>
-    mount(ShareViewDialog, {
+/** Every dialog mounted by a test, unmounted after it so no run of one test reaches the next. */
+const mounted: { unmount(): void }[] = [];
+const open = (cards: ShareCard[]) => {
+    const w = mount(ShareViewDialog, {
         props: { open: true, view: cards[0].view, cards, context },
         attachTo: document.body,
     });
+    mounted.push(w);
+    return w;
+};
 /** Resolve every map drawn so far that is still waiting, with a name for each. */
 async function drawAll(tag = 'MAP') {
     for (let round = 0; round < 12; round++) {
@@ -141,6 +147,7 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
         }
     });
     afterEach(() => {
+        for (const w of mounted.splice(0)) w.unmount();
         document.body.innerHTML = '';
     });
 
@@ -173,7 +180,7 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
         expect(place()).toBeNull();
     });
 
-    it('steps with real buttons named in words, 44px, keyboard reachable, disabled at the ends', async () => {
+    it('steps with real buttons named in words, 44px, keyboard reachable, marked disabled at the ends', async () => {
         open([series()]);
         await settle();
         for (const b of [prev()!, next()!]) {
@@ -183,9 +190,11 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
             expect(b.className).toMatch(/focus-visible:outline/);
             // Words, never an arrow character, for the name and the text.
             expect(b.textContent).not.toMatch(/[→←<>‹›]/);
+            // Never the disabled attribute, which would drop the keyboard focus.
+            expect(b.disabled).toBe(false);
         }
-        expect(prev()!.disabled).toBe(true);
-        expect(next()!.disabled).toBe(false);
+        expect(prev()!.getAttribute('aria-disabled')).toBe('true');
+        expect(next()!.getAttribute('aria-disabled')).toBe('false');
         next()!.focus();
         expect(document.activeElement).toBe(next());
         for (const want of ['2 of 4', '3 of 4', '4 of 4']) {
@@ -193,11 +202,39 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
             await settle();
             expect(place()).toBe(want);
         }
-        expect(next()!.disabled).toBe(true);
-        expect(prev()!.disabled).toBe(false);
+        expect(next()!.getAttribute('aria-disabled')).toBe('true');
+        expect(prev()!.getAttribute('aria-disabled')).toBe('false');
         prev()!.click();
         await settle();
         expect(place()).toBe('3 of 4');
+    });
+
+    it('keeps the keyboard focus on "Next slide" when it reaches the last slide, and a further press does nothing', async () => {
+        open([series()]);
+        await settle();
+        next()!.focus();
+        for (let i = 0; i < 3; i++) {
+            next()!.click();
+            await settle();
+        }
+        expect(place()).toBe('4 of 4');
+        expect(document.activeElement).toBe(next());
+        expect(next()!.getAttribute('aria-disabled')).toBe('true');
+        expect(next()!.className).toMatch(/aria-disabled:opacity-40/);
+        next()!.click();
+        await settle();
+        expect(place()).toBe('4 of 4');
+        expect(document.activeElement).toBe(next());
+        // The same at the start for "Previous slide".
+        for (let i = 0; i < 3; i++) {
+            prev()!.click();
+            await settle();
+        }
+        prev()!.focus();
+        prev()!.click();
+        await settle();
+        expect(place()).toBe('1 of 4');
+        expect(document.activeElement).toBe(prev());
     });
 
     it('shows the current slide, each with its place in its footer, and its own fixed headline', async () => {
@@ -215,6 +252,34 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
             expect(document.querySelector('[data-fixed-headline]')?.textContent?.trim()).toBe(real.headlineOf(SLIDES[i]));
             expect(document.body.textContent).toContain('This card’s headline is fixed, so it stays neutral.');
         }
+    });
+
+    it('gives every slide the series’ link, the first slide’s, so every footer shows the same line', async () => {
+        open([series()]);
+        await settle();
+        const link = siteUrl(SLIDES[0].path).replace(/^https?:\/\//, '');
+        const feet: string[] = [];
+        for (let i = 0; i < 4; i++) {
+            if (i) {
+                next()!.click();
+                await settle();
+            }
+            const el = document.querySelector('[data-preview] [data-link]')!;
+            expect(el.textContent).toBe(`${i + 1} of 4${link}`);
+            const brand = [...document.querySelectorAll('[data-preview] [data-footer] text')].some((t) => t.textContent === 'Kenya Electoral Map');
+            feet.push(JSON.stringify([el.getAttribute('x'), el.getAttribute('font-size'), el.getAttribute('text-anchor'), brand]));
+        }
+        expect(new Set(feet).size).toBe(1);
+        // The slides' own links differ: the series' link is not any slide's own but the first's.
+        expect(new Set(SLIDES.map((v) => v.path)).size).toBe(4);
+    });
+
+    it('a card outside a series keeps its own link', async () => {
+        open([plain, series()]);
+        await settle();
+        expect(document.querySelector('[data-preview] [data-link]')).toBeNull();
+        const texts = [...document.querySelectorAll('[data-preview] [data-footer] text')].map((t) => t.textContent);
+        expect(texts.at(-1)).toBe(siteUrl(plain.view.path).replace(/^https?:\/\//, ''));
     });
 
     it('a card outside a series has no page text', async () => {
@@ -328,6 +393,71 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
         expect(place()).toBe('2 of 4');
     });
 
+    it('keeps the focus on "Download all 4" while it runs, ignores a second press, and has one live region speak', async () => {
+        open([series()]);
+        await drawAll();
+        const all = button('Download all 4')!;
+        all.focus();
+        all.click();
+        await settle();
+        expect(document.activeElement).toBe(all);
+        expect(all.disabled).toBe(false);
+        expect(all.getAttribute('aria-disabled')).toBe('true');
+        // On the second slide, "Download all" and the stepper are pressed: nothing changes.
+        for (let round = 0; round < 40 && status() !== 'Drawing 2 of 4…'; round++) {
+            await settle();
+            const waiting = renders.find((r) => !(r as { done?: boolean }).done);
+            if (waiting) {
+                (waiting as { done?: boolean }).done = true;
+                waiting.resolve('data:image/png;base64,ALL');
+            }
+        }
+        expect(status()).toBe('Drawing 2 of 4…');
+        // Every line the progress region shows from here on.
+        const lines: string[] = [];
+        const region = document.querySelector('[aria-live="polite"]')!;
+        const watch = new MutationObserver(() => lines.push(region.textContent?.trim() ?? ''));
+        watch.observe(region, { childList: true, subtree: true, characterData: true });
+        all.click();
+        prev()!.click();
+        await settle();
+        expect(place()).toBe('2 of 4');
+        next()!.click();
+        await settle();
+        expect(place()).toBe('2 of 4');
+        expect(status()).toBe('Drawing 2 of 4…');
+        all.focus();
+        const speaking = () =>
+            [...document.querySelectorAll('[role="dialog"] [aria-live], [role="dialog"] [role="status"]')]
+                .filter((el) => el.getAttribute('aria-live') !== 'off' && /of 4/.test(el.textContent ?? ''))
+                .map((el) => el.textContent?.trim());
+        const seen: string[][] = [];
+        for (let round = 0; round < 20 && !vi.mocked(share.downloadBlob).mock.calls.length; round++) {
+            await settle();
+            if (status().startsWith('Drawing')) seen.push(speaking());
+            // Never back to the first slide: the second press started nothing.
+            expect(status()).not.toBe('Drawing 1 of 4…');
+            expect(document.activeElement).toBe(all);
+            await drawAll('ALL');
+        }
+        await new Promise((r) => setTimeout(r, 1200));
+        await settle();
+        watch.disconnect();
+        // The second press started no run of its own: never back to the first slide.
+        expect(lines).not.toContain('Drawing 1 of 4…');
+        expect([...new Set(lines.filter((l) => /^Drawing \d/.test(l)))]).toEqual(['Drawing 3 of 4…', 'Drawing 4 of 4…']);
+        expect(seen.length).toBeGreaterThan(0);
+        for (const s of seen) {
+            expect(s).toHaveLength(1);
+            expect(s[0]).toMatch(/^Drawing [1-4] of 4/);
+        }
+        expect(share.downloadBlob).toHaveBeenCalledTimes(4);
+        expect(document.activeElement).toBe(all);
+        expect(all.getAttribute('aria-disabled')).toBe('false');
+        // Out of a run the slide's place is a status again.
+        expect(document.querySelector('[data-slide-place]')!.getAttribute('aria-live')).not.toBe('off');
+    });
+
     it('stops "Download all" when the dialog is closed, and saves nothing', async () => {
         const w = open([series()]);
         await drawAll();
@@ -338,6 +468,129 @@ describe('ShareViewDialog: a card that is a series of slides', () => {
         await new Promise((r) => setTimeout(r, 1200));
         await settle();
         expect(share.downloadBlob).not.toHaveBeenCalled();
+    });
+
+    /** Press "Download all 4" (or "Share all 4") and draw every map until `done()`. */
+    async function runAll(name: string, done: () => boolean, tag = 'ALL') {
+        button(name)!.click();
+        for (let round = 0; round < 25 && !done(); round++) await drawAll(tag);
+    }
+    const saved = () => vi.mocked(share.downloadBlob).mock.calls;
+
+    it('saves nothing more when the dialog is closed while the files are being saved', async () => {
+        const w = open([series()]);
+        await drawAll();
+        await runAll('Download all 4', () => saved().length > 0);
+        // The first file is saved; the next three are 250 ms apart.
+        expect(saved()).toHaveLength(1);
+        await w.setProps({ open: false });
+        await new Promise((r) => setTimeout(r, 1200));
+        await settle();
+        expect(saved()).toHaveLength(1);
+    });
+
+    it('saves nothing when the dialog is closed and opened again while the slides are drawn', async () => {
+        const w = open([series()]);
+        await drawAll();
+        button('Download all 4')!.click();
+        // One map at a time, until the run is on the second slide.
+        for (let round = 0; round < 40 && !/^Drawing [2-4]/.test(status()); round++) {
+            await settle();
+            const waiting = renders.find((r) => !(r as { done?: boolean }).done);
+            if (waiting) {
+                (waiting as { done?: boolean }).done = true;
+                waiting.resolve('data:image/png;base64,ALL');
+            }
+        }
+        expect(status()).toMatch(/^Drawing [2-4] of 4/);
+        // Closed and opened again before the run reaches its saving: that run is over.
+        await w.setProps({ open: false });
+        await w.setProps({ open: true });
+        await drawAll('AGAIN');
+        await new Promise((r) => setTimeout(r, 1200));
+        await settle();
+        expect(saved()).toHaveLength(0);
+    });
+
+    it('a second "Download all" in the same size and colours reuses the images made the first time', async () => {
+        open([series()]);
+        await drawAll();
+        await runAll('Download all 4', () => saved().length === 4);
+        await new Promise((r) => setTimeout(r, 1200));
+        await settle();
+        const first = saved().map((c) => c[0]);
+        const made = vi.mocked(svgToPng).mock.calls.length;
+        await runAll('Download all 4', () => saved().length === 8);
+        await new Promise((r) => setTimeout(r, 1200));
+        await settle();
+        expect(saved().slice(4).map((c) => c[0])).toEqual(first);
+        expect(vi.mocked(svgToPng).mock.calls.length).toBe(made);
+    });
+
+    for (const [what, pick] of [
+        ['size', () => document.querySelector<HTMLInputElement>('input[name="view-size"][value="portrait"]')!.click()],
+        ['colours', () => document.querySelector<HTMLInputElement>('input[name="view-theme"][value="light"]')!.click()],
+    ] as const)
+        it(`makes the images again when the ${what} changed between two "Download all"`, async () => {
+            open([series()]);
+            await drawAll();
+            await runAll('Download all 4', () => saved().length === 4);
+            await new Promise((r) => setTimeout(r, 1200));
+            await settle();
+            const first = saved().map((c) => c[0]);
+            pick();
+            await drawAll('OTHER');
+            await runAll('Download all 4', () => saved().length === 8);
+            await new Promise((r) => setTimeout(r, 1200));
+            await settle();
+            const second = saved().slice(4);
+            expect(second).toHaveLength(4);
+            for (const [blob] of second) expect(first).not.toContain(blob);
+            if (what === 'size') for (const [, name] of second) expect(name).toMatch(/-portrait-\d-of-4\.png$/);
+        });
+
+    it('when the browser blocks the share (the tap was too long ago), says to tap again, and the second tap shares the same images', async () => {
+        vi.mocked(share.canShareFiles).mockReturnValue(true);
+        vi.mocked(share.shareFiles).mockResolvedValueOnce('blocked');
+        open([series()]);
+        await drawAll();
+        await runAll('Share all 4', () => vi.mocked(share.shareFiles).mock.calls.length > 0, 'SHARE');
+        await settle();
+        expect(status()).toBe('The 4 images are ready. Tap Share all 4 again to send them.');
+        const made = vi.mocked(svgToPng).mock.calls.length;
+        button('Share all 4')!.click();
+        await settle();
+        expect(share.shareFiles).toHaveBeenCalledTimes(2);
+        const [a, b] = vi.mocked(share.shareFiles).mock.calls;
+        expect(b[0]).toEqual(a[0]);
+        expect(vi.mocked(svgToPng).mock.calls.length).toBe(made);
+        expect(share.downloadBlob).not.toHaveBeenCalled();
+    });
+
+    it('saves the four files where the device cannot share them all', async () => {
+        vi.mocked(share.canShareFiles).mockReturnValue(true);
+        vi.mocked(share.shareFiles).mockResolvedValueOnce('unavailable');
+        open([series()]);
+        await drawAll();
+        await runAll('Share all 4', () => vi.mocked(share.shareFiles).mock.calls.length > 0, 'SHARE');
+        await new Promise((r) => setTimeout(r, 1200));
+        await settle();
+        expect(saved().map((c) => c[1])).toEqual(
+            SLIDES.map((v, i) => real.filenameOf(v, 'square').replace(/\.png$/, `-${i + 1}-of-4.png`)),
+        );
+        expect(status()).toMatch(/^Saved 4 images/);
+    });
+
+    it('orders a series’ buttons with the primary one first', async () => {
+        open([series()]);
+        await settle();
+        const names = () => [...document.querySelectorAll('[data-series-actions] button')].map((b) => b.textContent?.trim());
+        expect(names()).toEqual(['Download all 4', 'Download PNG', 'Copy caption']);
+        for (const w of mounted.splice(0)) w.unmount();
+        vi.mocked(share.canShareFiles).mockReturnValue(true);
+        open([series()]);
+        await settle();
+        expect(names()).toEqual(['Share all 4', 'Download PNG', 'Download all 4', 'Copy caption']);
     });
 
     it('a slide that cannot be drawn gives the usual error and saves nothing', async () => {

@@ -15,7 +15,6 @@ import { viewPath } from './viewState';
 
 /** The seats a county has more than one of. */
 export type VersusSeat = 'mp' | 'mca';
-export const VERSUS_SEATS: readonly VersusSeat[] = ['mp', 'mca'];
 
 export const VERSUS_SCOPE = 'Maps are not to the same scale.';
 /** "No approved data yet": a county seat with no approved holder, as the leaders strip says it. */

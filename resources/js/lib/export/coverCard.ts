@@ -94,9 +94,12 @@ export const coverHeadline = (card: Pick<CoverCardView, 'county' | 'counts'>): s
 export const coverKicker = (card: Pick<CoverCardView, 'county'>): string =>
     `${card.county.name} County`;
 
+/** The scope line's last sentence, which a wrapped scope line keeps on one line. */
+export const COVER_SWIPE = 'Swipe for each.';
+
 /** "1 governor, 1 senator, 1 woman rep, 12 MPs and 60 MCAs. Swipe for each." */
 export const coverScope = (card: Pick<CoverCardView, 'counts'>): string =>
-    `1 governor, 1 senator, 1 woman rep, ${count(card.counts.constituencies, 'MP', 'MPs')} and ${count(card.counts.wards, 'MCA', 'MCAs')}. Swipe for each.`;
+    `1 governor, 1 senator, 1 woman rep, ${count(card.counts.constituencies, 'MP', 'MPs')} and ${count(card.counts.wards, 'MCA', 'MCAs')}. ${COVER_SWIPE}`;
 
 /** The cover's map: the county on the MCA seat, nothing highlighted, no MP outlines. */
 export const coverSpec = (card: CoverCardView): ViewMapSpec => ({

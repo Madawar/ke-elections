@@ -1144,12 +1144,32 @@ function topCountiesOf(seat: ColourKey, only: readonly string[]) {
     });
     return card.rows.length ? card : null;
 }
+/** A county's carousel (cover, leaders, MP, MCA), for a county in focus; otherwise null. */
+const carouselOf = (focus: FocusSelection | null) =>
+    index.value && focus?.level === 'county'
+        ? carouselCard({
+              seats: seats.value,
+              index: index.value,
+              county: focus.code,
+              theme: theme.value,
+              showSurroundings: showSurroundings.value,
+              mpOutlines: mpOutlines.value,
+          })
+        : null;
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
     const focus = focusOf(selection.value);
     if (k === COUNTY_SEATS) {
-        if (focus) return shareLeaders();
+        // A county on the striped map: its leaders card (the dialog opens on it), then its
+        // carousel. ("Share leaders" in the panel still offers the leaders card alone.)
+        if (focus) {
+            const carousel = carouselOf(focus);
+            sharedCards.value = shareCards([leadersOf(focus)]).concat(
+                carousel ? [carousel] : [],
+            );
+            return;
+        }
         // All of Kenya on the striped map: the national cards, with no "This view".
         sharedCards.value = shareCards([
             fiveSeatsCardView({ seats: seats.value, index: index.value, theme: theme.value }),
@@ -1171,17 +1191,7 @@ function shareView() {
               ]
             : [];
     // A county on any seat view: its carousel (cover, leaders, MP, MCA), last.
-    const carousel =
-        focus?.level === 'county'
-            ? carouselCard({
-                  seats: seats.value,
-                  index: index.value,
-                  county: focus.code,
-                  theme: theme.value,
-                  showSurroundings: showSurroundings.value,
-                  mpOutlines: mpOutlines.value,
-              })
-            : null;
+    const carousel = carouselOf(focus);
     // "This view", then the other cards for what is in view: one line each.
     sharedCards.value = shareCards([
         snapshotView({
