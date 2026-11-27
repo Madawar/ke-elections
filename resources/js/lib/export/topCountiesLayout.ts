@@ -3,17 +3,17 @@
 // footer). Every box and every line of text is placed here, so the card component only draws what
 // this returns and tests can check that nothing overlaps, runs off the card or is cut.
 //
-// Square: the ranked rows on the left, the map of Kenya on the right with its caption and key
-// under it. Story: the rows across the width, and under them the map with its caption and key
-// beside it. Each row is rank, county name (bold), a bar on one scale from zero, the count (bold)
-// right after the bar, and "of 40 wards" in a column of its own, with a hairline under the row.
+// Square: the ranked rows on the left, the map of Kenya on the right with its caption under it.
+// Story: the rows across the width, and under them the map, centred, with its caption under it.
+// Each row is rank, county name (bold), a bar on one scale from zero, the count (bold) right after
+// the bar, and "of 40 wards" in a column of its own, with a hairline under the row. The rows' type
+// and height come from the room there is; a long "of 12 constituencies" narrows its own column's
+// type and the bars' track, never the rows.
 import type { Box, FooterFonts, TextItem } from './layout';
 import type { ViewSize } from './sizes';
 import { fitFontSize, textWidth, wrapText } from './text';
 import {
     type TopCountiesCardView,
-    countyShade,
-    shadeRange,
     topCountiesMapCaption,
     topCountiesNote,
     topCountiesScope,
@@ -27,7 +27,6 @@ import {
     titleBlock,
 } from './viewLayout';
 import { viewMapAspect } from './viewMap';
-import { THEMES } from '@/lib/map/theme';
 
 export interface TopCountiesRowItem {
     code: number;
@@ -44,12 +43,6 @@ export interface TopCountiesRowItem {
     rule: Box;
 }
 
-export interface TopCountiesKeyItem {
-    swatch: Box & { colour: string };
-    /** "4 seats". */
-    label: TextItem;
-}
-
 export interface TopCountiesLayout {
     w: number;
     h: number;
@@ -62,9 +55,8 @@ export interface TopCountiesLayout {
     rows: TopCountiesRowItem[];
     note: TextItem[];
     map: Box;
+    /** "The 10 counties shaded", centred under the map. */
     mapCaption: TextItem;
-    /** The shade's key: the fewest and the most seats the map shows, each in its shade. */
-    key: TopCountiesKeyItem[];
     footerBox: Box;
     footerFonts: FooterFonts;
 }
@@ -80,9 +72,13 @@ const fmt = (n: number) => n.toLocaleString('en-GB');
 const SCALES = [1.08, 1, 0.94, 0.88, 0.82, 0.76, 0.7];
 /** A row's height for its type size (a story's rows sit a little closer), and the most it may open up to. */
 const ROW_H = { square: 1.9, story: 1.75 } as Record<ViewSize, number>;
-const ROW_MAX = 2.15;
-/** The bars keep at least this share of the rows' width. */
+const ROW_MAX = 2.1;
+/** The bars keep at least this share of the rows' width, while the right-hand column can narrow. */
 const BAR_MIN = 0.28;
+/** The least the bars' track may then shrink to, before the rows' type would have to. */
+const BAR_FLOOR = 0.2;
+/** The right-hand column's type may narrow to this share of the rows' (not below the card's small text). */
+const OF_MIN = 0.75;
 /** The story's map, under the rows, is at least this share of the width tall. */
 const STORY_MAP_MIN = 0.42;
 /** A name takes at most this share of the rows' width before it shrinks, then wraps. */
@@ -90,6 +86,8 @@ const NAME_MAX = 0.36;
 
 interface Columns {
     size: number;
+    /** The right-hand column's type size ("of 40 wards"): the rows' size, or narrower. */
+    ofSize: number;
     rankW: number;
     nameX: number;
     nameW: number;
@@ -100,12 +98,17 @@ interface Columns {
     ofX: number;
 }
 
-/** Where a row's parts go at one type size, or null when the bars would be too short. */
+/**
+ * Where a row's parts go at one type size, or null when the bars would be too short. A long
+ * right-hand column first narrows its own type (to OF_MIN, not below `small`), then the bars'
+ * track shortens (to BAR_FLOOR): the rank, name and count keep the rows' size.
+ */
 function columnsAt(
     card: TopCountiesCardView,
     x: number,
     w: number,
     size: number,
+    small: number,
 ): Columns | null {
     const gap = Math.round(size * 0.6);
     const rankW = Math.ceil(
@@ -121,16 +124,24 @@ function columnsAt(
             ...card.rows.map((r) => textWidth(fmt(r.count), size, true)),
         ),
     );
-    const ofW = Math.ceil(
-        Math.max(0, ...card.rows.map((r) => textWidth(r.of, size))),
-    );
     const nameX = x + rankW + Math.round(size * 0.45);
     const barX = nameX + nameW + gap;
-    const ofX = x + w - ofW;
     const countGap = Math.round(size * 0.35);
-    const barMax = ofX - gap - countW - countGap - barX;
-    if (barMax < w * BAR_MIN) return null;
-    return { size, rankW, nameX, nameW, barX, barMax, countGap, ofX };
+    const at = (ofSize: number) => {
+        const ofW = Math.ceil(
+            Math.max(0, ...card.rows.map((r) => textWidth(r.of, ofSize))),
+        );
+        const ofX = x + w - ofW;
+        const barMax = ofX - gap - countW - countGap - barX;
+        return { size, ofSize, rankW, nameX, nameW, barX, barMax, countGap, ofX };
+    };
+    const least = Math.min(size, Math.max(small, Math.round(size * OF_MIN)));
+    for (let ofSize = size; ofSize >= least; ofSize--) {
+        const cols = at(ofSize);
+        if (cols.barMax >= w * BAR_MIN) return cols;
+    }
+    const cols = at(least);
+    return cols.barMax >= w * BAR_FLOOR ? cols : null;
 }
 
 /** A name at the row's size, or a little smaller, or on two lines: never cut. */
@@ -209,7 +220,7 @@ function rowAt(
             x: cols.ofX,
             y: baseline,
             text: r.of,
-            size,
+            size: cols.ofSize,
             tone: 'muted',
         },
         rule: box(x, y + h - 1, w, 1),
@@ -224,12 +235,13 @@ function rowsFit(
     base: number,
     room: number,
     pitch: number,
+    small: number,
 ): { cols: Columns; h: number } {
     const n = Math.max(1, card.rows.length);
     let last: { cols: Columns; h: number } | null = null;
     for (const scale of SCALES) {
         const size = Math.round(base * scale);
-        const cols = columnsAt(card, x, w, size);
+        const cols = columnsAt(card, x, w, size, small);
         if (!cols) continue;
         const h = Math.round(size * pitch);
         last = { cols, h };
@@ -242,8 +254,9 @@ function rowsFit(
     const size = Math.round(base * SCALES[SCALES.length - 1]);
     return (
         last ?? {
-            cols: columnsAt(card, x, w, size) ?? {
+            cols: columnsAt(card, x, w, size, small) ?? {
                 size,
+                ofSize: size,
                 rankW: 0,
                 nameX: x,
                 nameW: Math.floor(w * NAME_MAX),
@@ -285,58 +298,26 @@ function balanced(lines: TextItem[], w: number): TextItem[] {
     ];
 }
 
-/** The note's lines, the caption and the key, laid out from `y` in a column `w` wide. */
-function mapNotes(
+/** "The 10 counties shaded", centred directly under the map, at most `w` wide. */
+function mapCaption(
     card: TopCountiesCardView,
-    x: number,
-    y: number,
+    map: Box,
     w: number,
     size: number,
-): { caption: TextItem; key: TopCountiesKeyItem[]; bottom: number } {
-    const caption: TextItem = {
-        x,
-        y: Math.round(y + size * 0.9),
-        text: topCountiesMapCaption(card),
-        size: fitFontSize(topCountiesMapCaption(card), w, size, Math.round(size * 0.8)),
+): TextItem {
+    const text = topCountiesMapCaption(card);
+    const fitted = fitFontSize(text, w, size, Math.round(size * 0.8));
+    return {
+        x: Math.round(map.x + map.w / 2 - textWidth(text, fitted) / 2),
+        y: Math.round(map.y + map.h + fitted * 1.15),
+        text,
+        size: fitted,
         tone: 'muted',
     };
-    const range = shadeRange(card);
-    const theme = THEMES[card.theme];
-    const counts = range
-        ? range.min === range.max
-            ? [range.min]
-            : [range.min, range.max]
-        : [];
-    const sw = Math.round(size * 0.9);
-    const keyY = Math.round(caption.y + size * 1.55);
-    let kx = x;
-    const key = counts.map((n): TopCountiesKeyItem => {
-        const text = `${fmt(n)} ${n === 1 ? 'seat' : 'seats'}`;
-        const item: TopCountiesKeyItem = {
-            swatch: {
-                x: kx,
-                y: keyY - Math.round(size * 0.78),
-                w: sw,
-                h: sw,
-                colour: countyShade(n, range!.min, range!.max, theme),
-            },
-            label: {
-                x: kx + sw + Math.round(size * 0.35),
-                y: keyY,
-                text,
-                size,
-                tone: 'ink',
-            },
-        };
-        kx = item.label.x + Math.ceil(textWidth(text, size)) + Math.round(size * 0.9);
-        return item;
-    });
-    return {
-        caption,
-        key,
-        bottom: (key.length ? keyY : caption.y) + Math.round(size * 0.3),
-    };
 }
+
+/** The caption's height under the map, from the map's foot to the caption's foot. */
+const captionH = (size: number) => Math.round(size * 1.45);
 
 export function topCountiesLayout(
     size: ViewSize,
@@ -393,10 +374,14 @@ export function topCountiesLayout(
 
     // The story's map block under the rows: its least height, so the rows leave room for it.
     const storyMapMin = story ? Math.round(innerW * STORY_MAP_MIN) : 0;
+    // On the square the note runs the full width under the map's caption whenever the rows
+    // reach below it (as they do with more than a handful), so that is the room it takes.
+    const mapBlockH = Math.round(mapColW / aspect) + captionH(small);
+    const noteFull = !story && bodyBottom - y - noteH(1) > mapBlockH + small * 2;
     const rowsRoom =
         bodyBottom -
         y -
-        noteH(noteAt(rowsW, small).length) -
+        noteH(noteAt(noteFull ? innerW : rowsW, small).length) -
         (story ? storyMapMin + tight : 0);
     const fit = rowsFit(
         card,
@@ -405,6 +390,7 @@ export function topCountiesLayout(
         spec.row.label,
         rowsRoom,
         ROW_H[size] ?? ROW_H.square,
+        small,
     );
     const rows = card.rows.map((_, i) =>
         rowAt(card, i, y + i * fit.h, fit.h, fit.cols, pad, rowsW),
@@ -415,38 +401,33 @@ export function topCountiesLayout(
     const firstNoteY = Math.round(y + noteSize * 1.45);
 
     let map: Box;
-    let notes: ReturnType<typeof mapNotes>;
+    let caption: TextItem;
     let noteW = rowsW;
     if (story) {
-        // The map as large as the room under the rows allows, its caption and key beside it.
+        // Under the rows and the note: the map as tall as the room before the footer allows,
+        // centred in the content width, with its caption directly under it.
         const noteBottom = noteText
             ? firstNoteY +
               Math.round((noteAt(rowsW, noteSize).length - 1) * noteSize * 1.4) +
               Math.round(noteSize * 0.4)
             : y;
         const blockTop = Math.round(noteBottom + tight);
-        const room = bodyBottom - blockTop;
-        const sideW = Math.round(innerW * 0.34);
-        const mapW = Math.min(
-            innerW - sideW - gap,
-            Math.round(Math.max(0, room) * aspect),
+        const mapH = Math.max(0, bodyBottom - blockTop - captionH(noteSize));
+        const mapW = Math.min(innerW, Math.round(mapH * aspect));
+        map = box(
+            pad + Math.round((innerW - mapW) / 2),
+            blockTop,
+            mapW,
+            Math.round(mapW / aspect),
         );
-        map = box(pad, blockTop, mapW, Math.round(mapW / aspect));
-        notes = mapNotes(
-            card,
-            pad + mapW + gap,
-            Math.round(map.y + map.h - noteSize * 3.6),
-            innerW - mapW - gap,
-            noteSize,
-        );
+        caption = mapCaption(card, map, innerW, noteSize);
     } else {
-        // Beside the rows, from the first row down, with its caption and key under it.
+        // Beside the rows, from the first row down, with its caption under it.
         const x = pad + rowsW + gap;
         const firstRow = rows[0]?.box.y ?? bodyTop;
-        const notesH = Math.round(noteSize * 3.8);
         const mapH = Math.min(
             Math.round(mapColW / aspect),
-            bodyBottom - firstRow - notesH,
+            bodyBottom - firstRow - captionH(noteSize),
         );
         const mapW = Math.min(mapColW, Math.round(mapH * aspect));
         map = box(
@@ -455,15 +436,9 @@ export function topCountiesLayout(
             mapW,
             Math.round(mapW / aspect),
         );
-        notes = mapNotes(
-            card,
-            x,
-            map.y + map.h + Math.round(noteSize * 0.6),
-            mapColW,
-            noteSize,
-        );
-        // Under the map's words, the note may run the card's full width.
-        if (firstNoteY - noteSize > notes.bottom + noteSize) noteW = innerW;
+        caption = mapCaption(card, map, mapColW, noteSize);
+        // Under the map's caption, the note may run the card's full width.
+        if (firstNoteY - noteSize > caption.y + noteSize) noteW = innerW;
     }
     const note: TextItem[] = noteAt(noteW, noteSize).map((line, i) => ({
         x: pad,
@@ -485,8 +460,7 @@ export function topCountiesLayout(
         rows,
         note,
         map,
-        mapCaption: notes.caption,
-        key: notes.key,
+        mapCaption: caption,
         footerBox,
         footerFonts: spec.footer,
     };

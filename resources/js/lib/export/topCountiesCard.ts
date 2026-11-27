@@ -185,63 +185,19 @@ export function topCountiesMapCaption(card: Pick<TopCountiesCardView, 'rows'>): 
           : `The ${n} counties shaded`;
 }
 
-const hex = (c: string) =>
-    [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-const toHex = (rgb: number[]) =>
-    `#${rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
-
-/** The weakest and strongest shade, as shares of the way from the land colour to the ink. */
-const SHADE = { from: 0.4, to: 0.82 };
-
 /**
- * A county's shade for its count: the theme's ink laid over its land, stronger for more seats, on
- * one scale from the fewest to the most the list shows. It is a count, never a party's colour, so
- * it is drawn in the card's own neutral tones (dark on light, light on dark). The strongest stops
- * short of the ink so the county lines stay visible between shaded counties.
- */
-export function countyShade(
-    count: number,
-    min: number,
-    max: number,
-    theme: MapTheme,
-): string {
-    const t =
-        max > min
-            ? SHADE.from + ((count - min) / (max - min)) * (SHADE.to - SHADE.from)
-            : SHADE.to;
-    const [a, b] = [hex(theme.land), hex(theme.ink)];
-    return toHex(a.map((v, i) => v + (b[i] - v) * t));
-}
-
-/** The counts the shade runs between: the fewest and the most the list shows. */
-export function shadeRange(
-    card: Pick<TopCountiesCardView, 'rows'>,
-): { min: number; max: number } | null {
-    if (!card.rows.length) return null;
-    const counts = card.rows.map((r) => r.count);
-    return { min: Math.min(...counts), max: Math.max(...counts) };
-}
-
-/**
- * The map's colouring: the listed counties, by IEBC code, in their count's shade; every other
- * county in the no-data colour. It colours county fills, so the map spec that carries it names a
- * seat held at the county (see `colouring` in lib/export/viewMap.ts).
+ * The map's colouring: the listed counties, by IEBC code, flat in the group's data colour (the
+ * bars' colour, so the map and the bars read as one thing); every other county in the no-data
+ * colour. It colours county fills, so the map spec that carries it names a seat held at the county
+ * (see `colouring` in lib/export/viewMap.ts).
  */
 export function topCountiesColouring(
-    card: Pick<TopCountiesCardView, 'rows'>,
+    card: Pick<TopCountiesCardView, 'rows' | 'colour'>,
     theme: MapTheme,
 ): Colouring {
-    const range = shadeRange(card);
     return {
         mode: { kind: 'seat', seat: 'governor' },
-        colours: new Map(
-            range
-                ? card.rows.map((r) => [
-                      r.code,
-                      countyShade(r.count, range.min, range.max, theme),
-                  ])
-                : [],
-        ),
+        colours: new Map(card.rows.map((r) => [r.code, card.colour])),
         fallback: theme.noData,
     };
 }

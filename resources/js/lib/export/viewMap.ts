@@ -41,7 +41,15 @@ export type ViewMapSpec = Pick<
      * seat held at the county, such as `governor`, and no focus.
      */
     colouring?: Colouring;
+    /**
+     * Draw each county line over a wider halo in the card's land colour, so the line between two
+     * counties filled in one colour (the top-10 map) still shows, in either theme.
+     */
+    haloCountyLines?: boolean;
 };
+
+/** The halo's width in pixels behind each county line, where a spec asks for one. */
+export const COUNTY_HALO_WIDTH = 3.2;
 
 export interface ViewMapContext {
     manifest: Record<string, string>;
@@ -139,6 +147,23 @@ export function viewStyle(
             l.type === 'background'
                 ? { ...l, paint: { 'background-color': theme.land } }
                 : l,
+        )
+        .flatMap((l): LayerSpecification[] =>
+            view.haloCountyLines && l.id === 'counties-line'
+                ? [
+                      {
+                          id: 'counties-line-halo',
+                          type: 'line',
+                          source: 'counties',
+                          layout: { 'line-join': 'round' },
+                          paint: {
+                              'line-color': theme.land,
+                              'line-width': COUNTY_HALO_WIDTH,
+                          },
+                      },
+                      l,
+                  ]
+                : [l],
         );
     return { ...base, layers };
 }

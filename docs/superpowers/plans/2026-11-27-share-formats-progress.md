@@ -54,6 +54,11 @@ wrapped in the rows' column under an empty map column (it takes the full width t
 faint lowest shade on the dark map. The seat view, leaders and party PNGs are still
 byte-identical.
 
+After the owner's look at Task C: the map is back to the plan (flat group colour, no key, a halo
+on the county lines), the rows no longer shrink for a long "of N constituencies", and the story's
+map is centred with its caption under it (see the rulings). Downloaded again in the eight
+combinations and looked at; the seat view, leaders and party PNGs are still byte-identical.
+
 ## Rulings
 
 Each one: what was decided, why, and what it costs if it is wrong.
@@ -140,12 +145,33 @@ Each one: what was decided, why, and what it costs if it is wrong.
   a map counts as finished only then too, so a later drawing of the same key is never forgotten
   by an older one's skip — cost if wrong: none.
 
-- **Ruling: the top-10 map is a neutral count scale, not the group's colour** (review note,
-  over the plan's "filled in the group's colour"): the listed counties are the theme's ink laid
-  over its land, 40% for the fewest the list shows to 82% for the most, the rest no-data; a key
-  under the caption gives the two ends ("4 seats", "9 seats", in their shades). The bars keep the
-  group's data colour, as the plan says, because they are the legend's counts in the legend's
-  colour — cost if wrong: `countyShade` and `SHADE` in `topCountiesCard.ts`.
+- ~~**Ruling: the top-10 map is a neutral count scale, not the group's colour**~~ **Superseded**
+  (owner's eye, after Task C): the ink count scale and its two-ended key came from a brief that was
+  a mistake. On the dark card the strongest shade was near-white, so the map no longer read as the
+  same thing as the bars. Now as the plan and mock-up 8 have it:
+- **Ruling: the top-10 map fills the listed counties flat in the group's data colour (the bars'
+  colour), the rest in the no-data colour, captioned "The 10 counties shaded", with no key** —
+  map and bars read as one thing — cost if wrong: `topCountiesColouring` in `topCountiesCard.ts`.
+- **Ruling: the top-10 map's county lines are drawn over a 3.2px halo in the card's land colour**
+  (`ViewMapSpec.haloCountyLines`, only this map sets it). Without it the line between two listed
+  counties all but vanished: #E8EEF0 on the independents' #E4C6D2 (dark) and navy on #4E3F4B
+  (light). With it Kitui and Makueni stay apart in both themes (looked at, zoomed) — cost if
+  wrong: one layer in `viewStyle`.
+- **Ruling: the top-10 rows take their type size and height from the room alone** (up to 1.08 of
+  the row label size and 2.1 × that size per row, about the mock-up's rows); a long right-hand
+  column ("of 12 constituencies") first narrows its own type (to 75%, not below the card's small
+  text), then the bars' track (to 20% of the rows' width), never the rows. On the square the room
+  is taken with the note at the full width, as it is drawn under the map's caption. The MP and MCA
+  square cards now both have 27px rows 57px high (UDA/MP was 22px and 47px) — cost if wrong:
+  `OF_MIN`, `BAR_FLOOR`, `ROW_MAX` in `topCountiesLayout.ts`.
+- **Ruling: the top-10 story's map is centred in the content width (72 to 960) under the rows and
+  note, with its caption centred directly under it, as tall as the room before the footer** —
+  the height is not there for it to be larger without smaller rows: between the note (baseline
+  906) and the footer (1339) there are 433px; less the gap (22), the caption (38) and the space
+  under the note, the map is 280 × 341, against 311 × 379 before (when the caption sat beside it).
+  A map about 440 tall would need about 100px from the rows (row pitch 51 to about 41 on the MP
+  story). The rows were left as they are, as asked; the owner decides — cost if wrong:
+  `STORY_MAP_MIN` in `topCountiesLayout.ts`.
 - **Ruling: the map spec is seat `governor`, no focus, no highlight, with the card's colouring**
   (`mode: { kind: 'seat', seat: 'governor' }`), so the county fills are what is coloured and no
   ward lines are drawn; said in `ViewMapSpec.colouring`'s doc comment — cost if wrong: one spec.
@@ -172,7 +198,8 @@ Each one: what was decided, why, and what it costs if it is wrong.
   constituency offers the party card alone, as the ranking is national — cost if wrong: one
   condition in `shareParty`.
 - **Ruling: the strip draws the ranked seat's lid deeper** (MP or MCA), as the seat views do —
-  cost if wrong: one argument.
+  checked: `viewLayout` calls `strip(w, spec.stripH, view.seat)`, so "This view" draws its seat's
+  lid deeper too; kept — cost if wrong: one argument.
 - **Ruling: the dialog copy is "Share top 10 counties" / "The counties where <group> hold(s) the
   most <seat> seats, sized for Instagram or stories."; the file is
   `kenya-electoral-map-top-counties-<group>-<seat>-<size>.png`; the Instagram caption gives the
@@ -196,8 +223,8 @@ Each one: what was decided, why, and what it costs if it is wrong.
   wiring in `Map.vue` and the dialog, not before; the card's own tests were written first.
 - The leaders layout keeps its own copy of the bar-spreading arithmetic; it could use `spread`
   too.
-- On the top-10 story the map block (about 310 × 380) leaves empty room to the right of the map
-  above its caption; the rows take the height first. A bigger map would mean smaller rows.
+- On the top-10 story the map is 280 × 341 (see the ruling): a bigger map would mean smaller
+  rows.
 - `npm run check` (vp check) reports formatting issues in 118 files across the repository,
   as it did before this branch; not fixed here.
 

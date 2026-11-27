@@ -5,7 +5,6 @@ import { topCountiesCaption, xLength } from '@/lib/export/caption';
 import { type Box, type TextItem, footerBlock } from '@/lib/export/layout';
 import {
     type TopCountiesCardView,
-    countyShade,
     topCountiesCardView,
     topCountiesColouring,
     topCountiesHeadline,
@@ -27,7 +26,7 @@ import {
 } from '@/lib/export/shareView';
 import { textWidth } from '@/lib/export/text';
 import { HEADLINE_STRETCH } from '@/lib/export/viewLayout';
-import { viewColouring } from '@/lib/export/viewMap';
+import { viewColouring, viewStyle } from '@/lib/export/viewMap';
 import { buildLegend } from '@/lib/legend';
 import { SEAT_LEVEL } from '@/lib/map/colouring';
 import { ATTRIBUTION, THEMES } from '@/lib/map/theme';
@@ -215,27 +214,27 @@ describe('topCountiesCardView', () => {
 });
 
 describe('the top-10 map', () => {
-    it('shades the listed counties, by code, on a neutral count scale, the rest in the no-data colour', () => {
-        for (const theme of [THEMES.light, THEMES.dark]) {
-            const c = topCountiesColouring(eleven, theme);
-            expect([...c.colours.keys()]).toEqual(
-                eleven.rows.map((r) => r.code),
+    it('fills the listed counties, by code, in the group’s data colour (the bars’ colour), the rest in the no-data colour', () => {
+        for (const theme of ['light', 'dark'] as const) {
+            const c = view(placed('mca', 'IND', ELEVEN), 'mca', 'IND', theme);
+            const colouring = topCountiesColouring(c, THEMES[theme]);
+            expect([...colouring.colours.keys()]).toEqual(
+                c.rows.map((r) => r.code),
             );
-            expect(c.fallback).toBe(theme.noData);
+            // One flat colour, the bars' own, so the map and the bars read as one thing.
+            expect(new Set(colouring.colours.values())).toEqual(
+                new Set([c.colour]),
+            );
+            expect(c.colour).toBe(THEMES[theme].independent);
+            expect(colouring.fallback).toBe(THEMES[theme].noData);
             // The county fills are what is coloured: the spec's seat is held at the county.
-            expect(c.mode).toEqual({ kind: 'seat', seat: 'governor' });
+            expect(colouring.mode).toEqual({ kind: 'seat', seat: 'governor' });
             expect(SEAT_LEVEL.governor).toBe('county');
-            // More seats, a stronger shade; equal counts, the same shade.
-            expect(c.colours.get(15)).toBe(countyShade(9, 4, 9, theme));
-            expect(c.colours.get(8)).toBe(c.colours.get(44));
-            expect(c.colours.get(36)).toBe(countyShade(4, 4, 9, theme));
-            expect(c.colours.get(15)).not.toBe(c.colours.get(36));
-            // Never the group's colour: the shade is a count, not a party.
-            for (const colour of c.colours.values()) {
-                expect(colour).not.toBe(eleven.colour);
-                expect(colour).not.toBe(theme.noData);
-            }
         }
+        const uda = view(NUMBERS_SEATS, 'mp', 'UDA');
+        expect(
+            new Set(topCountiesColouring(uda, THEMES.dark).colours.values()),
+        ).toEqual(new Set([uda.colour]));
     });
 
     it('is the one map slot, of all of Kenya, coloured as above', () => {
@@ -253,6 +252,44 @@ describe('the top-10 map', () => {
                 topCountiesColouring(eleven, THEMES.dark),
             );
         }
+    });
+});
+
+describe('the top-10 map’s county lines', () => {
+    it('draw over a halo in the card’s land colour, so two listed counties side by side stay apart', () => {
+        const ctx = {
+            manifest: {},
+            provinceOfCounty: new Map<number, number>(),
+            index,
+            seats: NUMBERS_SEATS,
+        };
+        const text = { headline: topCountiesHeadline(eleven), url: URL, mapAspect: 0.82 };
+        for (const theme of ['light', 'dark'] as const) {
+            const c = view(placed('mca', 'IND', ELEVEN), 'mca', 'IND', theme);
+            const [slot] = mapSlotsOf('square', c, text);
+            expect(slot.spec.haloCountyLines).toBe(true);
+            const ids = viewStyle(slot.spec, ctx, THEMES[theme]).layers.map(
+                (l) => l.id,
+            );
+            const halo = viewStyle(slot.spec, ctx, THEMES[theme]).layers.find(
+                (l) => l.id === 'counties-line-halo',
+            ) as { paint: Record<string, unknown> };
+            expect(halo.paint['line-color']).toBe(THEMES[theme].land);
+            expect(ids.indexOf('counties-line-halo')).toBe(
+                ids.indexOf('counties-line') - 1,
+            );
+            // Above every fill.
+            expect(ids.indexOf('counties-line-halo')).toBeGreaterThan(
+                ids.indexOf('counties-fill'),
+            );
+        }
+        // Other maps have no halo.
+        const plain = viewStyle(
+            { seat: 'governor', only: [], focus: null, showSurroundings: false },
+            ctx,
+            THEMES.dark,
+        );
+        expect(plain.layers.some((l) => l.id === 'counties-line-halo')).toBe(false);
     });
 });
 
@@ -278,7 +315,6 @@ const texts = (l: TopCountiesLayout): TextItem[] => [
     ...l.rows.flatMap((r) => [r.rank, ...r.name, r.count, r.of]),
     ...l.note,
     l.mapCaption,
-    ...l.key.map((k) => k.label),
 ];
 const layout = (c: TopCountiesCardView, size: (typeof SIZES)[number]) =>
     topCountiesLayout(size, c, {
@@ -341,7 +377,6 @@ describe('topCountiesLayout', () => {
                     ...items,
                     ...l.rows.map((r) => [`bar ${r.code}`, r.bar] as const),
                     ['map', l.map],
-                    ...l.key.map((k, i) => [`swatch ${i}`, k.swatch] as const),
                     ['footer', l.footerBox],
                     ...l.headlineLines.map(
                         (t) => [t.text, textBox(t, HEADLINE_STRETCH)] as const,
@@ -396,17 +431,86 @@ describe('topCountiesLayout', () => {
         );
     });
 
-    it('keys the shade with the lowest and highest counts it shows, in their shades', () => {
-        const l = layout(eleven, 'square');
-        expect(l.key.map((k) => k.label.text)).toEqual(['4 seats', '9 seats']);
-        expect(l.key.map((k) => k.swatch.colour)).toEqual([
-            countyShade(4, 4, 9, THEMES.dark),
-            countyShade(9, 4, 9, THEMES.dark),
-        ]);
-        expect(layout(view(placed('mca', 'IND', { 15: 1 })), 'square').key.map(
-            (k) => k.label.text,
-        )).toEqual(['1 seat']);
-        expect(layout(CASES.nobody, 'square').key).toEqual([]);
+    it('has no key: the caption says what is shaded, centred directly under the map', () => {
+        for (const size of SIZES) {
+            const l = layout(eleven, size);
+            expect('key' in l, size).toBe(false);
+            const cap = textBox(l.mapCaption);
+            expect(
+                Math.abs(cap.x + cap.w / 2 - (l.map.x + l.map.w / 2)),
+                size,
+            ).toBeLessThanOrEqual(1);
+            expect(cap.y, size).toBeGreaterThanOrEqual(l.map.y + l.map.h);
+            expect(cap.y - (l.map.y + l.map.h), size).toBeLessThanOrEqual(
+                l.mapCaption.size,
+            );
+        }
+    });
+
+    it('keeps the rows the same size whatever the right-hand column says; only that column narrows', () => {
+        // Ten counties with many constituencies: "of 17 constituencies" is the longest it gets.
+        const mp = view(
+            placed('mp', 'UDA', {
+                47: 11,
+                22: 9,
+                32: 8,
+                37: 7,
+                39: 6,
+                12: 6,
+                45: 5,
+                3: 5,
+                16: 4,
+                15: 4,
+            }),
+            'mp',
+            'UDA',
+        );
+        expect(mp.rows).toHaveLength(10);
+        expect(mp.rows[0].of).toBe('of 17 constituencies');
+        const short = { ...mp, rows: mp.rows.map((r) => ({ ...r, of: 'of 1' })) };
+        for (const size of SIZES) {
+            const long = layout(mp, size);
+            const s = layout(short, size);
+            expect(long.rows[0].box.h, size).toBe(s.rows[0].box.h);
+            expect(long.rows[0].name[0].size, size).toBe(s.rows[0].name[0].size);
+            expect(long.rows[0].count.size, size).toBe(s.rows[0].count.size);
+            expect(long.rows[0].of.size, size).toBeLessThanOrEqual(
+                long.rows[0].count.size,
+            );
+        }
+        // An MP card and an MCA card of ten rows: the same rows on the square.
+        const a = layout(eleven, 'square');
+        const b = layout(mp, 'square');
+        expect(b.rows[0].box.h).toBe(a.rows[0].box.h);
+        expect(b.rows[0].name[0].size).toBe(a.rows[0].name[0].size);
+        expect(b.rows[0].count.size).toBe(a.rows[0].count.size);
+        // The rows and the note use the room between the scope line and the footer.
+        for (const c of [eleven, mp, CASES.party]) {
+            const l = layout(c, 'square');
+            const end = l.note.length
+                ? l.note.at(-1)!.y
+                : l.rows.at(-1)!.box.y + l.rows.at(-1)!.box.h;
+            expect(
+                (end - l.scopeLine.y) / (l.footerBox.y - l.scopeLine.y),
+                c.group,
+            ).toBeGreaterThanOrEqual(0.8);
+        }
+    });
+
+    it('on the story, centres the map in the content width, under the rows, as tall as the room before the footer allows', () => {
+        for (const c of [eleven, CASES.party]) {
+            const l = layout(c, 'story');
+            // Inside the safe zones: content from the left pad to 120px from the right edge.
+            const centre = (72 + (1080 - 120)) / 2;
+            expect(Math.abs(l.map.x + l.map.w / 2 - centre)).toBeLessThanOrEqual(1);
+            const lastRow = l.rows.at(-1)!.box;
+            const above = l.note.length ? l.note.at(-1)!.y : lastRow.y + lastRow.h;
+            expect(l.map.y).toBeGreaterThan(above);
+            // The caption sits just above the footer: the block takes the height there is.
+            expect(l.footerBox.y - l.mapCaption.y).toBeLessThanOrEqual(
+                l.mapCaption.size * 1.6,
+            );
+        }
     });
 
     it('keeps story text out of the zones TikTok and Reels cover', () => {
@@ -463,7 +567,7 @@ describe('TopCountiesCard', () => {
         expect(draw(eleven, 'story').attributes('viewBox')).toBe('0 0 1080 1920');
     });
 
-    it('shows the headline, the ranked counties, the note, the map with its caption and key, the source, date and link', () => {
+    it('shows the headline, the ranked counties, the note, the map with its caption, the source, date and link', () => {
         const w = draw(eleven);
         expect(
             w
@@ -486,7 +590,7 @@ describe('TopCountiesCard', () => {
             'data:image/png;base64,MAP',
         );
         expect(text).toContain('The 10 counties shaded');
-        expect(w.findAll('[data-key] rect')).toHaveLength(2);
+        expect(w.find('[data-key]').exists()).toBe(false);
         expect(text).toContain('Source: IEBC gazette notices.');
         expect(text).toContain('Data as of 16 July 2026.');
         expect(text).toContain('Boundaries:');

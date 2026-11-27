@@ -255,9 +255,10 @@ const TOP_COUNTIES: CardKind<TopCountiesCardView> = {
     headline: topCountiesHeadline,
     caption: topCountiesCaption,
     layout: topCountiesLayout,
-    // Kenya with the listed counties shaded by count. The colouring fills counties, so the spec
-    // names a seat held at the county (governor): that is what decides which fills are coloured,
-    // and that no ward lines are drawn.
+    // Kenya with the listed counties in the group's colour. The colouring fills counties, so the
+    // spec names a seat held at the county (governor): that is what decides which fills are
+    // coloured, and that no ward lines are drawn. The county lines get a halo so two listed
+    // counties side by side stay apart.
     maps: (layout: TopCountiesLayout, view) => [
         {
             key: 'map',
@@ -268,6 +269,7 @@ const TOP_COUNTIES: CardKind<TopCountiesCardView> = {
                 focus: null,
                 showSurroundings: false,
                 colouring: topCountiesColouring(view, THEMES[view.theme]),
+                haloCountyLines: true,
             },
         },
     ],

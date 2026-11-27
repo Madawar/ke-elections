@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // "Top 10 counties for a group": the counties where the group the person picked holds the most MP
-// or MCA seats, as ranked bars beside a map of Kenya with those counties shaded by count. Drawn as
+// or MCA seats, as ranked bars beside a map of Kenya with those counties filled in the bars’ colour. Drawn as
 // SVG at the card's pixel size, shown as the live preview and rasterised to PNG, in the same look
 // as the other share cards: their strip, headline and footer.
 import { computed } from 'vue';
@@ -184,7 +184,7 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
                 >
             </text>
 
-            <!-- Kenya, with the listed counties shaded by count -->
+            <!-- Kenya, with the listed counties in the bars’ colour -->
             <image
                 v-if="mapImage"
                 data-map
@@ -214,27 +214,6 @@ const asOfText = computed(() => formatAsOf(props.view.asOf));
             >
                 {{ layout.mapCaption.text }}
             </text>
-            <g v-if="layout.key.length" data-key>
-                <template v-for="(k, i) in layout.key" :key="i">
-                    <rect
-                        :x="k.swatch.x"
-                        :y="k.swatch.y"
-                        :width="k.swatch.w"
-                        :height="k.swatch.h"
-                        rx="2"
-                        :fill="k.swatch.colour"
-                        :stroke="theme.hairline"
-                    />
-                    <text
-                        :x="k.label.x"
-                        :y="k.label.y"
-                        :font-size="k.label.size"
-                        :fill="tone(k.label.tone)"
-                    >
-                        {{ k.label.text }}
-                    </text>
-                </template>
-            </g>
 
             <CardFooter
                 :box="layout.footerBox"
