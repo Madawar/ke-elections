@@ -31,6 +31,7 @@ import {
     topCountiesRowLine,
     topCountiesScope,
 } from './topCountiesCard';
+import { TILES_SCOPE, type TilesCardView, tilesHeadline } from './tilesCard';
 import { type ViewState, headlineFor } from './viewState';
 
 export type CaptionPlatform = 'instagram' | 'x';
@@ -325,6 +326,38 @@ export function fiveSeatsCaption(
         ...card.rows.map(numbersRowLine),
         '',
         fiveSeatsKeyLine(card),
+        '',
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
+}
+
+/**
+ * The caption for "Every county the same size": the headline, the scope, one line per key entry in
+ * the key's order with its counties by IEBC code ("UDA 20: Kwale, Kilifi, …."), so the image is
+ * readable in words, the source with its date, the link and the tags. On X only the headline,
+ * source, link and tags fit.
+ */
+export function tilesCaption(
+    card: TilesCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = tilesHeadline(card),
+): string {
+    if (platform === 'x') return xCaption(card, url, headline);
+    return [
+        clip(headline, 300),
+        '',
+        `${TILES_SCOPE}.`,
+        ...card.key.map(
+            (k) =>
+                `${k.label} ${fmt(k.count)}: ${card.tiles
+                    .filter((t) => t.group === k.key)
+                    .map((t) => t.name)
+                    .join(', ')}.`,
+        ),
         '',
         sourceText(card, 10),
         url,

@@ -17,6 +17,7 @@ import {
     leadersCaption,
     numbersCaption,
     partyCaption,
+    tilesCaption,
     topCountiesCaption,
     type CaptionPlatform,
 } from './caption';
@@ -43,6 +44,8 @@ import { type NumbersLayout, numbersLayout } from './numbersLayout';
 import { type PartyCardView, partyHeadline } from './partyCard';
 import { type PartyLayout, partyLayout } from './partyLayout';
 import { VIEW_SIZES, type ViewSize, viewFilename } from './sizes';
+import { type TilesCardView, tilesCardView, tilesHeadline } from './tilesCard';
+import { type TilesLayout, tilesLayout } from './tilesLayout';
 import {
     type TopCountiesCardView,
     topCountiesCardView,
@@ -64,11 +67,13 @@ import FiveSeatsCard from '@/components/export/FiveSeatsCard.vue';
 import LeadersCard from '@/components/export/LeadersCard.vue';
 import NumbersCard from '@/components/export/NumbersCard.vue';
 import PartyCard from '@/components/export/PartyCard.vue';
+import TilesCard from '@/components/export/TilesCard.vue';
 import TopCountiesCard from '@/components/export/TopCountiesCard.vue';
 import ViewCard from '@/components/export/ViewCard.vue';
 import { type MapTheme, THEMES, type ThemeName } from '@/lib/map/theme';
 import type { SeatsData } from '@/lib/seats';
 import type { UnitIndex } from '@/lib/units';
+import { SEAT_LABEL } from '@/lib/legend';
 
 export type ShareableView =
     | ViewState
@@ -77,7 +82,8 @@ export type ShareableView =
     | NumbersCardView
     | TopCountiesCardView
     | FiveSeatsCardView
-    | BallotsCardView;
+    | BallotsCardView
+    | TilesCardView;
 export type ShareLayout =
     | ViewLayout
     | PartyLayout
@@ -85,7 +91,8 @@ export type ShareLayout =
     | NumbersLayout
     | TopCountiesLayout
     | FiveSeatsLayout
-    | BallotsLayout;
+    | BallotsLayout
+    | TilesLayout;
 export type ShareKind = ShareableView['kind'];
 
 /** What a layout is laid out for besides the card: its headline, link and map shape. */
@@ -419,6 +426,37 @@ const BALLOTS: CardKind<BallotsCardView> = {
     component: BallotsCard,
 };
 
+const TILES: CardKind<TilesCardView> = {
+    key: 'tiles',
+    // Tall, like the grid: portrait for feeds, story for TikTok and Reels.
+    sizes: ['portrait', 'story'],
+    // Editable; its default names no number, so the hint is about facts.
+    editableHeadline: true,
+    headlineWording: FACTS_WORDING,
+    label: () => 'County tiles',
+    headline: tilesHeadline,
+    caption: tilesCaption,
+    layout: tilesLayout,
+    // No map: the tiles are drawn.
+    maps: () => [],
+    aspect: () => 1,
+    copy: (view) => ({
+        title: 'Share county tiles',
+        description: `Every county as one tile of the same size, coloured by the party of its ${SEAT_LABEL[view.seat].toLowerCase()}, sized for Instagram or stories.`,
+    }),
+    // Taken again from the seats in that theme, so independents and no-data follow it.
+    inTheme: (view, theme, ctx) =>
+        tilesCardView({
+            seats: seatsInTheme(ctx.seats, theme),
+            index: ctx.index,
+            seat: view.seat,
+            theme,
+            sample: view.sample,
+        }),
+    filename: (view, size) => `kenya-electoral-map-tiles-${view.seat}-${size}.png`,
+    component: TilesCard,
+};
+
 type ViewOfKind = { [V in ShareableView as V['kind']]: V };
 
 const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
@@ -429,6 +467,7 @@ const CARDS: { [K in ShareKind]: CardKind<ViewOfKind[K]> } = {
     topCounties: TOP_COUNTIES,
     fiveSeats: FIVE_SEATS,
     ballots: BALLOTS,
+    tiles: TILES,
 };
 
 // TypeScript cannot follow a union of views to the matching entry, so this one lookup says it.
