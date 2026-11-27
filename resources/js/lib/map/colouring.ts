@@ -3,6 +3,8 @@ import type { MapLevel } from './levels';
 import { PROVINCE_TINTS } from './theme';
 
 export type SeatKey = 'governor' | 'senator' | 'woman_rep' | 'mp' | 'mca';
+/** What the map is coloured by: nothing, the former provinces, or the party holding a seat. */
+export type ColourKey = 'none' | 'province' | SeatKey;
 export const SEAT_LEVEL: Record<SeatKey, MapLevel> = {
     governor: 'county',
     senator: 'county',

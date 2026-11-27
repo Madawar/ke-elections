@@ -69,6 +69,65 @@ describe('BottomSheet', () => {
         wrapper.unmount();
     });
 
+    describe('a tap on the handle', () => {
+        // With the pointer captured by the drag area, a mouse or pen click lands on the area rather
+        // than the handle button, so the pointer-up itself has to do the resize.
+        it('resizes on pointer-up, even though the click never reaches the button', async () => {
+            const wrapper = mountSheet();
+            const handle = wrapper.get('button[data-sheet-handle]');
+            await handle.trigger('pointerdown', { clientY: 700, pointerId: 1 });
+            await handle.trigger('pointerup', { clientY: 700, pointerId: 1 });
+            expect(wrapper.props('snap')).toBe('half');
+            wrapper.unmount();
+        });
+
+        it('resizes once where the click does arrive too (touch gesture taps)', async () => {
+            const wrapper = mountSheet();
+            const handle = wrapper.get('button[data-sheet-handle]');
+            await handle.trigger('pointerdown', { clientY: 700, pointerId: 1 });
+            await handle.trigger('pointerup', { clientY: 700, pointerId: 1 });
+            await handle.trigger('click', { detail: 1 });
+            expect(wrapper.props('snap')).toBe('half');
+            wrapper.unmount();
+        });
+
+        it('still resizes from the keyboard (a click with no pointer)', async () => {
+            const wrapper = mountSheet();
+            const handle = wrapper.get('button[data-sheet-handle]');
+            await handle.trigger('click', { detail: 0 });
+            expect(wrapper.props('snap')).toBe('half');
+            await handle.trigger('keydown', { key: 'Enter' });
+            expect(wrapper.props('snap')).toBe('full');
+            wrapper.unmount();
+        });
+
+        it('does not resize when the pointer was cancelled, or when it began on the header text', async () => {
+            const wrapper = mountSheet();
+            const handle = wrapper.get('button[data-sheet-handle]');
+            await handle.trigger('pointerdown', { clientY: 700, pointerId: 1 });
+            await handle.trigger('pointercancel', { clientY: 700, pointerId: 1 });
+            expect(wrapper.props('snap')).toBe('peek');
+            const title = wrapper.get('h2');
+            await title.trigger('pointerdown', { clientY: 700, pointerId: 2 });
+            await title.trigger('pointerup', { clientY: 700, pointerId: 2 });
+            expect(wrapper.props('snap')).toBe('peek');
+            wrapper.unmount();
+        });
+
+        it('does not resize after a drag, and does not take the click that follows it', async () => {
+            const wrapper = mountSheet();
+            const handle = wrapper.get('button[data-sheet-handle]');
+            await handle.trigger('pointerdown', { clientY: 700, pointerId: 1 });
+            await handle.trigger('pointermove', { clientY: 100, pointerId: 1 });
+            await handle.trigger('pointerup', { clientY: 100, pointerId: 1 });
+            const dragged = wrapper.props('snap');
+            expect(dragged).toBe('full');
+            await handle.trigger('click', { detail: 1 });
+            expect(wrapper.props('snap')).toBe(dragged);
+            wrapper.unmount();
+        });
+    });
+
     it('marks the drag area touch-action none', () => {
         const wrapper = mountSheet();
         expect(wrapper.get('[data-sheet-drag]').attributes('style')).toContain(
@@ -147,5 +206,21 @@ describe('BottomSheet', () => {
                 wrapper.unmount();
             },
         );
+    });
+
+    it('leaves a button in the header to take its own tap, so the pointer is not captured', async () => {
+        const wrapper = mount(BottomSheet, {
+            props: { snap: 'peek' as Snap, desktop: false },
+            slots: { header: '<button class="in-header">About</button>' },
+            attachTo: document.body,
+        });
+        const capture = vi.fn();
+        const drag = wrapper.get('[data-sheet-drag]').element;
+        drag.setPointerCapture = capture;
+        await wrapper.get('.in-header').trigger('pointerdown', { pointerId: 1 });
+        expect(capture).not.toHaveBeenCalled();
+        await wrapper.get('[data-sheet-handle]').trigger('pointerdown', { pointerId: 1 });
+        expect(capture).toHaveBeenCalledOnce();
+        wrapper.unmount();
     });
 });

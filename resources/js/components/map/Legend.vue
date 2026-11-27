@@ -28,10 +28,14 @@ const emit = defineEmits<{
     clear: [];
     /** "Share this view": make a social image of the map as it is now. */
     share: [];
+    /** A row's "Party details" button: open that party's profile (its abbreviation). */
+    party: [abbrev: string];
 }>();
 const isOn = (key: string) => props.highlighted?.includes(key) ?? false;
 const open = defineModel<boolean>('open', { default: true });
 
+/** Some row has a details button: the rows without one keep its room, so every bar lines up. */
+const anyDetails = computed(() => props.rows.some((r) => r.party));
 const hasBars = computed(() => props.rows.some((r) => r.count !== undefined));
 const sorted = computed(() =>
     hasBars.value
@@ -66,7 +70,7 @@ const spoken = (r: LegendRow) =>
 <template>
     <div
         class="flex flex-col rounded-md border border-hairline bg-surface text-[13px] text-ink shadow-sm"
-        :class="open ? 'w-72 max-w-[calc(100vw-1.5rem)]' : 'max-w-[16rem]'"
+        :class="open ? 'w-80 max-w-[calc(100vw-1.5rem)]' : 'max-w-[16rem]'"
         :style="open && maxHeight ? { maxHeight } : undefined"
     >
         <button
@@ -105,9 +109,11 @@ const spoken = (r: LegendRow) =>
                 <li v-for="r in sorted" :key="r.key" :data-key="r.key">
                     <template v-if="r.count !== undefined">
                         <span class="sr-only">{{ spoken(r) }}</span>
+                        <!-- Two separate targets: the row highlights, the end button opens the party. -->
+                        <div class="-mx-1 flex w-[calc(100%+0.5rem)] items-stretch">
                         <button
                             type="button"
-                            class="-mx-1 flex min-h-8 w-[calc(100%+0.5rem)] items-center gap-2 rounded-[3px] px-1 text-left pointer-coarse:min-h-11"
+                            class="flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-[3px] px-1 text-left pointer-coarse:min-h-11"
                             :class="
                                 isOn(r.key)
                                     ? 'font-semibold ring-2 ring-ink ring-inset'
@@ -155,6 +161,25 @@ const spoken = (r: LegendRow) =>
                                 >({{ share(r.count) }})</span
                             >
                         </button>
+                        <button
+                            v-if="r.party"
+                            type="button"
+                            data-party-details
+                            class="flex min-h-8 w-11 shrink-0 items-center justify-center rounded-[3px] text-muted-ink hover:bg-ground hover:text-ink pointer-coarse:min-h-11"
+                            :aria-label="`${fullName(r)}: all seats`"
+                            @click="emit('party', r.party)"
+                        >
+                            <svg viewBox="0 0 16 16" class="size-4" aria-hidden="true">
+                                <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4" />
+                                <path d="M8 7.2v4M8 4.6v.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                            </svg>
+                        </button>
+                        <span
+                            v-else-if="anyDetails"
+                            class="w-11 shrink-0"
+                            aria-hidden="true"
+                        />
+                        </div>
                     </template>
                     <span v-else class="flex items-center gap-2">
                         <span
@@ -179,6 +204,7 @@ const spoken = (r: LegendRow) =>
                 <button
                     v-if="filtered"
                     type="button"
+                    data-onboarding="legend-clear"
                     class="min-h-11 text-[14px] underline underline-offset-4"
                     @click="emit('clear')"
                 >
@@ -188,6 +214,7 @@ const spoken = (r: LegendRow) =>
                     v-if="shareable"
                     type="button"
                     data-share-view
+                    data-onboarding="share-view"
                     class="ml-auto flex min-h-11 items-center rounded-md px-3 text-[14px] font-medium"
                     :class="
                         shareEmphasis

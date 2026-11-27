@@ -1,6 +1,6 @@
 # Roadmap and open decisions
 
-Last updated 2026-11-26, when `feature/people-search-focus` was finished into `develop`. This is
+Last updated 2026-11-27, when v0.2.0 (`feature/map-controls`, Tasks 1–4) was released. This is
 the committed record of what comes next. Local execution ledgers are gitignored and deleted when
 a feature finishes.
 
@@ -24,15 +24,28 @@ a feature finishes.
   - Seat-mix bars, per-constituency mix rows, and a "who holds what" list. Single-seat cards show
     the holder.
 
-## Queue, in order (owner priorities as of 2026-11-26)
-1. ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
+- **Releases:** v0.1.0 and v0.1.1 (worker fix) on 27 Nov 2026, live at https://ke-elections.madawar.app
+  (Forge, deployed from `main`).
+- **Map controls** (`2026-11-27-map-controls.md`, Tasks 1–4, v0.2.0):
+  - Seat chips on the map, and one-tap drill-down.
+  - Seat view follows the focus level.
+  - Back button and phone back, with the outside-tap hint.
+  - Party profiles scoped to a county or constituency, with a party card.
+  - Onboarding tour and tips.
+
+## Queue, in order (owner priorities as of 2026-11-27)
+0. **Next branch: leaders and MP outlines** (`2026-11-27-map-controls.md`, Tasks 5–6 with their
+   owner additions).
+1. **Share formats the owner picks** from the eight mock-ups
+   (https://claude.ai/artifact/MGTqRFYdds6L2ZTqriusnj). The suggestion is 1, 5 and 6 first.
+- ~~Social export: still infographics~~ **Done.** The numeric (census and voters) views are
    added once the pocketbook data lands.
 2. **Voter guide, "How elections work".** English first, then a reviewed Kiswahili version.
    - Built on the infographic card system, so each section can export as a carousel or story.
    - Draft content, for the **owner to review before the build**, is in
      `docs/research/voter-guide/` (`guide-en.md`, `slides-en.md`, `facts.csv`: 128 facts, 118
      verified, 7 partial, 3 unverified).
-3. **Task 3B map controls.** The spec is in `2026-11-26-people-search-focus.md`, Task 3, items
+- ~~Task 3B map controls~~ **Done in v0.2.0.** The spec is in `2026-11-26-people-search-focus.md`, Task 3, items
    (b), (c) and (g). It goes on its own branch:
    - (b) Seat chips on top of the map; the owner chose this placement.
    - (g) A back button, the browser and phone back gesture, and the new outside-tap rule (no-op,
@@ -66,6 +79,29 @@ a feature finishes.
      - Turnout.
      - 2013 ward-level presidential results from the data we have.
      - Other seats later, through the admin table.
+   - **"Who does what":** one diagram per seat, built once and used in three places. The owner
+     said "I don't want the UI to get bloated. It's at the sweet spot now."
+     - **The seats:** Governor, **Senator**, Woman Rep, MP and MCA. The owner asked for Senators
+       not to be forgotten.
+     - **Each diagram shows:**
+       - Who does the work, who checks them, and what the seat can't do.
+       - Real holders for the place.
+       - Ballot-colour boxes, and arrows labelled with what they mean ("approves budget",
+         "oversees", "decides removal").
+       - A Constitution-first citation and an "as of" date.
+     - **Place 1, the map:** only a text link, "What this seat does", under each holder in the unit
+       panel. It opens the diagram in the bottom sheet. No new chips, layers or buttons.
+     - **Place 2, the pocketbook:** a "Who does what" page with "pick a problem" and "pick a seat"
+       views, using the same diagrams.
+     - **Place 3, export:** a share card with the same diagram, for example "Your MCA vs your
+       Governor".
+     - **Research:** `docs/research/roles/` (104 facts, 75 verified).
+     - **Before release, check by hand:** the 6 unverified facts, the NG-CDF judgments
+       (Kenya Law blocked automated reading), the Supreme Court ruling of 25 Sep 2026
+       ([2026] KESC 62), and the current editions of the Acts.
+     - **Mzalendo:** links only, through a reviewed `data/sources/links/mzalendo.csv` keyed by
+       codes. That's about 1 day of checking, for 399 of 416 rows matched. There's no licence to
+       reuse its numbers, and no attendance data exists to show.
 5. **Numeric-view infographics:** census and voters, with a top-10 bar chart.
 6. **Animated video export.** Plan: `2026-11-26-social-export.md`, Task 2. The spike proved:
    - **Use WebCodecs `VideoEncoder`** (H.264 `avc1.640028`, 1080×1920, 30 fps, timestamps from
@@ -108,7 +144,9 @@ a feature finishes.
 - None-mode inner borders inside a focused unit are now heavier (plan item (e)). Is that OK, given
   the owner liked "boundaries only"?
 
-## Data fixes found by the by-election research (`docs/research/by-elections/`)
+## Data fixes found by the by-election research
+- **Mathira MP's name:** our data has "Eric Mwangi Kahugu", but Parliament's list has "Meangi". Check
+  the gazette before changing it. (`docs/research/by-elections/`)
 - **Migwani ward 338** is shown as held but has been **vacant since 6 Aug 2026** (GN 15266). Its
   17 Nov poll was suspended by a court, and no new date has been gazetted.
 - **David Ndakwa overlaps two seats:** Malava MP from 2025-11-27 and West Kabras MCA until

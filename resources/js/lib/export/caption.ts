@@ -1,6 +1,7 @@
 // The text that goes with a shared view: the headline, the numbers behind it, the source with
 // its date, the link and the tags. Instagram and TikTok allow 2,200 characters; X allows 280.
 import { formatAsOf } from './format';
+import { type PartyCardView, TOP_COUNTIES_TITLE, partyHeadline } from './partyCard';
 import { type ViewState, headlineFor } from './viewState';
 
 export type CaptionPlatform = 'instagram' | 'x';
@@ -22,15 +23,18 @@ const list = (items: string[]) =>
         ? (items[0] ?? '')
         : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
+/** What the source line needs of a card: both kinds of card have it. */
+type Sourced = Pick<ViewState, 'asOf' | 'source' | 'sources' | 'sample'>;
+
 /** The sources, naming at most `max` of them and counting the rest. */
-function sourcesText(view: ViewState, max = Infinity): string {
+function sourcesText(view: Sourced, max = Infinity): string {
     const parts = view.sources.length ? view.sources : [view.source];
     if (parts.length <= max) return list(parts);
     const rest = parts.length - max;
     return `${parts.slice(0, max).join(', ')} and ${rest} more ${rest === 1 ? 'source' : 'sources'}`;
 }
 
-function sourceText(view: ViewState, max = Infinity): string {
+function sourceText(view: Sourced, max = Infinity): string {
     const asOf = formatAsOf(view.asOf);
     return `Source: ${sourcesText(view, max)}${asOf ? `, data as of ${asOf}` : ''}.${view.sample ? ' Sample data, not real records.' : ''}`;
 }
@@ -97,4 +101,47 @@ export function captionFor(
     return text.length > INSTAGRAM_MAX
         ? `${clip(head, Math.max(1, INSTAGRAM_MAX - tail.length - 2))}\n\n${tail}`
         : text;
+}
+
+/**
+ * The caption for a party card: the headline, each seat's "n of N (p%)", the source with its
+ * date, the link and the tags. On X the rows go: the headline, source, link and tags are what fit.
+ */
+export function partyCaption(
+    card: PartyCardView,
+    url: string,
+    platform: CaptionPlatform = 'instagram',
+    headline = partyHeadline(card),
+): string {
+    if (platform === 'x') {
+        let tail = '';
+        for (const max of [2, 1]) {
+            tail = `\n\n${sourceText(card, max)}\n${url}\n${TAGS}`;
+            if (xLength(tail) <= X_MAX - 20) break;
+        }
+        return `${clip(headline, Math.max(1, X_MAX - xLength(tail)))}${tail}`;
+    }
+    const lines = card.hasSeats || card.scope
+        ? [
+              ...card.rows.map(
+                  (r) =>
+                      `${r.label}: ${r.single ? r.value.charAt(0).toLowerCase() + r.value.slice(1) : r.value}`,
+              ),
+              ...(card.top.length
+                  ? [
+                        `${TOP_COUNTIES_TITLE}: ${list(card.top.map((c) => `${c.name} ${c.value}`))}`,
+                    ]
+                  : []),
+          ]
+        : [];
+    return [
+        clip(headline, 300),
+        '',
+        ...lines,
+        ...(lines.length ? [''] : []),
+        sourceText(card, 10),
+        url,
+        '',
+        TAGS,
+    ].join('\n');
 }

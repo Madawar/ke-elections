@@ -2,18 +2,34 @@
 import { Head, router } from '@inertiajs/vue3';
 import { useEventListener, useMediaQuery, useStorage } from '@vueuse/core';
 import { useAppearance } from '@/composables/useAppearance';
-import { computed, onMounted, ref, shallowRef, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    shallowRef,
+    watch,
+} from 'vue';
 import InPowerExport from '@/components/export/InPowerExport.vue';
 import LocatorExport from '@/components/export/LocatorExport.vue';
 import ShareViewDialog from '@/components/export/ShareViewDialog.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
+import BackButton from '@/components/map/BackButton.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
-import LayersPanel, { type ColourKey } from '@/components/map/LayersPanel.vue';
+import LayersPanel from '@/components/map/LayersPanel.vue';
 import Legend from '@/components/map/Legend.vue';
 import MapControls from '@/components/map/MapControls.vue';
 import MapView from '@/components/map/MapView.vue';
 import NationalOverview from '@/components/map/NationalOverview.vue';
+import Onboarding from '@/components/map/Onboarding.vue';
+import PartyPanel from '@/components/map/PartyPanel.vue';
+import OutsideHint, {
+    hintText,
+    markHintUsed,
+} from '@/components/map/OutsideHint.vue';
 import SearchBox from '@/components/map/SearchBox.vue';
+import SeatChips from '@/components/map/SeatChips.vue';
 import UnitList from '@/components/map/UnitList.vue';
 import UnitPanel from '@/components/map/UnitPanel.vue';
 import type { Picked } from '@/composables/useMap';
@@ -24,31 +40,45 @@ import {
 } from '@/lib/map/announce';
 import { mapPadding } from '@/lib/map/camera';
 import {
+    type ColourKey,
     type Colouring,
     type SeatKey,
     NO_COLOURING,
 } from '@/lib/map/colouring';
 import { type MapLevel, zoomOutTarget } from '@/lib/map/levels';
+import {
+    type RememberedModes,
+    chipStepUp,
+    modeForFocus,
+    rememberLevel,
+    validSeatModes,
+} from '@/lib/map/seatMode';
 import type { FocusSelection } from '@/lib/map/focus';
+import {
+    type FocusHistory,
+    type FocusHistoryPort,
+    type HistoryCause,
+    type RestoreOptions,
+    createFocusHistory,
+    gatePopState,
+} from '@/lib/map/history';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
 import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
-import { unitPath } from '@/lib/map/urls';
 import { formatAsOf } from '@/lib/export/format';
-import {
-    type ViewState,
-    parseViewQuery,
-    snapshotView,
-} from '@/lib/export/viewState';
+import { partyCardView } from '@/lib/export/partyCard';
+import type { ShareableView } from '@/lib/export/shareView';
+import { parseViewQuery, snapshotView } from '@/lib/export/viewState';
+import { type PartyScope, findParty, scopeFor } from '@/lib/party';
+import { parsePartyPath } from '@/lib/map/urls';
 import {
     type SeatsData,
     EMPTY_SEATS,
     legendScope,
     loadSeats,
     seatColouring,
-    seatLegend,
     withIndependentColour,
 } from '@/lib/seats';
 import {
@@ -68,7 +98,8 @@ type ServerUnit = {
     name: string;
     ancestors: { level: string; code: number; name: string }[];
 } | null;
-const props = defineProps<{ unit: ServerUnit }>();
+type ServerParty = { abbrev: string; name: string } | null;
+const props = defineProps<{ unit: ServerUnit; party?: ServerParty }>();
 
 // ---- data -------------------------------------------------------------------------------
 const manifest = ref<Record<string, string> | null>(null);
@@ -99,6 +130,13 @@ const provinceOfCounty = computed(
         ),
 );
 
+// Set when the page goes away; whatever the data load finishes after that must not start anything.
+let disposed = false;
+onBeforeUnmount(() => {
+    disposed = true;
+    focusHistory?.dispose();
+});
+
 onMounted(async () => {
     try {
         const m = (await (
@@ -108,15 +146,30 @@ onMounted(async () => {
             UnitIndex.load(fileUrl(m, 'units.json')),
             loadSeats(),
         ]);
+        // Gone before the data came: the popstate gate is taken only below, and must not be left held.
+        if (disposed) return;
         index.value = units;
         loadedSeats.value = data;
         manifest.value = m;
+        // What the person had before arrived (their last choice, or a link's): the county level's.
+        remembered.value = { county: colourKey.value };
         applySharedView(data);
         if (props.unit)
             selectUnit(units.get(props.unit.level, props.unit.code) ?? null, {
-                push: false,
+                history: 'none',
                 animate: false,
             });
+        // A /party/{abbrev}?in=county-47 link: the scope is the focus (or above it), so the map
+        // starts on it, and the history's first entry remembers that focus.
+        const linked = props.party
+            ? parsePartyPath(location.pathname + location.search)?.scope
+            : null;
+        const scopeUnit = linked && units.get(linked.level, linked.code);
+        if (!props.unit && scopeUnit)
+            selectUnit(scopeUnit, { history: 'none', animate: false });
+        focusHistory = createFocusHistory(historyPort, restoreFocus);
+        // ... and opens that party's profile (one the data does not have shows the map).
+        if (props.party) showParty(props.party.abbrev, linked);
         fetch(fileUrl(m, 'towns.geojson'))
             .then((r) => r.json())
             .then(
@@ -143,7 +196,27 @@ const themePref = computed({
     set: (v) => updateAppearance(v),
 });
 
-const colourKey = useStorage<ColourKey>('km.colour', 'none');
+// The colouring a visit opens with is the person's own choice at Kenya or a county level, read
+// once. The focus switching the mode on its own (MCA inside a constituency) and a link's
+// ?seat= are not choices and are never saved (see chooseMode), so the next visit does not
+// open all of Kenya in ward-level colours.
+const COLOUR_STORAGE = 'km.colour';
+function savedColour(): ColourKey {
+    try {
+        const v = localStorage.getItem(COLOUR_STORAGE) as ColourKey | null;
+        return v && validSeatModes(null).includes(v) ? v : 'none';
+    } catch {
+        return 'none';
+    }
+}
+function saveColour(mode: ColourKey) {
+    try {
+        localStorage.setItem(COLOUR_STORAGE, mode);
+    } catch {
+        // Private windows and blocked storage: the choice just lasts for this visit.
+    }
+}
+const colourKey = ref<ColourKey>(savedColour());
 const onlyParties = useStorage<string[]>('km.only', []);
 const enabledOverlays = useStorage<string[]>(
     'km.overlays',
@@ -153,24 +226,46 @@ const overlays = ref<MapOverlay[]>(OVERLAYS);
 
 const seatCount = (seat: SeatKey) =>
     Object.values(seats.value.totals[seat] ?? {}).reduce((a, b) => a + b, 0);
-const colourOptions = computed(() => [
-    { key: 'none' as const, label: 'Boundaries only', available: true },
-    { key: 'province' as const, label: 'Former province', available: true },
-    ...(Object.keys(SEAT_LABEL) as SeatKey[]).map((seat) => {
-        const n = seatCount(seat);
-        return {
-            key: seat,
-            label: `${SEAT_LABEL[seat]} party`,
-            available: n > 0,
-            note: n > 0 ? undefined : 'No approved data yet',
-            swatch: SEAT_COLOURS[seat],
-        };
-    }),
-]);
-watch(colourOptions, (opts) => {
-    if (!opts.find((o) => o.key === colourKey.value)?.available)
+// The chips for seats with no approved data yet cannot be chosen (all stay open until it loads).
+const unavailableSeats = computed(() =>
+    loadedSeats.value === EMPTY_SEATS
+        ? []
+        : (Object.keys(SEAT_LABEL) as SeatKey[]).filter(
+              (seat) => seatCount(seat) === 0,
+          ),
+);
+watch(unavailableSeats, (off) => {
+    if ((off as ColourKey[]).includes(colourKey.value))
         colourKey.value = 'none';
 });
+
+// What the person chose at each level (Kenya shares the county level's), so stepping back out
+// brings their choice back after the focus switched the mode on its own.
+const remembered = ref<RememberedModes>({});
+/**
+ * The person chose a mode: use it, and remember it for the level they are looking at. Only a
+ * choice made at Kenya or a county is saved for the next visit; a link's seat is not a choice
+ * (`save: false`).
+ */
+function chooseMode(mode: ColourKey, { save = true }: { save?: boolean } = {}) {
+    const focus = focusOf(selection.value)?.level ?? null;
+    // A mode that means nothing at this level (the province tint inside a constituency) is refused.
+    if (!validSeatModes(focus).includes(mode)) return;
+    colourKey.value = mode;
+    remembered.value = { ...remembered.value, [rememberLevel(focus)]: mode };
+    if (save && rememberLevel(focus) === 'county') saveColour(mode);
+}
+/** The mode that fits the focus: the person's choice for that level, else one that fits. */
+function modeFor(unit: Unit | null): ColourKey {
+    const mode = modeForFocus(
+        focusOf(unit)?.level ?? null,
+        colourKey.value,
+        remembered.value,
+    );
+    return (unavailableSeats.value as ColourKey[]).includes(mode)
+        ? 'none'
+        : mode;
+}
 
 const colouring = computed<Colouring>(() => {
     const k = colourKey.value;
@@ -209,12 +304,18 @@ const legend = computed(() => {
 });
 /** A legend row was pressed: switch the parties it stands for on or off, each independently. */
 function toggleParty(key: string) {
-    if (legend.value)
-        onlyParties.value = toggledParties(
-            legend.value.members,
-            onlyParties.value,
-            key,
-        );
+    if (!legend.value) return;
+    const wasFiltered = onlyParties.value.length > 0;
+    onlyParties.value = toggledParties(
+        legend.value.members,
+        onlyParties.value,
+        key,
+    );
+    // The first time a party is picked out, say how to clear it.
+    if (!wasFiltered && onlyParties.value.length > 0)
+        void onboarding.value?.showTip('party', {
+            party: legend.value.rows.find((r) => r.key === key)?.label,
+        });
 }
 // A different seat keeps the highlighted parties that hold it and drops the rest.
 watch(colourKey, (k) => {
@@ -227,7 +328,7 @@ watch(colourKey, (k) => {
 function applySharedView(data: SeatsData) {
     const { seat, parties } = parseViewQuery(location.search, data);
     if (seat) {
-        colourKey.value = seat;
+        chooseMode(seat, { save: false });
         onlyParties.value = parties;
     }
     // Take only our own two parameters off the address; anything else (utm_…) stays.
@@ -243,11 +344,6 @@ function applySharedView(data: SeatsData) {
         );
     }
 }
-const partyChips = computed(() =>
-    colourKey.value === 'none' || colourKey.value === 'province'
-        ? []
-        : seatLegend(seats.value, colourKey.value),
-);
 // What the person set: a colouring, plus each legend row they pressed ("Other" counts once).
 const activeSettings = computed(() =>
     settingsCount(colourKey.value, legend.value),
@@ -263,9 +359,10 @@ const isDesktop = useMediaQuery('(min-width: 768px)');
 const snap = ref<'peek' | 'half' | 'full'>('peek');
 const sheetHeight = ref(112);
 const view = ref<'unit' | 'layers' | 'about' | 'list'>('unit');
-// The legend is open on desktop; a focused unit collapses it to its chip so it never covers the unit.
-const legendOpen = ref(isDesktop.value && !props.unit);
-watch(isDesktop, (d) => (legendOpen.value = d && !selection.value));
+// The legend is open by default on desktop, beside a focused unit too (the fit keeps the unit clear
+// of it); the person can collapse it to its chip. On a phone it starts as the chip.
+const legendOpen = ref(isDesktop.value);
+watch(isDesktop, (d) => (legendOpen.value = d));
 // The open legend is capped to the room between the search bar and its own bottom edge, so its
 // heading is never pushed under the search bar.
 const legendMaxHeight = computed(
@@ -283,6 +380,10 @@ const legendBoxOpen = computed(
 // What a person picked in search points at: a seat row in the unit panel, or a party in the overview.
 const highlightSeat = ref<string | undefined>();
 const highlightParty = ref<string | undefined>();
+// The party whose profile fills the panel (its abbreviation), if any. The focus behind it stays.
+const partyAbbrev = ref<string | null>(null);
+// What its numbers cover: a county or a constituency, or all of Kenya (null).
+const partyScope = ref<PartyScope>(null);
 
 // With a unit selected the map shows only that unit; this keeps the rest faintly in view instead.
 const SURROUNDINGS_KEY = 'kem.showSurroundings';
@@ -295,6 +396,9 @@ function readSurroundings() {
 }
 const showSurroundings = ref(readSurroundings());
 watch(showSurroundings, (on) => {
+    // Turning the switch (either way) means the person has found it: the hint is not needed again.
+    markHintUsed();
+    outsideHint.value?.dismiss();
     try {
         localStorage.setItem(SURROUNDINGS_KEY, String(on));
     } catch {
@@ -308,20 +412,42 @@ const focusOf = (unit: Unit | null) =>
 const boundsOf = (level: MapLevel, code: number) =>
     index.value?.get(level, code)?.b;
 
+/**
+ * Show a unit (null: all of Kenya). `history` is how the address bar follows (see lib/map/history):
+ * a person's choice pushes an entry; a step up (the Back button, the zoom-out control: 'up', or
+ * zooming out of the unit: 'zoom') goes back to the previous entry when that is the parent, else
+ * pushes ('up') or replaces ('zoom'); 'none' leaves it alone (the first paint, and restoring an
+ * entry the browser went back to).
+ */
 function selectUnit(
     unit: Unit | null,
-    { push = true, fit = true, animate = true, recentre = true } = {},
+    {
+        history = 'user',
+        fit = true,
+        animate = true,
+        recentre = true,
+    }: {
+        history?: HistoryCause | 'none';
+        fit?: boolean;
+        animate?: boolean;
+        recentre?: boolean;
+    } = {},
 ) {
+    outsideHint.value?.dismiss();
+    onboarding.value?.dismissTip();
     overlayInfo.value = null;
     tip.value = null;
     highlightSeat.value = undefined;
     highlightParty.value = undefined;
+    // Choosing a place leaves a party's profile; restoreFocus shows one again where it belongs.
+    partyAbbrev.value = null;
     legendOpen.value = legendOpenAfterSelect(legendOpen.value, {
         desktop: isDesktop.value,
         wasFocused: selection.value !== null,
         focusing: unit !== null,
     });
     selection.value = unit;
+    colourKey.value = modeFor(unit);
     applyPadding();
     autoCentre.value = recentre;
     view.value = 'unit';
@@ -331,26 +457,100 @@ function selectUnit(
         map?.clearSelection();
         announce.value = announceSelection(null, []);
         if (fit) map?.fitKenya(animate);
-        if (push) replaceUrl('/', null);
+        recordHistory(null, history);
         document.title = 'Kenya Electoral Map';
         return;
     }
     if (unit.l !== 'province') map?.select(unit.l, unit.c, { fit, animate });
     const ancestors = index.value?.ancestors(unit.l, unit.c) ?? [];
-    if (push && unit.l !== 'province')
-        replaceUrl(unitPath(unit.l, unit.c), {
-            level: unit.l,
-            code: unit.c,
-            name: unit.n,
-            ancestors: ancestors.map((a) => ({
-                level: a.l,
-                code: a.c,
-                name: a.n,
-            })),
-        });
+    if (unit.l !== 'province') recordHistory(focusOf(unit), history);
     announce.value = announceSelection(unit, ancestors);
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+    // The first time the person picks a place (not a link or a step back), point at Share this view.
+    if (history === 'user') void onboarding.value?.showTip('unit');
+}
+
+// ---- party profile ------------------------------------------------------------------------
+const partyTitle = (abbrev: string, scope: PartyScope) => {
+    const party = findParty(seats.value, abbrev);
+    const where = scope && index.value?.get(scope.level, scope.code)?.n;
+    return party
+        ? `${party.name} (${party.abbrev})${where ? ` in ${where}` : ''} — Kenya Electoral Map`
+        : null;
+};
+/**
+ * Show a party's profile in the panel, without touching the history. The scope is a county or a
+ * constituency of the data (anything else is all of Kenya). False for an unknown party.
+ */
+function showParty(abbrev: string, scope: PartyScope = null): boolean {
+    const party = findParty(seats.value, abbrev);
+    if (!party) return false;
+    const known = scope && index.value?.get(scope.level, scope.code);
+    view.value = 'unit';
+    partyAbbrev.value = party.abbrev;
+    partyScope.value = known ? scope : null;
+    document.title =
+        partyTitle(party.abbrev, partyScope.value) ?? document.title;
+    announce.value = `${party.name}: seats held now${known ? ` in ${known.n}` : ''}.`;
+    if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
+    return true;
+}
+/**
+ * The person opened a party's profile (legend, a seat row, the overview or search): one history
+ * entry. Its numbers cover the focus: the county or constituency shown, a ward's constituency, or
+ * Kenya when nothing is focused.
+ */
+function openParty(abbrev: string) {
+    const focus = focusOf(selection.value);
+    const scope = index.value ? scopeFor(index.value, focus) : null;
+    if (!showParty(abbrev, scope) || !partyAbbrev.value) return;
+    focusHistory?.openParty(partyAbbrev.value, focus, partyScope.value);
+}
+/** The profile's scope switch: the same entry, a different place. */
+function setPartyScope(scope: PartyScope) {
+    const abbrev = partyAbbrev.value;
+    if (!abbrev) return;
+    partyScope.value = scope;
+    document.title = partyTitle(abbrev, scope) ?? document.title;
+    focusHistory?.setPartyScope(abbrev, focusOf(selection.value), scope);
+}
+/** The person closed the profile: back to the entry it was opened from, the camera where it is. */
+function closeParty() {
+    if (!partyAbbrev.value) return;
+    partyAbbrev.value = null;
+    document.title = selection.value
+        ? `${selection.value.n} ${selection.value.l.charAt(0).toUpperCase()}${selection.value.l.slice(1)} — Kenya Electoral Map`
+        : 'Kenya Electoral Map';
+    recordHistory(focusOf(selection.value), 'close');
+}
+/**
+ * "Show on map" on a seat row: colour the map by that seat and highlight the party, leaving the
+ * focus where it is. A seat held above the focus (a governor inside a constituency) goes up to the
+ * unit that holds it, the same step the seat chips take.
+ */
+function showPartyOnMap(seat: SeatKey) {
+    const abbrev = partyAbbrev.value;
+    if (!abbrev) return;
+    const stepUp = chipStepUp(focusOf(selection.value)?.level ?? null, seat);
+    if (stepUp) onChipStepUp(seat, stepUp);
+    else {
+        chooseMode(seat);
+        closeParty();
+    }
+    onlyParties.value = [abbrev];
+    announce.value = `Showing ${SEAT_LABEL[seat]} seats held by ${findParty(seats.value, abbrev)?.name ?? abbrev} on the map.`;
+}
+function shareParty() {
+    const abbrev = partyAbbrev.value;
+    if (!abbrev) return;
+    sharedView.value = partyCardView({
+        seats: seats.value,
+        abbrev,
+        theme: theme.value,
+        index: index.value ?? undefined,
+        scope: partyScope.value,
+    });
 }
 
 // The person zoomed out of the focused unit: the focus (and the panel) move up to its parent, and
@@ -359,7 +559,7 @@ function onZoomOut(next: FocusSelection | null) {
     const unit = next
         ? (index.value?.get(next.level, next.code) ?? null)
         : null;
-    selectUnit(unit, { fit: false, recentre: false });
+    selectUnit(unit, { history: 'zoom', fit: false, recentre: false });
 }
 
 function onPickPerson({ holder, unit }: PersonResult) {
@@ -374,13 +574,72 @@ function onPickPerson({ holder, unit }: PersonResult) {
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
 }
 
+// A chip for a seat held above the focus was pressed: go up to the unit that shows it, and show it.
+function onChipStepUp(seat: ColourKey, level: 'county' | 'constituency') {
+    const s = selection.value;
+    const target =
+        s && index.value?.ancestors(s.l, s.c).find((a) => a.l === level);
+    if (!target) return;
+    selectUnit(target, { history: 'up' });
+    chooseMode(seat);
+}
+const chipParents = computed(() => {
+    const s = selection.value;
+    const up = (level: string) =>
+        (s && index.value?.ancestors(s.l, s.c).find((a) => a.l === level)?.n) ||
+        undefined;
+    return { county: up('county'), constituency: up('constituency') };
+});
+
+// The first time the chips for county-wide seats are muted (inside a constituency or a ward).
+watch(
+    () => focusOf(selection.value)?.level ?? null,
+    (level) => {
+        const county = chipParents.value.county;
+        if ((level === 'constituency' || level === 'ward') && county)
+            void onboarding.value?.showTip('muted-chip', { county });
+    },
+);
+
 const onPick = (p: Picked) =>
     selectUnit(index.value?.get(p.level, p.code) ?? null);
+
+// ---- onboarding -------------------------------------------------------------------------
+const onboarding = ref<InstanceType<typeof Onboarding> | null>(null);
+let tourTimer = 0;
+onBeforeUnmount(() => window.clearTimeout(tourTimer));
+// With no WebGL2 the list view replaces the map (it never becomes ready): the tour still runs,
+// without its map step, and the tips (which wait for the tour) are not blocked for good.
+watch(unsupported, (off) => {
+    if (off)
+        tourTimer = window.setTimeout(() => onboarding.value?.startTour(), 700);
+});
+// The part of the screen the panel covers, so the tour can point at the middle of what is left.
+const mapInset = computed(() =>
+    isDesktop.value
+        ? { left: 400, bottom: 0 }
+        : { left: 0, bottom: sheetHeight.value },
+);
+/** The share step points inside the sheet: on a phone, open it so the button shows. */
+async function prepareStep(id: string) {
+    if (id !== 'share' || isDesktop.value || snap.value !== 'peek') return;
+    if (!isSeatMode.value) return;
+    snap.value = 'half';
+    await new Promise((r) => setTimeout(r, 300));
+}
+/** "Show tips again" in the About sheet: leave it, and start the tour over. */
+function showTipsAgain() {
+    view.value = 'unit';
+    outsideHint.value?.dismiss();
+    void nextTick(() => onboarding.value?.restartTour());
+}
 
 // The map can mount after the data (or the other way round): apply a pending deep link once both exist.
 watch(
     () => mapRef.value?.ready,
     (ready) => {
+        // A first visit gets the tour once the map is up and the sheet has settled.
+        if (ready) tourTimer = window.setTimeout(() => onboarding.value?.startTour(), 700);
         if (ready) {
             mapRef.value?.setShowSurroundings(showSurroundings.value);
             mapRef.value?.setFocus(focusOf(selection.value));
@@ -393,22 +652,76 @@ watch(
     },
 );
 
-/**
- * Keep the address bar on the selected unit so it can be shared. This replaces the current
- * history entry through Inertia (client-side, state preserved) instead of pushing new ones:
- * Inertia remounts the page on Back, which would rebuild the map, so Back leaves the map and
- * the breadcrumb and zoom-out control step back up a level.
- */
-function replaceUrl(url: string, unit: ServerUnit) {
-    if (location.pathname === url) return;
-    router.replace({
-        url,
-        props: (current) => ({ ...current, unit }),
-        preserveState: true,
-        preserveScroll: true,
-    });
-}
+// ---- history ----------------------------------------------------------------------------
+// The address bar follows the focus, and each unit the person chooses is a history entry, so the
+// browser's back button and the phone's back gesture walk back through what they looked at.
+// Entries are made through Inertia's router (client-side, state preserved): they carry the page
+// Inertia needs to rebuild the entry after a reload, or after leaving to another page and coming
+// back. Going back to an entry is handled here, not by Inertia: it would put the page back from
+// its saved copy and rebuild the map, so our listener runs first (see `installPopStateGate`) and
+// keeps Inertia from seeing the event.
+let focusHistory: FocusHistory | null = null;
 
+function serverUnitOf(focus: FocusSelection | null): ServerUnit {
+    const unit = focus && index.value?.get(focus.level, focus.code);
+    if (!focus || !unit) return null;
+    return {
+        level: focus.level,
+        code: focus.code,
+        name: unit.n,
+        ancestors: (index.value?.ancestors(focus.level, focus.code) ?? []).map(
+            (a) => ({ level: a.l, code: a.c, name: a.n }),
+        ),
+    };
+}
+function serverPartyOf(slug: string | undefined): ServerParty {
+    const party = slug ? findParty(loadedSeats.value, slug) : undefined;
+    return party ? { abbrev: party.abbrev, name: party.name } : null;
+}
+const visit = (
+    url: string,
+    focus: FocusSelection | null,
+    party?: { abbrev: string },
+) => ({
+    url,
+    props: (current: Record<string, unknown>) => ({
+        ...current,
+        unit: serverUnitOf(focus),
+        party: serverPartyOf(party?.abbrev),
+    }),
+    preserveState: true,
+    preserveScroll: true,
+});
+const historyPort: FocusHistoryPort = {
+    // A party's address carries its scope after the ?; the others are the path alone.
+    path: () =>
+        parsePartyPath(location.pathname)
+            ? location.pathname + location.search
+            : location.pathname,
+    push: (url, focus, party) => router.push(visit(url, focus, party)),
+    replace: (url, focus, party) => router.replace(visit(url, focus, party)),
+    back: () => window.history.back(),
+    onPopState: gatePopState,
+};
+function recordHistory(
+    focus: FocusSelection | null,
+    cause: HistoryCause | 'none',
+) {
+    if (cause !== 'none') focusHistory?.record(focus, cause);
+}
+/** The browser went back or forward to one of our entries: show its focus and fit the camera to it. */
+function restoreFocus(
+    focus: FocusSelection | null,
+    { fit, party, partyScope: scope }: RestoreOptions,
+) {
+    const unit = focus
+        ? (index.value?.get(focus.level, focus.code) ?? null)
+        : null;
+    // Going back because of a zoom must not snap the camera away from where the person's fingers are.
+    selectUnit(unit, { history: 'none', fit, recentre: fit });
+    // An entry for a party's profile shows it over the focus it was opened over.
+    if (party) showParty(party, scope);
+}
 function zoomOut() {
     if (!index.value) return;
     const target = zoomOutTarget(
@@ -420,18 +733,41 @@ function zoomOut() {
     if (target.unit)
         selectUnit(
             index.value.get(target.unit.level, target.unit.code) ?? null,
+            { history: 'up' },
         );
-    else if (selection.value) selectUnit(null);
+    else if (selection.value) selectUnit(null, { history: 'up' });
     else mapRef.value?.zoomOutStep();
 }
-const zoomOutLabel = computed(() => {
+// The level above the selection, by name; the back button, the hint and the zoom-out label use it.
+const parentName = computed(() => {
     const s = selection.value;
-    if (!s) return 'Zoom out';
+    if (!s || s.l === 'province') return null;
     const parent = index.value?.ancestors(s.l, s.c)[0];
-    return parent && parent.l !== 'province'
-        ? `Zoom out to ${parent.n}`
-        : 'Zoom out to all of Kenya';
+    return parent && parent.l !== 'province' ? parent.n : 'All of Kenya';
 });
+const zoomOutLabel = computed(() =>
+    !selection.value
+        ? 'Zoom out'
+        : parentName.value === 'All of Kenya'
+          ? 'Zoom out to all of Kenya'
+          : `Zoom out to ${parentName.value}`,
+);
+
+// The back button, and the hint a tap outside the focused unit shows (it does nothing otherwise).
+const outsideHint = ref<InstanceType<typeof OutsideHint> | null>(null);
+function stepBack() {
+    markHintUsed();
+    outsideHint.value?.dismiss();
+    zoomOut();
+}
+function onOutsideClick() {
+    const s = selection.value;
+    // With the surroundings shown there is a neighbour to pick, and Back is on screen: no nudge.
+    if (!s || s.l === 'province' || showSurroundings.value) return;
+    // The tour and the tips have the floor: never two cards at once.
+    if (onboarding.value?.busy()) return;
+    if (outsideHint.value?.nudge()) announce.value = hintText(s.n);
+}
 
 function recentre() {
     autoCentre.value = true;
@@ -505,6 +841,7 @@ function onOverlayClick(
 async function locate() {
     if (!navigator.geolocation || !manifest.value) {
         locateMessage.value = 'This device cannot share its location.';
+        void onboarding.value?.showTip('locate', { reason: 'unsupported' });
         return;
     }
     locating.value = true;
@@ -530,9 +867,13 @@ async function locate() {
                 locating.value = false;
             }
         },
-        () => {
+        (error) => {
             locating.value = false;
             locateMessage.value = 'Location was not shared.';
+            // Code 1 is "permission denied"; anything else is the device not finding itself.
+            void onboarding.value?.showTip('locate', {
+                reason: error.code === error.PERMISSION_DENIED ? 'denied' : 'failed',
+            });
         },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
@@ -547,8 +888,16 @@ function onHover(p: Picked | null, point: { x: number; y: number }) {
         : null;
 }
 
-const title = computed(() => (panelUnit.value ? panelUnit.value.n : 'Kenya'));
+const partyName = computed(() =>
+    partyAbbrev.value
+        ? (findParty(seats.value, partyAbbrev.value)?.name ?? partyAbbrev.value)
+        : null,
+);
+const title = computed(
+    () => partyName.value ?? (panelUnit.value ? panelUnit.value.n : 'Kenya'),
+);
 const subtitle = computed(() => {
+    if (partyName.value) return 'Political party';
     const u = panelUnit.value;
     if (!u) return '47 counties, 290 constituencies, 1,450 wards';
     const parent = index.value
@@ -559,7 +908,9 @@ const subtitle = computed(() => {
         : LEVEL_NAME[u.l].replace(/^./, (c) => c.toUpperCase());
 });
 const headTitle = computed(() =>
-    props.unit
+    props.party
+        ? `${props.party.name} (${props.party.abbrev})`
+        : props.unit
         ? `${props.unit.name} ${props.unit.level.charAt(0).toUpperCase()}${props.unit.level.slice(1)}`
         : '',
 );
@@ -577,7 +928,7 @@ function shareUnit() {
 const isSeatMode = computed(
     () => colourKey.value !== 'none' && colourKey.value !== 'province',
 );
-const sharedView = shallowRef<ViewState | null>(null);
+const sharedView = shallowRef<ShareableView | null>(null);
 function shareView() {
     const k = colourKey.value;
     if (!index.value || k === 'none' || k === 'province') return;
@@ -619,7 +970,7 @@ const showView = (v: typeof view.value) => {
                 view = 'list';
             "
             @user-move="autoCentre = false"
-            @outside-click="zoomOut"
+            @outside-click="onOutsideClick"
             @zoom-out="onZoomOut"
             @overlay-click="onOverlayClick"
         />
@@ -637,8 +988,10 @@ const showView = (v: typeof view.value) => {
             <SearchBox
                 :index="index"
                 :holders="seats.holders"
+                :parties="seats.parties"
                 @pick="(u) => selectUnit(u)"
                 @pick-person="onPickPerson"
+                @pick-party="openParty"
             />
             <button
                 type="button"
@@ -662,6 +1015,47 @@ const showView = (v: typeof view.value) => {
                     >{{ activeSettings }}</span
                 >
             </button>
+        </div>
+
+        <!-- Seat chips: under the search bar on phones, beside it on wide desktops. Hidden while the
+             sheet is at full height, as the legend is. -->
+        <div
+            v-if="!(snap === 'full' && !isDesktop)"
+            class="pointer-events-none absolute top-[64px] right-3 left-3 z-20 md:left-[400px] xl:top-3 xl:left-[864px]"
+        >
+            <SeatChips
+                :model-value="colourKey"
+                :unavailable="unavailableSeats"
+                :focus-level="focusOf(selection)?.level ?? null"
+                :parents="chipParents"
+                @update:modelValue="chooseMode"
+                @step-up="onChipStepUp"
+            />
+        </div>
+
+        <!-- Back button: under the search bar and the chips (beside them on wide desktops). -->
+        <div
+            v-if="!(snap === 'full' && !isDesktop)"
+            class="pointer-events-none absolute top-[116px] left-3 z-20 flex flex-col items-start gap-2 md:left-[400px] xl:top-[64px]"
+        >
+            <BackButton :parent="parentName" @step-up="stepBack" />
+        </div>
+
+        <!-- The hint: docked above the sheet on a phone (a card up top would cover the unit), beside
+             the back button from md up. The right edge stays clear of the zoom controls. -->
+        <div
+            v-if="!(snap === 'full' && !isDesktop)"
+            data-testid="outside-hint-slot"
+            class="pointer-events-none absolute right-[72px] left-3 z-20 md:top-[168px] md:right-auto md:left-[400px] xl:top-[116px]"
+            :style="isDesktop ? undefined : { bottom: `${sheetHeight + 12}px` }"
+        >
+            <OutsideHint
+                ref="outsideHint"
+                :unit="selection?.n ?? ''"
+                :parent="parentName ?? ''"
+                @step-up="zoomOut"
+                @show-surroundings="showSurroundings = true"
+            />
         </div>
 
         <div
@@ -689,6 +1083,7 @@ const showView = (v: typeof view.value) => {
 
         <div
             v-if="legend && !(snap === 'full' && !isDesktop)"
+            data-onboarding="legend"
             class="absolute left-3 z-10 md:left-[396px]"
             :style="{ bottom: isDesktop ? '24px' : `${sheetHeight + 12}px` }"
         >
@@ -709,6 +1104,7 @@ const showView = (v: typeof view.value) => {
                 @toggle="toggleParty"
                 @clear="onlyParties = []"
                 @share="shareView"
+                @party="openParty"
             />
         </div>
 
@@ -750,6 +1146,14 @@ const showView = (v: typeof view.value) => {
                         type="button"
                         class="min-h-11 px-2 text-[14px] underline underline-offset-4"
                         @click="view = 'unit'"
+                    >
+                        Done
+                    </button>
+                    <button
+                        v-else-if="partyAbbrev"
+                        type="button"
+                        class="min-h-11 px-2 text-[14px] underline underline-offset-4"
+                        @click="closeParty"
                     >
                         Done
                     </button>
@@ -801,24 +1205,38 @@ const showView = (v: typeof view.value) => {
 
             <LayersPanel
                 v-if="view === 'layers'"
-                v-model:colour="colourKey"
-                v-model:only="onlyParties"
+                :colour="colourKey"
+                :province-available="
+                    validSeatModes(focusOf(selection)?.level ?? null).includes(
+                        'province',
+                    )
+                "
+                @update:colour="chooseMode"
                 v-model:enabled="enabledOverlays"
                 v-model:theme="themePref"
-                :colour-options="colourOptions"
-                :parties="partyChips"
                 :overlays="overlays"
                 :swatch-for="(o) => o.swatch?.(THEMES[theme])"
             />
-            <AboutSheet v-else-if="view === 'about'" />
+            <AboutSheet v-else-if="view === 'about'" @show-tips="showTipsAgain" />
             <UnitList
                 v-else-if="view === 'list' && index"
                 :index="index"
                 @pick="(u) => selectUnit(u)"
             />
             <template v-else-if="index">
+                <PartyPanel
+                    v-if="partyAbbrev"
+                    :seats="seats"
+                    :abbrev="partyAbbrev"
+                    :index="index"
+                    :scope="partyScope"
+                    :focus="focusOf(selection)"
+                    @scope="setPartyScope"
+                    @show="showPartyOnMap"
+                    @share="shareParty"
+                />
                 <UnitPanel
-                    v-if="panelUnit"
+                    v-else-if="panelUnit"
                     :unit="panelUnit"
                     :index="index"
                     :seats="seats"
@@ -827,6 +1245,7 @@ const showView = (v: typeof view.value) => {
                     v-model:show-surroundings="showSurroundings"
                     :can-share-view="isSeatMode"
                     @go="(u) => selectUnit(u)"
+                    @party="openParty"
                     @share="shareUnit"
                     @share-view="shareView"
                 />
@@ -835,7 +1254,8 @@ const showView = (v: typeof view.value) => {
                     :seats="seats"
                     :highlight-party="highlightParty"
                     :can-share-view="isSeatMode"
-                    @colour-by="(s) => (colourKey = s)"
+                    @colour-by="chooseMode"
+                    @party="openParty"
                     @share="exportNational = true"
                     @share-view="shareView"
                 />
@@ -871,6 +1291,13 @@ const showView = (v: typeof view.value) => {
             v-model:open="exportNational"
             :seats="seats"
             :theme="THEMES[theme]"
+        />
+
+        <Onboarding
+            ref="onboarding"
+            :map-inset="mapInset"
+            :avoid-map="!isDesktop && selection !== null"
+            :prepare="prepareStep"
         />
 
         <div class="sr-only" aria-live="polite">{{ announce }}</div>

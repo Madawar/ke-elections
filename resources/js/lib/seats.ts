@@ -5,11 +5,21 @@ import type { MapLevel } from './map/levels';
 import { OTHER, THEMES } from './map/theme';
 import type { Unit, UnitIndex } from './units';
 
+/** A former abbreviation from a rename (the ORPP register), with the date it took effect. */
+export interface FormerName {
+    abbrev: string;
+    effective_on: string | null;
+}
+
 export interface Party {
     abbrev: string;
     name: string;
     coalition_2022: string | null;
     colour: string | null;
+    /** The ORPP registration status ("fully registered"), and the register it comes from. */
+    status?: string | null;
+    source_url?: string | null;
+    former_names?: FormerName[];
 }
 
 export interface Holder {
@@ -203,7 +213,7 @@ export const legendTitle = (
  */
 export function seatLegend(
     data: SeatsData,
-    seat: SeatKey,
+    seat: Holder['seat'],
     scope?: Set<number> | null,
 ): { abbrev: string; name: string; seats: number; colour: string }[] {
     const colours = partyColours(data);

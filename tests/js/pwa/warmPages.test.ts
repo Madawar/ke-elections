@@ -72,3 +72,14 @@ describe('warmPages', () => {
         expect(cache.stored.has('/county/47')).toBe(true);
     });
 });
+
+describe('party pages', () => {
+    it('are map pages: saved for offline like a unit page', async () => {
+        const cache = fakeCache([]);
+        await warmPages(cache, '/party/wdm-k', async () => publicPage());
+        expect([...cache.stored].sort()).toEqual(['/', '/party/wdm-k']);
+        const other = fakeCache([]);
+        await warmPages(other, '/party/a_b', async () => publicPage());
+        expect([...other.stored]).toEqual(['/']);
+    });
+});

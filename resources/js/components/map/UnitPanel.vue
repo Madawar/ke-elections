@@ -5,6 +5,7 @@ import {
     onBeforeUnmount,
     onMounted,
     ref,
+    useId,
     watch,
 } from 'vue';
 import { siteUrl } from '@/lib/export/format';
@@ -28,10 +29,14 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
     go: [unit: Unit];
+    /** A party's name was pressed: open its profile (the abbreviation). */
+    party: [abbrev: string];
     share: [];
     shareView: [];
     'update:showSurroundings': [on: boolean];
 }>();
+
+const switchId = useId();
 
 const LEVEL = {
     province: 'Former province',
@@ -71,6 +76,17 @@ const colours = computed(() => partyColours(props.seats));
 const partyName = computed(
     () => new Map(props.seats.parties.map((p) => [p.abbrev, p.name])),
 );
+/** Parties the data describes have a profile; independents are not a party and have none. */
+const profiled = computed(
+    () =>
+        new Set(
+            props.seats.parties
+                .map((p) => p.abbrev)
+                .filter((a) => a !== 'IND'),
+        ),
+);
+const partyLabel = (party: string | null) =>
+    party === 'IND' ? 'Independent' : (partyName.value.get(party ?? '') ?? party);
 const rows = computed(() =>
     seatsFor(props.unit.l).map((seat) => ({
         seat,
@@ -207,13 +223,19 @@ const sourceHost = (url: string) => {
                                         }"
                                         aria-hidden="true"
                                     />
-                                    {{
-                                        holder.party === 'IND'
-                                            ? 'Independent'
-                                            : (partyName.get(
-                                                  holder.party ?? '',
-                                              ) ?? holder.party)
-                                    }}
+                                    <button
+                                        v-if="holder.party && profiled.has(holder.party)"
+                                        type="button"
+                                        data-party
+                                        class="-my-3.5 inline-flex min-h-11 items-center text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
+                                        :aria-label="`${partyLabel(holder.party)}: all seats`"
+                                        @click="emit('party', holder.party)"
+                                    >
+                                        {{ partyLabel(holder.party) }}
+                                    </button>
+                                    <template v-else>{{
+                                        partyLabel(holder.party)
+                                    }}</template>
                                 </span>
                                 <span class="text-muted-ink"
                                     >{{
@@ -247,12 +269,16 @@ const sourceHost = (url: string) => {
                 type="button"
                 role="switch"
                 :aria-checked="showSurroundings === true"
+                :aria-labelledby="`${switchId}-label`"
+                :aria-describedby="`${switchId}-hint`"
                 class="mb-2 flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px]"
                 @click="emit('update:showSurroundings', !showSurroundings)"
             >
                 <span>
-                    Show surroundings
-                    <span class="block text-[13px] text-muted-ink"
+                    <span :id="`${switchId}-label`">Show surroundings</span>
+                    <span
+                        :id="`${switchId}-hint`"
+                        class="block text-[13px] text-muted-ink"
                         >The rest of the map, faint and in grey</span
                     >
                 </span>
@@ -275,6 +301,7 @@ const sourceHost = (url: string) => {
                 v-if="canShareView"
                 type="button"
                 data-share-view
+                data-onboarding="share-view"
                 class="mb-2 flex h-11 w-full items-center justify-center rounded-md bg-ink px-3 text-[15px] font-medium text-surface"
                 @click="emit('shareView')"
             >

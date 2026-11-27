@@ -4,9 +4,14 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { initializeFlashToast } from '@/lib/flashToast';
+import { installPopStateGate } from '@/lib/map/history';
 import { initializePwa } from '@/lib/pwa/register';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+// The map page takes the browser's back button itself (see lib/map/history.ts); this has to be
+// added before Inertia starts, so that it runs before Inertia's own popstate listener.
+installPopStateGate();
 
 void createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),

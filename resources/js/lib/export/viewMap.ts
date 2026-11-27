@@ -15,6 +15,15 @@ import { unitStyle } from './locator';
 import { renderMapImage } from './renderMapImage';
 import type { ViewState } from './viewState';
 
+/**
+ * What the map image reads of a card: the seat to colour by, the parties to highlight, the focus
+ * and whether the surroundings show. The seat view and the party card both have them.
+ */
+export type ViewMapSpec = Pick<
+    ViewState,
+    'seat' | 'only' | 'focus' | 'showSurroundings'
+>;
+
 export interface ViewMapContext {
     manifest: Record<string, string>;
     provinceOfCounty: Map<number, number>;
@@ -24,7 +33,7 @@ export interface ViewMapContext {
 
 /** The colouring on screen for this view and theme: the same seatColouring and highlight. */
 export function viewColouring(
-    view: ViewState,
+    view: ViewMapSpec,
     seats: SeatsData,
     theme: MapTheme,
 ): Colouring {
@@ -36,7 +45,7 @@ export function viewColouring(
 }
 
 /** Width over height of the area the card's map shows, in Web Mercator. */
-export function viewMapAspect(view: ViewState): number {
+export function viewMapAspect(view: ViewMapSpec): number {
     const [w, s, e, n] = view.focus?.b ?? KENYA_BOUNDS;
     const y = (lat: number) =>
         Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
@@ -46,7 +55,7 @@ export function viewMapAspect(view: ViewState): number {
 }
 
 export function viewStyle(
-    view: ViewState,
+    view: ViewMapSpec,
     ctx: ViewMapContext,
     theme: MapTheme,
 ): StyleSpecification {
@@ -103,7 +112,7 @@ export function viewStyle(
 
 /** Draw the view's map at the exact pixel size of its box on the card. */
 export function renderViewMap(
-    view: ViewState,
+    view: ViewMapSpec,
     ctx: ViewMapContext,
     theme: MapTheme,
     map: Box,
