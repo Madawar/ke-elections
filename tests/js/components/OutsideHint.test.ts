@@ -165,6 +165,26 @@ describe('OutsideHint', () => {
         set.mockRestore();
     });
 
+    it('is compact on a phone: one short visible line and the buttons side by side, the full words kept for screen readers', async () => {
+        const w = mountHint();
+        nudge(w);
+        await w.vm.$nextTick();
+        const spans = w.findAll('p > span');
+        expect(spans[0].text()).toBe("You're viewing Mathare.");
+        expect(spans[0].classes()).not.toContain('max-md:sr-only');
+        expect(spans[1].text()).toBe(
+            'Go back to see more, or show the surroundings to pick a neighbour.',
+        );
+        expect(spans[1].classes()).toContain('max-md:sr-only');
+        const row = w.get('[data-hint-buttons]');
+        expect(row.classes()).toContain('flex-row');
+        expect(row.classes()).toContain('md:flex-col');
+        for (const b of row.findAll('button')) {
+            expect(b.classes()).toContain('flex-1');
+            expect(b.classes()).toContain('min-h-11');
+        }
+    });
+
     it('is a plain card, not a modal, and does not take focus', async () => {
         const w = mountHint();
         nudge(w);

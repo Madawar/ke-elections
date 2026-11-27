@@ -6,8 +6,10 @@ export const MAX_SHOWS = 3;
 /** How long the card stays before it closes by itself. */
 export const HINT_MS = 6000;
 
-export const hintText = (unit: string) =>
-    `You're viewing ${unit}. Go back to see more, or show the surroundings to pick a neighbour.`;
+// On a phone only the first sentence is shown (the buttons say the rest); the whole is still read out.
+const lead = (unit: string) => `You're viewing ${unit}.`;
+const REST = 'Go back to see more, or show the surroundings to pick a neighbour.';
+export const hintText = (unit: string) => `${lead(unit)} ${REST}`;
 
 // Storage can be blocked; the count is then kept in memory, for as long as the page is open.
 let memory = 0;
@@ -75,20 +77,26 @@ defineExpose({ nudge, dismiss });
 <template>
     <div
         v-if="open"
-        class="pointer-events-auto w-72 max-w-full rounded-md border border-hairline bg-surface p-3 text-ink shadow-sm"
+        class="pointer-events-auto w-full max-w-full rounded-md border border-hairline bg-surface p-2.5 text-ink shadow-sm md:w-72 md:p-3"
     >
-        <p class="text-[14px] leading-snug">{{ hintText(unit) }}</p>
-        <div class="mt-2 flex flex-col gap-1.5">
+        <p class="text-[14px] leading-snug">
+            <span>{{ lead(unit) + ' ' }}</span>
+            <span class="max-md:sr-only">{{ REST }}</span>
+        </p>
+        <div
+            data-hint-buttons
+            class="mt-2 flex flex-row gap-1.5 md:flex-col"
+        >
             <button
                 type="button"
-                class="flex min-h-11 items-center justify-center rounded-md bg-ink px-3 text-[14px] font-medium text-surface focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
+                class="flex min-h-11 flex-1 items-center justify-center rounded-md bg-ink px-2 text-center text-[13px] leading-tight font-medium text-surface focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none md:flex-none md:px-3 md:text-[14px]"
                 @click="use('stepUp')"
             >
                 Back to {{ parent }}
             </button>
             <button
                 type="button"
-                class="flex min-h-11 items-center justify-center rounded-md border border-ink bg-surface px-3 text-[14px] font-medium text-ink focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
+                class="flex min-h-11 flex-1 items-center justify-center rounded-md border border-ink bg-surface px-2 text-center text-[13px] leading-tight font-medium text-ink focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none md:flex-none md:px-3 md:text-[14px]"
                 @click="use('showSurroundings')"
             >
                 Show surroundings

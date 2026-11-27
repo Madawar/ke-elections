@@ -47,6 +47,7 @@ import {
     type FocusHistory,
     type FocusHistoryPort,
     type HistoryCause,
+    type RestoreOptions,
     createFocusHistory,
     gatePopState,
 } from '@/lib/map/history';
@@ -117,6 +118,13 @@ const provinceOfCounty = computed(
         ),
 );
 
+// Set when the page goes away; whatever the data load finishes after that must not start anything.
+let disposed = false;
+onBeforeUnmount(() => {
+    disposed = true;
+    focusHistory?.dispose();
+});
+
 onMounted(async () => {
     try {
         const m = (await (
@@ -126,6 +134,8 @@ onMounted(async () => {
             UnitIndex.load(fileUrl(m, 'units.json')),
             loadSeats(),
         ]);
+        // Gone before the data came: the popstate gate is taken only below, and must not be left held.
+        if (disposed) return;
         index.value = units;
         loadedSeats.value = data;
         manifest.value = m;
@@ -345,9 +355,11 @@ const boundsOf = (level: MapLevel, code: number) =>
     index.value?.get(level, code)?.b;
 
 /**
- * Show a unit (null: all of Kenya). `history` is how the address bar follows: a person's choice
- * pushes an entry, a zoom-driven step up ('zoom') replaces the current one, and 'none' leaves it alone
- * (the first paint, and restoring an entry the browser went back to).
+ * Show a unit (null: all of Kenya). `history` is how the address bar follows (see lib/map/history):
+ * a person's choice pushes an entry; a step up (the Back button, the zoom-out control: 'up', or
+ * zooming out of the unit: 'zoom') goes back to the previous entry when that is the parent, else
+ * pushes ('up') or replaces ('zoom'); 'none' leaves it alone (the first paint, and restoring an
+ * entry the browser went back to).
  */
 function selectUnit(
     unit: Unit | null,
@@ -423,7 +435,7 @@ function onChipStepUp(seat: ColourKey, level: 'county' | 'constituency') {
     const target =
         s && index.value?.ancestors(s.l, s.c).find((a) => a.l === level);
     if (!target) return;
-    selectUnit(target);
+    selectUnit(target, { history: 'up' });
     chooseMode(seat);
 }
 const chipParents = computed(() => {
@@ -488,6 +500,7 @@ const historyPort: FocusHistoryPort = {
     path: () => location.pathname,
     push: (url, focus) => router.push(visit(url, focus)),
     replace: (url, focus) => router.replace(visit(url, focus)),
+    back: () => window.history.back(),
     onPopState: gatePopState,
 };
 function recordHistory(
@@ -497,12 +510,13 @@ function recordHistory(
     if (cause !== 'none') focusHistory?.record(focus, cause);
 }
 /** The browser went back or forward to one of our entries: show its focus and fit the camera to it. */
-function restoreFocus(focus: FocusSelection | null) {
-    const unit = focus ? (index.value?.get(focus.level, focus.code) ?? null) : null;
-    selectUnit(unit, { history: 'none' });
+function restoreFocus(focus: FocusSelection | null, { fit }: RestoreOptions) {
+    const unit = focus
+        ? (index.value?.get(focus.level, focus.code) ?? null)
+        : null;
+    // Going back because of a zoom must not snap the camera away from where the person's fingers are.
+    selectUnit(unit, { history: 'none', fit, recentre: fit });
 }
-onBeforeUnmount(() => focusHistory?.dispose());
-
 function zoomOut() {
     if (!index.value) return;
     const target = zoomOutTarget(
@@ -514,8 +528,9 @@ function zoomOut() {
     if (target.unit)
         selectUnit(
             index.value.get(target.unit.level, target.unit.code) ?? null,
+            { history: 'up' },
         );
-    else if (selection.value) selectUnit(null);
+    else if (selection.value) selectUnit(null, { history: 'up' });
     else mapRef.value?.zoomOutStep();
 }
 // The level above the selection, by name; the back button, the hint and the zoom-out label use it.
@@ -794,12 +809,22 @@ const showView = (v: typeof view.value) => {
             />
         </div>
 
-        <!-- Back button and its hint: under the search bar and the chips (beside them on wide desktops). -->
+        <!-- Back button: under the search bar and the chips (beside them on wide desktops). -->
         <div
             v-if="!(snap === 'full' && !isDesktop)"
             class="pointer-events-none absolute top-[116px] left-3 z-20 flex flex-col items-start gap-2 md:left-[400px] xl:top-[64px]"
         >
             <BackButton :parent="parentName" @step-up="stepBack" />
+        </div>
+
+        <!-- The hint: docked above the sheet on a phone (a card up top would cover the unit), beside
+             the back button from md up. The right edge stays clear of the zoom controls. -->
+        <div
+            v-if="!(snap === 'full' && !isDesktop)"
+            data-testid="outside-hint-slot"
+            class="pointer-events-none absolute right-[72px] left-3 z-20 md:top-[168px] md:right-auto md:left-[400px] xl:top-[116px]"
+            :style="isDesktop ? undefined : { bottom: `${sheetHeight + 12}px` }"
+        >
             <OutsideHint
                 ref="outsideHint"
                 :unit="selection?.n ?? ''"

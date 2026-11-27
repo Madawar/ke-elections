@@ -1,11 +1,23 @@
 // Browser history for the focus: each unit the person chooses is a history entry (so the browser's
-// back button and the phone's back gesture step back through what they looked at), and a zoom-out
-// that steps the focus up rewrites the current entry instead, so zooming never floods the history.
+// back button and the phone's back gesture step back through what they looked at). A step up (the
+// app's Back button, the zoom-out control, or zooming out of the unit) that lands on the entry just
+// before this one goes back to it, so Back never walks to the same unit twice and Back from Kenya
+// leaves the site. A step up to anywhere else pushes (the person's) or replaces (a zoom's).
 import type { FocusSelection } from './focus';
 import { parseUnitPath, unitPath } from './urls';
 
-/** Why the focus changed: the person chose a unit, or their zooming out stepped it up. */
-export type HistoryCause = 'user' | 'zoom';
+/**
+ * Why the focus changed:
+ * - 'user': the person chose a unit (a tap, a search pick, a link in the panel).
+ * - 'up': the person stepped up (the Back button or the zoom-out control).
+ * - 'zoom': their zooming out stepped the focus up.
+ */
+export type HistoryCause = 'user' | 'up' | 'zoom';
+
+/** How a restored focus should reach the camera: a zoom must not snap the camera mid-pinch. */
+export interface RestoreOptions {
+    fit: boolean;
+}
 
 /** What the history needs from the browser, so it can be tested without one. */
 export interface FocusHistoryPort {
@@ -13,6 +25,8 @@ export interface FocusHistoryPort {
     path(): string;
     push(path: string, focus: FocusSelection | null): void;
     replace(path: string, focus: FocusSelection | null): void;
+    /** Go back one entry (history.back()). */
+    back(): void;
     /** Listen for the browser going back or forward; returns the way to stop listening. */
     onPopState(
         listener: (event: { stopImmediatePropagation(): void }) => void,
@@ -31,10 +45,16 @@ const pathFor = (focus: FocusSelection | null) =>
 export function createFocusHistory(
     port: FocusHistoryPort,
     /** The browser went back or forward to an entry of ours: show this focus (null: all of Kenya). */
-    onRestore: (focus: FocusSelection | null) => void,
+    onRestore: (focus: FocusSelection | null, options: RestoreOptions) => void,
 ) {
-    // Tracked here, not read back from the address bar: the browser applies a push a moment later.
-    let current = port.path();
+    // The paths of this page's own entries and where we are among them. Kept here, not read back
+    // from the address bar: the browser applies a push a moment later, and the entries before
+    // `stack[0]` (the page the person came from) are not ours.
+    let stack = [port.path()];
+    let at = 0;
+    // Backs we asked for that the browser has not answered yet (each answer is not a new choice).
+    const pending: RestoreOptions[] = [];
+
     const stopListening = port.onPopState((event) => {
         const path = port.path();
         const focus = focusFromPath(path);
@@ -42,18 +62,41 @@ export function createFocusHistory(
         // Inertia would put the page back from its saved copy and rebuild it, and the map with it.
         // (This runs first because the gate is installed before Inertia: see `installPopStateGate`.)
         event.stopImmediatePropagation();
-        current = path;
-        onRestore(focus);
+        const asked = pending.shift();
+        if (!asked) {
+            // Back or forward by the person: one entry either way, else start over from here.
+            if (path === stack[at - 1]) at--;
+            else if (path === stack[at + 1]) at++;
+            else {
+                stack = [path];
+                at = 0;
+            }
+        }
+        onRestore(focus, asked ?? { fit: true });
         // The entry keeps the page Inertia saved for it; this brings Inertia's own copy in line.
         port.replace(path, focus);
     });
+
     return {
         record(focus: FocusSelection | null, cause: HistoryCause) {
             const path = pathFor(focus);
-            if (path === current) return;
-            current = path;
-            if (cause === 'zoom') port.replace(path, focus);
-            else port.push(path, focus);
+            if (path === stack[at]) return;
+            if (cause !== 'user' && path === stack[at - 1]) {
+                at--;
+                pending.push({ fit: cause !== 'zoom' });
+                port.back();
+            } else if (cause === 'zoom') {
+                stack[at] = path;
+                port.replace(path, focus);
+            } else {
+                stack = [...stack.slice(0, at + 1), path];
+                at++;
+                port.push(path, focus);
+            }
+        },
+        /** Where we are among this page's entries (0 is the first: Back from there leaves). */
+        get index() {
+            return at;
         },
         dispose: stopListening,
     };
