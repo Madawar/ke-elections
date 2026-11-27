@@ -257,8 +257,6 @@ Each one: what was decided, why, and what it costs if it is wrong.
 - The legend's heading stays "MCA seats in <unit> by party" while the box also lists MPs.
 - Stripes are 6px wide along the map (about 4px across the stripe) at a whole zoom, and up to
   twice that between zooms. (The ruling above says "9px bands": that was the first size.)
-- No screenshot was taken of a county whose three leaders share one party (a solid fill); the
-  solid pattern is covered by tests only.
 
 ## Parked minors from the roadmap fixed on the way
 
