@@ -110,6 +110,29 @@ describe('UnitPanel', () => {
         }
     });
 
+    it('describes the surroundings switch with its hint, so its name stays short', () => {
+        const wrapper = mount(UnitPanel, {
+            props: {
+                unit: county,
+                index,
+                seats,
+                towns: [],
+                showSurroundings: false,
+            },
+            attachTo: document.body,
+        });
+        const toggle = wrapper.get('button[role="switch"]').element;
+        const byId = (attr: string) =>
+            document.getElementById(toggle.getAttribute(attr) ?? '');
+        expect(byId('aria-labelledby')?.textContent?.trim()).toBe(
+            'Show surroundings',
+        );
+        expect(byId('aria-describedby')?.textContent?.trim()).toBe(
+            'The rest of the map, faint and in grey',
+        );
+        wrapper.unmount();
+    });
+
     it('offers a labelled switch for showing the surroundings', async () => {
         const wrapper = mount(UnitPanel, {
             props: {

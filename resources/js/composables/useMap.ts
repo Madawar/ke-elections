@@ -53,7 +53,7 @@ export interface UseMapOptions {
         overlay: MapOverlay,
         properties: Record<string, unknown>,
     ) => void;
-    /** A tap landed on the map, outside the focused unit (the page steps up one level). */
+    /** A tap landed outside the focused unit with nothing to select there (the page may nudge). */
     onOutsideClick?: () => void;
     /**
      * The person zoomed out of the focused unit, so the focus moves up (null: all of Kenya). The
@@ -313,7 +313,7 @@ export function useMap(
      * focus is read as the constituency drawn in its place until the ward geometry has loaded.
      */
     const tapAt = (e: MapMouseEvent) =>
-        tapTarget(drawnFocus(), featuresAt(e.point));
+        tapTarget(drawnFocus(), featuresAt(e.point), { surroundings });
 
     /** The zoom the camera would fit this unit at, with the current padding. */
     function fitZoomOf(sel: FocusSelection): number {

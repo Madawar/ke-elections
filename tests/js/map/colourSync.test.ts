@@ -6,7 +6,7 @@ import { defineComponent, h } from 'vue';
 
 vi.mock('@inertiajs/vue3', () => ({
     Head: defineComponent({ render: () => null }),
-    router: { replace: vi.fn() },
+    router: { replace: vi.fn(), push: vi.fn() },
 }));
 // The page, without a real map: it is the chips, the legend and the colour state that are under test.
 vi.mock('@/components/map/MapView.vue', () => ({

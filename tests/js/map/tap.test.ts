@@ -108,3 +108,62 @@ describe('tapTarget with a ward focused', () => {
         expect(tapTarget(focus, [])).toBe('outside');
     });
 });
+
+describe('tapTarget with surroundings shown', () => {
+    const on = { surroundings: true };
+
+    it('selects a neighbouring county from a focused county', () => {
+        const focus = { level: 'county' as const, code: 16 };
+        expect(tapTarget(focus, [kibwezi, county(17)], on)).toEqual({
+            level: 'county',
+            code: 17,
+        });
+    });
+
+    it('selects the neighbouring constituency (the focused level), not the ward or county under it', () => {
+        const focus = { level: 'constituency' as const, code: 91 };
+        expect(
+            tapTarget(focus, [makueniWard, kibwezi, county(17)], on),
+        ).toEqual({ level: 'constituency', code: 99 });
+        expect(
+            tapTarget(focus, [ward(451, 92, 16), constituency(92, 16), machakos], on),
+        ).toEqual({ level: 'constituency', code: 92 });
+    });
+
+    it('selects a neighbouring ward from a focused ward', () => {
+        const focus = { level: 'ward' as const, code: 450 };
+        expect(
+            tapTarget(focus, [ward(451, 91, 16), mwala, machakos], on),
+        ).toEqual({ level: 'ward', code: 451 });
+    });
+
+    it('falls back to the finest coarser unit when the focused level is not drawn there', () => {
+        const focus = { level: 'constituency' as const, code: 91 };
+        expect(tapTarget(focus, [county(17)], on)).toEqual({
+            level: 'county',
+            code: 17,
+        });
+    });
+
+    it('still reports empty ground as outside', () => {
+        expect(
+            tapTarget({ level: 'county', code: 16 }, [], on),
+        ).toBe('outside');
+    });
+
+    it('still treats the focused unit and what is inside it as before', () => {
+        const focus = { level: 'county' as const, code: 16 };
+        expect(tapTarget(focus, [muthetheni, mwala, machakos], on)).toEqual({
+            level: 'constituency',
+            code: 91,
+        });
+        expect(tapTarget(focus, [machakos], on)).toBe('inside');
+    });
+
+    it('with surroundings off a neighbour is outside', () => {
+        const focus = { level: 'county' as const, code: 16 };
+        expect(tapTarget(focus, [county(17)], { surroundings: false })).toBe(
+            'outside',
+        );
+    });
+});

@@ -5,6 +5,7 @@ import {
     onBeforeUnmount,
     onMounted,
     ref,
+    useId,
     watch,
 } from 'vue';
 import { siteUrl } from '@/lib/export/format';
@@ -32,6 +33,8 @@ const emit = defineEmits<{
     shareView: [];
     'update:showSurroundings': [on: boolean];
 }>();
+
+const switchId = useId();
 
 const LEVEL = {
     province: 'Former province',
@@ -247,12 +250,16 @@ const sourceHost = (url: string) => {
                 type="button"
                 role="switch"
                 :aria-checked="showSurroundings === true"
+                :aria-labelledby="`${switchId}-label`"
+                :aria-describedby="`${switchId}-hint`"
                 class="mb-2 flex min-h-11 w-full items-center justify-between gap-3 text-left text-[15px]"
                 @click="emit('update:showSurroundings', !showSurroundings)"
             >
                 <span>
-                    Show surroundings
-                    <span class="block text-[13px] text-muted-ink"
+                    <span :id="`${switchId}-label`">Show surroundings</span>
+                    <span
+                        :id="`${switchId}-hint`"
+                        class="block text-[13px] text-muted-ink"
                         >The rest of the map, faint and in grey</span
                     >
                 </span>

@@ -2,17 +2,22 @@
 import { Head, router } from '@inertiajs/vue3';
 import { useEventListener, useMediaQuery, useStorage } from '@vueuse/core';
 import { useAppearance } from '@/composables/useAppearance';
-import { computed, onMounted, ref, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import InPowerExport from '@/components/export/InPowerExport.vue';
 import LocatorExport from '@/components/export/LocatorExport.vue';
 import ShareViewDialog from '@/components/export/ShareViewDialog.vue';
 import AboutSheet from '@/components/map/AboutSheet.vue';
+import BackButton from '@/components/map/BackButton.vue';
 import BottomSheet from '@/components/map/BottomSheet.vue';
 import LayersPanel from '@/components/map/LayersPanel.vue';
 import Legend from '@/components/map/Legend.vue';
 import MapControls from '@/components/map/MapControls.vue';
 import MapView from '@/components/map/MapView.vue';
 import NationalOverview from '@/components/map/NationalOverview.vue';
+import OutsideHint, {
+    hintText,
+    markHintUsed,
+} from '@/components/map/OutsideHint.vue';
 import SearchBox from '@/components/map/SearchBox.vue';
 import SeatChips from '@/components/map/SeatChips.vue';
 import UnitList from '@/components/map/UnitList.vue';
@@ -38,12 +43,18 @@ import {
     validSeatModes,
 } from '@/lib/map/seatMode';
 import type { FocusSelection } from '@/lib/map/focus';
+import {
+    type FocusHistory,
+    type FocusHistoryPort,
+    type HistoryCause,
+    createFocusHistory,
+    gatePopState,
+} from '@/lib/map/history';
 import { findContaining } from '@/lib/map/locate';
 import { type MapOverlay, OVERLAYS } from '@/lib/map/overlays';
 import { fileUrl } from '@/lib/map/style';
 import { type PersonResult, SEAT_TITLE } from '@/lib/search';
 import { SEAT_COLOURS, THEMES } from '@/lib/map/theme';
-import { unitPath } from '@/lib/map/urls';
 import { formatAsOf } from '@/lib/export/format';
 import {
     type ViewState,
@@ -123,9 +134,10 @@ onMounted(async () => {
         applySharedView(data);
         if (props.unit)
             selectUnit(units.get(props.unit.level, props.unit.code) ?? null, {
-                push: false,
+                history: 'none',
                 animate: false,
             });
+        focusHistory = createFocusHistory(historyPort, restoreFocus);
         fetch(fileUrl(m, 'towns.geojson'))
             .then((r) => r.json())
             .then(
@@ -316,6 +328,9 @@ function readSurroundings() {
 }
 const showSurroundings = ref(readSurroundings());
 watch(showSurroundings, (on) => {
+    // Turning the switch (either way) means the person has found it: the hint is not needed again.
+    markHintUsed();
+    outsideHint.value?.dismiss();
     try {
         localStorage.setItem(SURROUNDINGS_KEY, String(on));
     } catch {
@@ -329,10 +344,26 @@ const focusOf = (unit: Unit | null) =>
 const boundsOf = (level: MapLevel, code: number) =>
     index.value?.get(level, code)?.b;
 
+/**
+ * Show a unit (null: all of Kenya). `history` is how the address bar follows: a person's choice
+ * pushes an entry, a zoom-driven step up ('zoom') replaces the current one, and 'none' leaves it alone
+ * (the first paint, and restoring an entry the browser went back to).
+ */
 function selectUnit(
     unit: Unit | null,
-    { push = true, fit = true, animate = true, recentre = true } = {},
+    {
+        history = 'user',
+        fit = true,
+        animate = true,
+        recentre = true,
+    }: {
+        history?: HistoryCause | 'none';
+        fit?: boolean;
+        animate?: boolean;
+        recentre?: boolean;
+    } = {},
 ) {
+    outsideHint.value?.dismiss();
     overlayInfo.value = null;
     tip.value = null;
     highlightSeat.value = undefined;
@@ -353,23 +384,13 @@ function selectUnit(
         map?.clearSelection();
         announce.value = announceSelection(null, []);
         if (fit) map?.fitKenya(animate);
-        if (push) replaceUrl('/', null);
+        recordHistory(null, history);
         document.title = 'Kenya Electoral Map';
         return;
     }
     if (unit.l !== 'province') map?.select(unit.l, unit.c, { fit, animate });
     const ancestors = index.value?.ancestors(unit.l, unit.c) ?? [];
-    if (push && unit.l !== 'province')
-        replaceUrl(unitPath(unit.l, unit.c), {
-            level: unit.l,
-            code: unit.c,
-            name: unit.n,
-            ancestors: ancestors.map((a) => ({
-                level: a.l,
-                code: a.c,
-                name: a.n,
-            })),
-        });
+    if (unit.l !== 'province') recordHistory(focusOf(unit), history);
     announce.value = announceSelection(unit, ancestors);
     document.title = `${unit.n} ${unit.l.charAt(0).toUpperCase()}${unit.l.slice(1)} — Kenya Electoral Map`;
     if (!isDesktop.value && snap.value === 'peek') snap.value = 'half';
@@ -381,7 +402,7 @@ function onZoomOut(next: FocusSelection | null) {
     const unit = next
         ? (index.value?.get(next.level, next.code) ?? null)
         : null;
-    selectUnit(unit, { fit: false, recentre: false });
+    selectUnit(unit, { history: 'zoom', fit: false, recentre: false });
 }
 
 function onPickPerson({ holder, unit }: PersonResult) {
@@ -432,21 +453,55 @@ watch(
     },
 );
 
-/**
- * Keep the address bar on the selected unit so it can be shared. This replaces the current
- * history entry through Inertia (client-side, state preserved) instead of pushing new ones:
- * Inertia remounts the page on Back, which would rebuild the map, so Back leaves the map and
- * the breadcrumb and zoom-out control step back up a level.
- */
-function replaceUrl(url: string, unit: ServerUnit) {
-    if (location.pathname === url) return;
-    router.replace({
-        url,
-        props: (current) => ({ ...current, unit }),
-        preserveState: true,
-        preserveScroll: true,
-    });
+// ---- history ----------------------------------------------------------------------------
+// The address bar follows the focus, and each unit the person chooses is a history entry, so the
+// browser's back button and the phone's back gesture walk back through what they looked at.
+// Entries are made through Inertia's router (client-side, state preserved): they carry the page
+// Inertia needs to rebuild the entry after a reload, or after leaving to another page and coming
+// back. Going back to an entry is handled here, not by Inertia: it would put the page back from
+// its saved copy and rebuild the map, so our listener runs first (see `installPopStateGate`) and
+// keeps Inertia from seeing the event.
+let focusHistory: FocusHistory | null = null;
+
+function serverUnitOf(focus: FocusSelection | null): ServerUnit {
+    const unit = focus && index.value?.get(focus.level, focus.code);
+    if (!focus || !unit) return null;
+    return {
+        level: focus.level,
+        code: focus.code,
+        name: unit.n,
+        ancestors: (index.value?.ancestors(focus.level, focus.code) ?? []).map(
+            (a) => ({ level: a.l, code: a.c, name: a.n }),
+        ),
+    };
 }
+const visit = (url: string, focus: FocusSelection | null) => ({
+    url,
+    props: (current: Record<string, unknown>) => ({
+        ...current,
+        unit: serverUnitOf(focus),
+    }),
+    preserveState: true,
+    preserveScroll: true,
+});
+const historyPort: FocusHistoryPort = {
+    path: () => location.pathname,
+    push: (url, focus) => router.push(visit(url, focus)),
+    replace: (url, focus) => router.replace(visit(url, focus)),
+    onPopState: gatePopState,
+};
+function recordHistory(
+    focus: FocusSelection | null,
+    cause: HistoryCause | 'none',
+) {
+    if (cause !== 'none') focusHistory?.record(focus, cause);
+}
+/** The browser went back or forward to one of our entries: show its focus and fit the camera to it. */
+function restoreFocus(focus: FocusSelection | null) {
+    const unit = focus ? (index.value?.get(focus.level, focus.code) ?? null) : null;
+    selectUnit(unit, { history: 'none' });
+}
+onBeforeUnmount(() => focusHistory?.dispose());
 
 function zoomOut() {
     if (!index.value) return;
@@ -463,14 +518,34 @@ function zoomOut() {
     else if (selection.value) selectUnit(null);
     else mapRef.value?.zoomOutStep();
 }
-const zoomOutLabel = computed(() => {
+// The level above the selection, by name; the back button, the hint and the zoom-out label use it.
+const parentName = computed(() => {
     const s = selection.value;
-    if (!s) return 'Zoom out';
+    if (!s || s.l === 'province') return null;
     const parent = index.value?.ancestors(s.l, s.c)[0];
-    return parent && parent.l !== 'province'
-        ? `Zoom out to ${parent.n}`
-        : 'Zoom out to all of Kenya';
+    return parent && parent.l !== 'province' ? parent.n : 'All of Kenya';
 });
+const zoomOutLabel = computed(() =>
+    !selection.value
+        ? 'Zoom out'
+        : parentName.value === 'All of Kenya'
+          ? 'Zoom out to all of Kenya'
+          : `Zoom out to ${parentName.value}`,
+);
+
+// The back button, and the hint a tap outside the focused unit shows (it does nothing otherwise).
+const outsideHint = ref<InstanceType<typeof OutsideHint> | null>(null);
+function stepBack() {
+    markHintUsed();
+    outsideHint.value?.dismiss();
+    zoomOut();
+}
+function onOutsideClick() {
+    const s = selection.value;
+    // With the surroundings shown there is a neighbour to pick, and Back is on screen: no nudge.
+    if (!s || s.l === 'province' || showSurroundings.value) return;
+    if (outsideHint.value?.nudge()) announce.value = hintText(s.n);
+}
 
 function recentre() {
     autoCentre.value = true;
@@ -658,7 +733,7 @@ const showView = (v: typeof view.value) => {
                 view = 'list';
             "
             @user-move="autoCentre = false"
-            @outside-click="zoomOut"
+            @outside-click="onOutsideClick"
             @zoom-out="onZoomOut"
             @overlay-click="onOverlayClick"
         />
@@ -716,6 +791,21 @@ const showView = (v: typeof view.value) => {
                 :parents="chipParents"
                 @update:modelValue="chooseMode"
                 @step-up="onChipStepUp"
+            />
+        </div>
+
+        <!-- Back button and its hint: under the search bar and the chips (beside them on wide desktops). -->
+        <div
+            v-if="!(snap === 'full' && !isDesktop)"
+            class="pointer-events-none absolute top-[116px] left-3 z-20 flex flex-col items-start gap-2 md:left-[400px] xl:top-[64px]"
+        >
+            <BackButton :parent="parentName" @step-up="stepBack" />
+            <OutsideHint
+                ref="outsideHint"
+                :unit="selection?.n ?? ''"
+                :parent="parentName ?? ''"
+                @step-up="zoomOut"
+                @show-surroundings="showSurroundings = true"
             />
         </div>
 

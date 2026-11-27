@@ -457,6 +457,42 @@ describe('useMap focus', () => {
             expect(out.outside).toHaveBeenCalledTimes(1);
         });
 
+        it('selects the tapped neighbour, and does not step out, when surroundings are shown', () => {
+            out.api!.setFocus({ level: 'county', code: 16 });
+            out.api!.setShowSurroundings(true);
+            under({
+                'counties-fill': [{ id: 17, properties: {} }],
+                'constituencies-fill': [
+                    { id: 99, properties: { county_code: 17 } },
+                ],
+            });
+            click();
+            expect(out.select).toHaveBeenCalledWith({
+                level: 'county',
+                code: 17,
+            });
+            expect(out.outside).not.toHaveBeenCalled();
+        });
+
+        it('still reports empty ground as outside when surroundings are shown', () => {
+            out.api!.setFocus({ level: 'county', code: 16 });
+            out.api!.setShowSurroundings(true);
+            under({});
+            click();
+            expect(out.select).not.toHaveBeenCalled();
+            expect(out.outside).toHaveBeenCalledTimes(1);
+        });
+
+        it('reports the neighbour again as outside once surroundings are switched off', () => {
+            out.api!.setFocus({ level: 'county', code: 16 });
+            out.api!.setShowSurroundings(true);
+            out.api!.setShowSurroundings(false);
+            under({ 'counties-fill': [{ id: 17, properties: {} }] });
+            click();
+            expect(out.select).not.toHaveBeenCalled();
+            expect(out.outside).toHaveBeenCalledTimes(1);
+        });
+
         it('ignores a seat colouring: a tap still picks the county from the national view', () => {
             colouring.value = {
                 ...NO_COLOURING,
