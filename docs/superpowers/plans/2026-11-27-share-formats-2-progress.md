@@ -11,8 +11,9 @@ resume from here.
 | F | "Every county the same size" (county tiles, mock-up 4), portrait and story, from the national Governor, Senator and Woman Rep views | done | `0c28c80` (grid), `9f9be59` (card), `ce9535b` (entry point, sweep), `37f241b` (key columns), `df5cb78` (log), `4e51799` (Mount Kenya tiles back), `7beca8d` (review fixes: vacant tiles outlined, link test, notes) |
 | G1 | The dialog's general ability: a card may carry one choice of its own | done | `ec2037e` |
 | G2 | "Side by side" (mock-up 7), X and story, from a county on the MP or MCA view | done | `7cb9db1` |
-| H1 | The dialog's general ability: a card may be a series | not started | |
-| H2 | The county carousel (mock-up 3), portrait and story | not started | |
+| H1 | The dialog's general ability: a card may be a series | done | `e6549cd` |
+| G review | Side by side and the choice: a vacant Woman Rep inside its column, bar proportions, dialog robustness | done | `ebfc563` |
+| H2 | The county carousel (mock-up 3), portrait and story | done | `d5310c2` |
 
 ## Task F: the tile grid and its neighbours
 
@@ -278,6 +279,131 @@ Each one: what was decided, why, and what it costs if it is wrong.
   MP or MCA lists "This view|County leaders|Side by side" (Carousel comes after it in Task H) —
   cost if wrong: one `concat` in `Map.vue`.
 
+## Task H1: a card can be a series
+
+A `cards` entry may carry `slides` (`seriesCard(key, label, slides)` in `lib/export/shareView.ts`):
+
+```ts
+{ key: 'carousel', label: 'Carousel', view: slides[0], slides: [cover, leaders, mpView, mcaView] }
+```
+
+While it is picked the dialog shows a "Slide" group under the "Card" choice: "Previous" and "Next"
+buttons (accessible names "Previous slide", "Next slide", chevron icons from `@lucide/vue`, 44px,
+disabled at the ends) with "2 of 4" between them. The preview is the current slide; the sizes on
+offer are those every slide has, in the first slide's order (the stored-size rule unchanged); the
+headline is the slide's own and fixed (the usual fixed-headline line); the caption and the dialog's
+title and description are the first slide's. The map cache key is `<card>#<slide>|size|theme|slot|box`,
+so slides with the same slot and box are kept apart, and stepping mid-draw never shows another
+slide's map (the same token and `wanted` logic as the choice). Every slide gets `page` ("2 of 4"),
+one of the uniform `CardProps`, which each card component declares and passes to `CardFooter`.
+
+Saving: the dialog already shared one file with the Web Share API (`shareOrDownload`) where the
+device can share files, and downloaded otherwise. For a series: "Download PNG" saves the current
+slide as `<its own file name>-2-of-4.png`; "Download all 4" steps the preview through every slide,
+showing "Drawing 2 of 4…", waits for each to be built, then saves the four files one after another
+(250 ms apart), and ends with "Saved 4 images. If your browser saved only some, step to each slide
+and use Download PNG." Where the device shares files, "Share all 4" (in place of "Share") makes the
+four and shares them in one `navigator.share({ files })` call (`shareFiles` in `share.ts`); when the
+browser refuses because the tap is too long ago (`NotAllowedError`, the images took a while), it
+says "The 4 images are ready. Tap Share all 4 again to send them." and the second tap shares the
+images it keeps; where the device cannot share four files, it saves them instead. Closing the
+dialog stops a run; a slide that fails gives the usual error, stays on that slide, and saves
+nothing. While a run is on, the card, size and colour choices and the stepper are disabled. Not
+tried on a real phone: Chrome on Android asks once before it allows several downloads from a site,
+and iOS Safari may keep only the first; the message covers both.
+
+Tests: `ShareViewDialogSeries.test.ts` (mocked slides of two kinds; stepper, ends, keyboard, 44px,
+no arrow characters; sizes intersection; page text on every slide and none outside; fixed headline;
+cache separation; stepping mid-draw; caption; Download PNG name; Download all: four files in order,
+"Drawing n of 4", back on the slide the person was on; stops on close; a failed slide; Share all in
+one call; the real carousel's four names), `footerPage.test.ts` (the footer with and without page
+text at every size, long links, the fallbacks, every card declaring `page`).
+
+## Task H2: the county carousel
+
+`lib/export/coverCard.ts`, `coverLayout.ts`, `components/export/CoverCard.vue`, the `cover` registry
+entry, `coverCaption`, and `carouselCard` in `shareView.ts`. Slides: the cover, `leadersCardView` for
+the county, `snapshotView` for the county on MP and on MCA. `Map.vue` adds `carouselCard(...)` last
+for a county in focus on any seat view that offers "Share this view": Governor, Senator, Woman Rep
+("This view|County leaders|Carousel"), MP and MCA ("This view|County leaders|Side by side|Carousel").
+A county on "County seats" still goes the leaders way (its leaders card alone), left as it is. No
+place reaches five entries: at 390px wide the four sit in two rows of two, each 175×44
+(`carousel-dialog-phone.png`).
+
+Checked: the cover's layout and component (`carousel.test.ts`), slides 2 to 4 equal to the views and
+layouts made outside the series and drawn to the same markup once the page text is taken out, the
+page tests (present on a county for the five seat views; absent for all of Kenya on every view, a
+constituency, a ward, County seats on a county; a party profile within a county still offers its
+party card alone, `partyPage.test.ts`), and the sweep (`carouselSweep.test.ts`): every county's cover
+and every slide's footer with its page text, portrait and story, light and dark, a local and a long
+site address; nothing cut or overlapping, the map as large as its room, story zones kept, the
+footer no taller, and every slide's words starting at the same top and left. The sweep was shown to
+fail (a note pushed into the footer is reported for every county).
+
+Downloaded with "Download all 4" from the running app for Kakamega (37) and Nairobi City (47),
+portrait light and dark and story light, and looked at beside mock-up 3. The cover follows the
+mock-up line for line (kicker, two-line headline, one-line scope on portrait, the map, the note);
+on the story the scope wraps to two lines. Fixed after looking: the page text sat far from the link
+(its place was computed from an estimate of the link's width); it is now drawn in the link's own
+text element. On the story, the leaders slide (long link) and Nairobi City's MCA slide have no
+brand: see the ruling. The older PNGs (`/?seat=mca`, `/county/47?seat=county_seats`, `/party/uda`
+square, `/county/37?seat=mca` portrait) are byte-identical before the first change and after the
+last.
+
+## Rulings for Task H
+
+- **Ruling: a series entry also carries `view` (its first slide)** — the page's `ShareCard[]` and
+  the dialog's `view` prop keep one type, and the dialog opens a series on its cover — cost if
+  wrong: one field.
+- **Ruling: the page text is muted, regular weight, at the link's size, on the link's line; the link
+  keeps its size: after the brand where the three fit; else right after the link, which starts the
+  line as it does when the brand does not fit (the brand gives way); only where even that is too
+  narrow does the link shrink (the page text then stands apart at the start)** — the footer's height
+  never changes, and the link reads the same on every slide. The cost: on a story, a slide whose link
+  is long has no brand where the same card outside the series has one (Nairobi City's MCA slide:
+  "localhost:8080/county/47?seat=mca 4 of 4"; the leaders slide never had room for the brand on a
+  story). With the real links, portrait always fits all three — cost if wrong: the order in
+  `footerBlock`.
+- **Ruling: where the page text sits right beside the link it is drawn in the link's text element
+  (a `tspan` with `dx`)** — the layout's estimate of the link's width is wider than the drawn link,
+  so a separate element left a gap of about 60px; the cards outside a series have no extra node —
+  cost if wrong: markup only.
+- **Ruling: the series' sizes are the intersection, in the first slide's order** (portrait, story
+  for the carousel) — cost if wrong: none.
+- **Ruling: "Download PNG" in a series names the file with its place too** (`…-2-of-4.png`), like
+  "Download all" — cost if wrong: one string.
+- **Ruling: "Download all" renders every slide first and saves only when all four were made**, so a
+  failure saves nothing and claims nothing — cost if wrong: on a failure the person has no partial
+  set (they can still step and download each).
+- **Ruling: the dialog copy for a series is the first slide's: "Share the county carousel" / "Four
+  slides on who holds Kakamega’s 75 elected seats, sized for Instagram or stories."; label
+  "Carousel"** — cost if wrong: strings.
+- **Ruling: the cover's sources are the county's MCA holders alone** — the map is the only thing on
+  it that a holder decides; the scope line counts seats from the unit index (IEBC codes, credited in
+  the attribution's "Codes" line) and names no holder, so the three county seats' and the MPs'
+  sources belong on slides 2 to 4, which show them — cost if wrong: two more source lists.
+- **Ruling: slides 3 and 4 have nothing highlighted, and the person's map settings (surroundings,
+  MP outlines)**, as "This view" has them with no party picked — the carousel is about the whole
+  county, so a highlight on screen does not carry into it — cost if wrong: two arguments.
+- **Ruling: the cover's strip has no deeper lid** (like the leaders card); the seat slides keep
+  theirs, as outside the series. Every slide's words start at the same top and left (tested) — cost
+  if wrong: one argument.
+- **Ruling: the cover's map is centred in the room left, with the note under it, the two together in
+  the middle of that room**; on a wide county (Nairobi City on the story) that leaves room above and
+  below — cost if wrong: one offset.
+- **Ruling: the cover's headline is fixed and the cover is never offered alone** — cost if wrong:
+  none.
+- **Ruling: the cover's file name is `kenya-electoral-map-county-<code>-cover-<size>.png`**; the
+  slides keep their own kinds' names — cost if wrong: one string.
+- **Ruling: the carousel's caption (the cover's) is the headline, the scope line, the county's MCAs
+  by party ("MCAs by party: ODM 27, ANC 11, …"), the source, the link and the tags; X gets the shared
+  `xCaption`** — cost if wrong: strings.
+- **Ruling (review of G): a "Side by side" scale fits only when the widest key entry and the widest
+  county-seat item fit the words' column** — cost if wrong: smaller type on the story for a county
+  with a vacant Woman Rep. With a vacant Woman Rep, and with none of the three county seats held,
+  every pair of counties (1,081 × 2 seats × 2 sizes) lays out clean (run once, not committed; the
+  committed sweep has both cases).
+
 ## Parked minor findings
 
 - The card's own tests (`tilesCard.test.ts`, `tilesLayout.test.ts`) first failed on the missing
@@ -307,7 +433,19 @@ Each one: what was decided, why, and what it costs if it is wrong.
 - The neighbour data is not rebuilt by `npm run boundaries:rebuild`; after a boundary change, rerun
   `node boundaries/pipeline/neighbours.mjs` (the test fails until then).
 
+- Task H: the cover's tests and code were written in one go: `coverCard.test.ts` and
+  `carousel.test.ts` were written first but not run before `coverCard.ts` and `coverLayout.ts`
+  existed, so their first failure was not seen. H1's dialog and footer tests, the page tests and the
+  review fixes' tests were seen to fail first for the right reason; the sweep and the bar-proportion
+  test were checked against a deliberate fault.
+- Existing tests changed in H: `countySeatsPage.test.ts` (five expectations gain "|Carousel"; the
+  "County leaders … whatever the seat mode" test covers Governor, MP and MCA again), `versusSweep.test.ts`
+  (the worst case vacates the Woman Rep, plus a case with no county seats held).
+- On the story the cover's scope line wraps ("… Swipe" / "for each."); a balanced break was not tried.
+- In a series on a phone the footer of the dialog has two rows of buttons, so the preview starts
+  lower; when the device cannot share, "Copy caption" sits alone on the second row.
+- "Share all 4" is untested on a real phone (only with a mocked `navigator.share`).
+
 ## What is next
 
-Owner's look at Tasks F (with the Mount Kenya tiles back) and G, then Task H1 (a card can be a
-series) and H2 (the county carousel, which adds "Carousel" after "Side by side").
+Final review of Task H (H1, H2 and the review fixes to G), then the owner's look at the carousel.
