@@ -169,17 +169,52 @@ describe('tilesLayout', () => {
         }
     });
 
+    it('keeps "Other parties" in its column when the columns fit the corner at some size', () => {
+        for (const size of ['portrait', 'story'] as const) {
+            const g = layout(card, size);
+            const other = g.key.entries.find((e) => e.key === 'other')!;
+            expect(other.chip.x, size).toBeGreaterThan(g.key.entries[0].chip.x);
+        }
+    });
+
     it('gives "Other parties" a line of its own when that is what lets the key fit the corner', () => {
-        // The fixtures' Woman Reps: "Independent 3" in the first column and "Other parties 3" in the
-        // second are too wide together for the story's corner; on a line of its own it fits.
-        const c = view('woman_rep');
-        const l = layout(c, 'story');
-        expect(l.key.inCorner).toBe(true);
-        const other = l.key.entries.find((e) => e.key === 'other')!;
-        expect(other.chip.x).toBe(l.key.entries[0].chip.x);
-        expect(other.label.y).toBeGreaterThan(
-            Math.max(...l.key.entries.filter((e) => e.key !== 'other').map((e) => e.label.y)),
-        );
+        // Ten entries, so five rows: too tall for the one-row corner. "Independent 12" heads the
+        // first column and "Other parties 11" ends the second: too wide together for the two-row
+        // corner at any size the key may take; with "Other parties" on a line of its own it fits.
+        const counts: [string, number][] = [
+            ['IND', 12], ['UDA', 9], ['ODM', 4], ['JP', 3], ['UDM', 3],
+            ['WDM-K', 2], ['ANC', 1], ['DAP-K', 1], ['FORD-K', 1], ['SP1', 11],
+        ];
+        const owners = counts.flatMap(([p, n]) => Array<string>(n).fill(p));
+        const party = (code: number) => owners[code - 1];
+        const data: SeatsData = {
+            ...NUMBERS_SEATS,
+            holders: NUMBERS_SEATS.holders.map((h) =>
+                h.seat === 'governor' ? { ...h, party: party(h.code) } : h,
+            ),
+        };
+        const c = view('governor', data);
+        expect(c.key.map((k) => `${k.label} ${k.count}`)).toEqual([
+            'Independent 12',
+            'UDA 9',
+            'ODM 4',
+            'JP 3',
+            'UDM 3',
+            'WDM-K 2',
+            'ANC 1',
+            'DAP-K 1',
+            'FORD-K 1',
+            'Other parties 11',
+        ]);
+        for (const size of SIZES) {
+            const l = layout(c, size);
+            expect(l.key.inCorner, size).toBe(true);
+            const other = l.key.entries.find((e) => e.key === 'other')!;
+            expect(other.chip.x, size).toBe(l.key.entries[0].chip.x);
+            expect(other.label.y, size).toBeGreaterThan(
+                Math.max(...l.key.entries.filter((e) => e.key !== 'other').map((e) => e.label.y)),
+            );
+        }
     });
 
     it('puts the key under the grid when it does not fit the corner, and the tiles give way', () => {

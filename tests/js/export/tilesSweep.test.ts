@@ -1,8 +1,8 @@
 // The county tiles card for every seat it can be made for (Governor, Senator, Woman Rep), in both
 // sizes and both themes, over the real unit index (every real county name), with the worst cases
 // for the key: every county held by the party with the longest real abbreviation, by independents
-// and by a party with no colour of its own; the fourteen longest real abbreviations at once (a key
-// of seventeen entries); and vacancies. Holders are placeholders.
+// and by a party with no colour of its own; the twenty longest real abbreviations at once (a key
+// of twenty-three entries); and vacancies. Holders are placeholders.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -54,7 +54,7 @@ const seatsWith = (parties: Party[], of: (code: number) => string | null): Seats
     ),
 });
 const colour = (i: number) => `#${(0x284060 + i * 0x0b0a09).toString(16).padStart(6, '0')}`;
-const longest = ABBREVS.slice(0, 14);
+const longest = ABBREVS.slice(0, 20);
 
 const CASES: [string, SeatsData][] = [
     ['the fixtures', NUMBERS_SEATS],
@@ -62,15 +62,15 @@ const CASES: [string, SeatsData][] = [
     ['every county independent', seatsWith([], () => 'IND')],
     ['every county a party with no colour', seatsWith([party('NOPEU', null)], () => 'NOPEU')],
     [
-        'the fourteen longest abbreviations, independents, no colour and vacancies',
+        'the twenty longest abbreviations, independents, no colour and vacancies',
         seatsWith(
             [...longest.map((a, i) => party(a, colour(i))), party('PICKX', null)],
             (c) =>
-                c <= 42
-                    ? longest[(c - 1) % 14]
-                    : c <= 44
+                c <= 40
+                    ? longest[(c - 1) % 20]
+                    : c <= 43
                       ? 'IND'
-                      : c === 45
+                      : c === 44
                         ? 'PICKX'
                         : null,
         ),
@@ -81,7 +81,7 @@ const CASES: [string, SeatsData][] = [
 describe('the county tiles card for every seat, size and theme', () => {
     it('uses the longest real abbreviations', () => {
         expect(ABBREVS[0]).toBe('KADU-ASILI');
-        expect(longest).toHaveLength(14);
+        expect(longest).toHaveLength(20);
     });
 
     it('keeps every name whole, the key whole, nothing overlapping, nothing past the footer, the story zones clear', () => {
@@ -117,7 +117,7 @@ describe('the county tiles card for every seat, size and theme', () => {
                     }
                 }
         expect(faults).toEqual([]);
-        // The key fits the corner in most cases; the seventeen-entry key goes under the grid.
+        // The key fits the corner in most cases; the twenty-three-entry key goes under the grid.
         expect(placed.corner).toBeGreaterThan(0);
         expect(placed.under).toBeGreaterThan(0);
     });

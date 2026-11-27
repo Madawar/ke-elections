@@ -9,7 +9,7 @@
 // one name size serves every tile, the largest at which every name fits. The key (the legend's
 // rows with counts, in two columns, "No approved holder yet" on a line of its own) goes in the
 // grid's empty bottom-left corner when it fits there, found from the grid's actual empty cells,
-// at the card's small text or a little smaller; otherwise it goes under the grid at the card's
+// at the card's small text or smaller, down to the footer's smallest; otherwise it goes under the grid at the card's
 // small text and the tiles are made smaller to make room. With no map, the footer credits only the
 // unit codes the counts are joined on.
 import { COUNTY_TILES, TILE_COLUMNS, TILE_ROWS } from './countyTiles';
@@ -82,8 +82,6 @@ export interface TilesText {
 
 /** The name's largest size, and its least before the tiles' padding gives way, as shares of a tile. */
 const NAME = { base: 0.16, least: 0.12 };
-/** The key's least size in the corner, as a share of the card's small text. */
-const KEY_LEAST = 0.8;
 
 const gutterOf = (side: number) => Math.max(3, Math.round(side * 0.05));
 const paddingOf = (side: number) => Math.max(4, Math.round(side * 0.08));
@@ -266,12 +264,12 @@ export function tilesLayout(
     // card's small text or a little smaller (the bigger corner first). Otherwise the key goes under
     // the grid at the card's small text, and the grid is made smaller to leave room for it.
     let { side, gutter } = tileFor(innerW, bodyBottom - bodyTop);
-    // At each size, "Other parties" may go on a line of its own under the columns when that is
-    // what lets them fit (as on "Five seats").
+    // "Other parties" goes on a line of its own under the columns only when the columns fit the
+    // corner at no size (as on "Five seats"): two even columns read better than a larger key.
     let corner: { x: number; y: number; size: number; otherOwnLine: boolean } | null = null;
     const pitch = () => side + gutter;
-    search: for (let ks = keyBase; ks >= Math.round(keyBase * KEY_LEAST); ks--)
-        for (const otherOwnLine of [false, true])
+    search: for (const otherOwnLine of [false, true])
+        for (let ks = keyBase; ks >= spec.footer.small; ks--)
             for (const c of [...emptyCorners()].sort((a, b) => b.cols * b.rows - a.cols * a.rows)) {
                 const room = {
                     w: c.cols * pitch() - gutter - paddingOf(side),
